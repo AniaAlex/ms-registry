@@ -1,0 +1,18 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+{{ block.super }}
+<li>
+    <a href="{% url 'admin:tsl_generator_tslscheme_import_xml' %}" class="addlink" style="background: linear-gradient(180deg, #5a8f29 0%, #417020 100%);">
+        Import TSL from XML
+    </a>
+</li>
+{% endblock %}
+
+{% block content %}
+<p style="margin-bottom: 15px; color: #666;">
+    <strong>Tip:</strong> Select a scheme and use the "Export selected schemes to XML" action, or click on a scheme to view/edit and generate XML.
+</p>
+{{ block.super }}
+{% endblock %}

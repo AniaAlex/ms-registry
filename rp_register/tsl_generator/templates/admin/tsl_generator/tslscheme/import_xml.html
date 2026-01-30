@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Import TSL from XML File</h1>
+    
+    <p>Upload an ETSI TS 119612 compliant Trust Status List XML file to import.</p>
+    <p>This will create a new TSL Scheme with all providers, services, and X.509 certificates.</p>
+    
+    <form method="post" enctype="multipart/form-data" class="import-form">
+        {% csrf_token %}
+        
+        <fieldset class="module aligned">
+            <h2>Import Settings</h2>
+            
+            <div class="form-row">
+                <label for="xml_file">TSL XML File:</label>
+                <input type="file" name="xml_file" id="xml_file" accept=".xml,application/xml,text/xml" required>
+                <p class="help">Select an ETSI TS 119612 TSL XML file (e.g., SE-TL.xml)</p>
+            </div>
+            
+            <div class="form-row">
+                <label for="scheme_name">Scheme Name (optional):</label>
+                <input type="text" name="scheme_name" id="scheme_name" maxlength="200" placeholder="Auto-generated from XML if empty">
+                <p class="help">Custom name for the imported scheme. Leave empty to auto-generate from the XML.</p>
+            </div>
+        </fieldset>
+        
+        <div class="submit-row">
+            <input type="submit" value="Import TSL" class="default" style="padding: 10px 20px; font-size: 14px;">
+            <a href="{% url 'admin:tsl_generator_tslscheme_changelist' %}" class="button" style="padding: 10px 20px; text-decoration: none; color: #666; margin-left: 10px;">Cancel</a>
+        </div>
+    </form>
+    
+    <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+        <h3 style="margin-top: 0;">What gets imported:</h3>
+        <ul>
+            <li><strong>Scheme Information:</strong> Name, territory, type, sequence number, dates, etc.</li>
+            <li><strong>Trust Service Providers:</strong> Names, addresses, electronic addresses, information URIs</li>
+            <li><strong>Trust Services:</strong> Service type, status, status starting time</li>
+            <li><strong>X.509 Certificates:</strong> All certificates in ServiceDigitalIdentity elements with extracted metadata</li>
+            <li><strong>Service History:</strong> Historical status records</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.import-form fieldset {
+    margin-bottom: 20px;
+}
+.import-form .form-row {
+    padding: 10px 12px;
+}
+.import-form .form-row label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+.import-form .form-row input[type="file"],
+.import-form .form-row input[type="text"] {
+    width: 100%;
+    max-width: 500px;
+    padding: 8px;
+    margin-bottom: 5px;
+}
+.import-form .form-row .help {
+    color: #666;
+    font-size: 12px;
+    margin: 0;
+}
+</style>
+{% endblock %}

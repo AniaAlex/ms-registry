@@ -60,10 +60,10 @@ endif
 
 .PHONY: createsuperuser
 createsuperuser: ## Create admin user and 2FA QR code
-	docker-compose run --rm django $(src)/manage.py createsuperuser --email $(email) --settings=taxonomy.settings
+	docker-compose run --rm django $(src)/manage.py createsuperuser --email $(email) --settings=rp_register.settings
 	@echo One time use token:
-	docker-compose run --rm django $(src)/manage.py addstatictoken $(email) --settings=taxonomy.settings
+	docker-compose run --rm django $(src)/manage.py addstatictoken $(email) --settings=rp_register.settings
 
 .PHONY: addstatictoken
 addstatictoken: ## Get 2FA code for email
-	docker-compose run --rm django $(src)/manage.py addstatictoken $(email) --settings=boilerplate.settings
+	docker-compose run --rm django $(src)/manage.py addstatictoken $(email) --settings=rp_register.settings

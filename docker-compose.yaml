@@ -3,16 +3,16 @@ version: "3.2"
 services:
   django:
     build: .
-    image: django-taxonomy
-    container_name: django-taxonomy
+    image: django-rp-register
+    container_name: django-rp-register
     depends_on:
       - postgres
       - redis
     env_file: .env
     volumes:
-      - "taxonomy_static_files:/var/www/static/"
-      - "taxonomy_media_files:/var/www/media/"
-      - "./taxonomy:/app"
+      - "rp_register_static_files:/var/www/static/"
+      - "rp_register_media_files:/var/www/media/"
+      - "./rp_register:/app"
     # Use runserver for local development not uwsgi
     command: "python manage.py runserver 0.0.0.0:8000"
     ports:
@@ -20,29 +20,29 @@ services:
 
   postgres:
     image: postgres:14
-    container_name: postgres-taxonomy
+    container_name: postgres-rp-register
     environment:
-      POSTGRES_DB: taxonomy
+      POSTGRES_DB: rp_register
       POSTGRES_PASSWORD: supersecret
     volumes:
-      - "taxonomy_dbdata:/var/lib/postgresql/data"
+      - "rp_register_dbdata:/var/lib/postgresql/data"
     # Expose port to localhost for debugging
     ports:
       - "127.0.0.1:5433:5432"
 
   redis:
     image: redis:6.2
-    container_name: redis-taxonomy
+    container_name: redis-rp-register
 
   rabbitmq:
     image: rabbitmq:3.9-management
-    container_name: rabbitmq-taxonomy
+    container_name: rabbitmq-rp-register
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=b0lag
 
 
 volumes:
-  taxonomy_dbdata:
-  taxonomy_static_files:
-  taxonomy_media_files:
+  rp_register_dbdata:
+  rp_register_static_files:
+  rp_register_media_files:

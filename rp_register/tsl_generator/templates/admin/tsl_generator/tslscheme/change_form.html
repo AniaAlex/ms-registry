@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+{{ block.super }}
+{% if original %}
+<li>
+    <a href="{% url 'admin:tsl_generator_tslscheme_generate_xml' original.pk %}" class="viewlink" style="background: linear-gradient(180deg, #28a745 0%, #1e7e34 100%);">
+        Generate ETSI XML
+    </a>
+</li>
+{% endif %}
+{% endblock %}
