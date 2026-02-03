@@ -1,5 +1,5 @@
 """
-EUDI Wallet Relying Party Registration - Django Signals
+EUDI Wallet Registered Entity Registration - Django Signals
 Handles automatic population of intermediary cached fields and audit logging
 """
 
@@ -8,17 +8,17 @@ from django.dispatch import receiver
 
 from .models import (
     AuditLog,
+    EntityUsesIntermediary,
     IntendedUse,
     LegalEntity,
-    WalletRelyingParty,
-    WRPUsesIntermediary,
+    RegisteredEntity,
 )
 
 
-@receiver(pre_save, sender=WRPUsesIntermediary)
+@receiver(pre_save, sender=EntityUsesIntermediary)
 def populate_intermediary_cached_fields(sender, instance, **kwargs):
     """
-    Auto-populate cached fields from the intermediary WRP.
+    Auto-populate cached fields from the intermediary entity.
     This denormalization provides quick access without additional queries.
     """
     if instance.intermediary:
@@ -45,12 +45,12 @@ def populate_intermediary_cached_fields(sender, instance, **kwargs):
 # ============================================================================
 
 AUDITED_MODELS = [
-    "WalletRelyingParty",
+    "RegisteredEntity",
     "LegalEntity",
     "IntendedUse",
-    "WRPEntitlement",
-    "WRPAccessCertificate",
-    "WRPRegistrationCertificate",
+    "EntityEntitlement",
+    "EntityAccessCertificate",
+    "EntityRegistrationCertificate",
 ]
 
 
@@ -107,7 +107,7 @@ def create_audit_log(
 _original_instances = {}
 
 
-@receiver(pre_save, sender=WalletRelyingParty)
+@receiver(pre_save, sender=RegisteredEntity)
 @receiver(pre_save, sender=LegalEntity)
 @receiver(pre_save, sender=IntendedUse)
 def store_original_instance(sender, instance, **kwargs):
@@ -121,7 +121,7 @@ def store_original_instance(sender, instance, **kwargs):
             _original_instances[f"{sender.__name__}_{instance.pk}"] = None
 
 
-@receiver(post_save, sender=WalletRelyingParty)
+@receiver(post_save, sender=RegisteredEntity)
 @receiver(post_save, sender=LegalEntity)
 @receiver(post_save, sender=IntendedUse)
 def audit_log_on_save(sender, instance, created, **kwargs):
@@ -148,7 +148,7 @@ def audit_log_on_save(sender, instance, created, **kwargs):
             )
 
 
-@receiver(post_delete, sender=WalletRelyingParty)
+@receiver(post_delete, sender=RegisteredEntity)
 @receiver(post_delete, sender=LegalEntity)
 @receiver(post_delete, sender=IntendedUse)
 def audit_log_on_delete(sender, instance, **kwargs):

@@ -74,6 +74,7 @@ TSL_TYPE_CHOICES = [
 # Service Type URIs - ETSI Trust Service types
 # =============================================================================
 SERVICE_TYPE_CHOICES = [
+    # Traditional eIDAS Trust Services
     ("http://uri.etsi.org/TrstSvc/Svctype/CA/QC", "Qualified Certificate Authority"),
     ("http://uri.etsi.org/TrstSvc/Svctype/CA/PKC", "Public Key Certificate Authority"),
     (
@@ -109,6 +110,31 @@ SERVICE_TYPE_CHOICES = [
     (
         "http://uri.etsi.org/TrstSvc/Svctype/IdV/nothavingPKIid",
         "Identity Verification (non-PKI)",
+    ),
+    # EUDI Wallet Services (eIDAS 2.0 / Regulation 2024/1183)
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PIDProvider",
+        "PID Provider - Person Identification Data Issuer",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/QEAAProvider",
+        "QEAA Provider - Qualified Electronic Attestation of Attributes Issuer",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/EAAProvider",
+        "EAA Provider - Electronic Attestation of Attributes Issuer",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/WalletProvider",
+        "EUDI Wallet Provider",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty",
+        "EUDI Wallet Relying Party",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PuB-EAAProvider",
+        "PuB-EAA Provider - Public Body Attestation Issuer",
     ),
 ]
 
@@ -424,19 +450,25 @@ class TrustServiceProvider(models.Model):
     Trust Service Provider (TSP) - equivalent to provider.yaml
 
     Represents an organization that provides trust services.
+    
+    Under eIDAS 2.0, wallet entities (PID Providers, Attestation Providers,
+    Relying Parties, Wallet Providers) are TSPs with wallet-specific service types.
+    
+    Organization data (name, address, contact) is stored in LegalEntity to avoid
+    duplication. One LegalEntity can have multiple TSP entries (in different TSL schemes).
     """
 
     scheme = models.ForeignKey(
         TSLScheme, on_delete=models.CASCADE, related_name="providers"
     )
 
-    # Postal Address
-    street_address = models.CharField(max_length=500, blank=True)
-    locality = models.CharField(max_length=200, blank=True)
-    state_or_province = models.CharField(max_length=200, blank=True)
-    postal_code = models.CharField(max_length=50, blank=True)
-    country_name = models.CharField(
-        max_length=2, default="SE", help_text="ISO 3166-1 alpha-2"
+    # Link to LegalEntity for organization data (name, address, contact)
+    # ForeignKey allows one organization to be in multiple TSL schemes
+    legal_entity = models.ForeignKey(
+        "rp_registration.LegalEntity",
+        on_delete=models.CASCADE,
+        related_name="trust_service_providers",
+        help_text="Organization providing the trust services",
     )
 
     # Metadata
@@ -448,10 +480,50 @@ class TrustServiceProvider(models.Model):
         verbose_name = "Trust Service Provider"
         verbose_name_plural = "Trust Service Providers"
         ordering = ["pk"]
+        # One organization can only appear once per scheme
+        unique_together = ["scheme", "legal_entity"]
 
     def __str__(self):
         primary_name = self.names.first()
-        return primary_name.value if primary_name else f"TSP #{self.pk}"
+        if primary_name:
+            return primary_name.value
+        # Fallback to LegalEntity name
+        return self.legal_entity.display_name if self.legal_entity else f"TSP #{self.pk}"
+
+    @property
+    def street_address(self):
+        """Get street address from LegalEntity's PhysicalAddress."""
+        if self.legal_entity and self.legal_entity.physical_address:
+            return self.legal_entity.physical_address.street_address or ""
+        return ""
+
+    @property
+    def locality(self):
+        """Get locality from LegalEntity's PhysicalAddress."""
+        if self.legal_entity and self.legal_entity.physical_address:
+            return self.legal_entity.physical_address.locality or ""
+        return ""
+
+    @property
+    def state_or_province(self):
+        """Get region from LegalEntity's PhysicalAddress."""
+        if self.legal_entity and self.legal_entity.physical_address:
+            return self.legal_entity.physical_address.region or ""
+        return ""
+
+    @property
+    def postal_code(self):
+        """Get postal code from LegalEntity's PhysicalAddress."""
+        if self.legal_entity and self.legal_entity.physical_address:
+            return self.legal_entity.physical_address.postal_code or ""
+        return ""
+
+    @property
+    def country_name(self):
+        """Get country code from LegalEntity's PhysicalAddress."""
+        if self.legal_entity and self.legal_entity.physical_address:
+            return self.legal_entity.physical_address.country_code or "SE"
+        return "SE"
 
 
 class TSPName(MultiLangName):
@@ -539,7 +611,7 @@ class TSPCertificate(models.Model):
         max_length=50,
         choices=CERTIFICATE_TYPE_CHOICES,
         default="identity",
-        help_text="Type/purpose of this certificate"
+        help_text="Type/purpose of this certificate",
     )
 
     # Metadata extracted from certificate
@@ -573,7 +645,9 @@ class TSPCertificate(models.Model):
         max_length=500, blank=True, help_text="Key usage extensions (comma-separated)"
     )
     extended_key_usage = models.CharField(
-        max_length=500, blank=True, help_text="Extended key usage OIDs (comma-separated)"
+        max_length=500,
+        blank=True,
+        help_text="Extended key usage OIDs (comma-separated)",
     )
 
     # Status
@@ -607,9 +681,10 @@ class TSPCertificate(models.Model):
         Requires the cryptography library.
         """
         try:
+            import hashlib
+
             from cryptography import x509
             from cryptography.hazmat.backends import default_backend
-            import hashlib
 
             cert = x509.load_pem_x509_certificate(
                 self.certificate_pem.encode(), default_backend()
@@ -634,18 +709,22 @@ class TSPCertificate(models.Model):
                 pass
 
             # Serial and validity
-            self.serial_number = format(cert.serial_number, 'x').upper()
+            self.serial_number = format(cert.serial_number, "x").upper()
             self.not_before = cert.not_valid_before_utc
             self.not_after = cert.not_valid_after_utc
 
             # Fingerprint
-            self.fingerprint_sha256 = hashlib.sha256(
-                cert.public_bytes(x509.encoding.Encoding.DER)
-            ).hexdigest().upper()
+            self.fingerprint_sha256 = (
+                hashlib.sha256(cert.public_bytes(x509.encoding.Encoding.DER))
+                .hexdigest()
+                .upper()
+            )
 
             # Key usage
             try:
-                ku = cert.extensions.get_extension_for_oid(x509.oid.ExtensionOID.KEY_USAGE)
+                ku = cert.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.KEY_USAGE
+                )
                 usages = []
                 if ku.value.digital_signature:
                     usages.append("digitalSignature")
@@ -692,6 +771,7 @@ class TSPCertificate(models.Model):
     def is_valid(self):
         """Check if certificate is currently valid based on dates."""
         from django.utils import timezone
+
         now = timezone.now()
         if self.not_before and self.not_after:
             return self.not_before <= now <= self.not_after
@@ -701,6 +781,7 @@ class TSPCertificate(models.Model):
     def days_until_expiry(self):
         """Return days until certificate expires."""
         from django.utils import timezone
+
         if self.not_after:
             delta = self.not_after - timezone.now()
             return delta.days
@@ -792,19 +873,19 @@ class ServiceCertificate(models.Model):
     serial_number = models.CharField(max_length=100, blank=True)
     not_before = models.DateTimeField(null=True, blank=True)
     not_after = models.DateTimeField(null=True, blank=True)
-    
+
     # X.509 Subject Distinguished Name (for ServiceDigitalIdentity output)
     x509_subject_name = models.CharField(
         max_length=1000,
         blank=True,
-        help_text="X.509 Subject Distinguished Name (e.g., CN=..., O=..., C=...)"
+        help_text="X.509 Subject Distinguished Name (e.g., CN=..., O=..., C=...)",
     )
-    
+
     # X.509 Subject Key Identifier (for ServiceDigitalIdentity output)
     x509_ski = models.CharField(
         max_length=200,
         blank=True,
-        help_text="X.509 Subject Key Identifier (Base64 encoded)"
+        help_text="X.509 Subject Key Identifier (Base64 encoded)",
     )
 
     # Metadata
@@ -909,31 +990,32 @@ class ServiceHistoryName(MultiLangName):
 class ServiceHistoryDigitalId(models.Model):
     """
     Digital identity for Service History Instance.
-    
+
     Used to specify X509SubjectName and X509SKI in service history.
     This is different from the main certificate as history may only reference
     the subject name and SKI without the full certificate.
     """
+
     history = models.ForeignKey(
         ServiceHistoryInstance, on_delete=models.CASCADE, related_name="digital_ids"
     )
-    
+
     x509_subject_name = models.CharField(
         max_length=1000,
         blank=True,
-        help_text="X.509 Subject Distinguished Name (e.g., CN=..., O=..., C=...)"
+        help_text="X.509 Subject Distinguished Name (e.g., CN=..., O=..., C=...)",
     )
-    
+
     x509_ski = models.CharField(
         max_length=200,
         blank=True,
-        help_text="X.509 Subject Key Identifier (Base64 encoded)"
+        help_text="X.509 Subject Key Identifier (Base64 encoded)",
     )
-    
+
     class Meta:
         verbose_name = "History Digital ID"
         verbose_name_plural = "History Digital IDs"
-    
+
     def __str__(self):
         if self.x509_subject_name:
             return f"DN: {self.x509_subject_name[:50]}..."
@@ -943,24 +1025,22 @@ class ServiceHistoryDigitalId(models.Model):
 class ServiceHistoryQualification(models.Model):
     """
     Qualification element for Service History Instance.
-    
+
     Used to specify historical QC qualifications per ETSI TS 119612.
     """
+
     history = models.ForeignKey(
         ServiceHistoryInstance, on_delete=models.CASCADE, related_name="qualifications"
     )
-    
+
     qualifier_uri = models.CharField(
-        max_length=200,
-        help_text="Qualifier URI (e.g., QCNoQSCD)"
+        max_length=200, help_text="Qualifier URI (e.g., QCNoQSCD)"
     )
-    
+
     criteria_assert = models.CharField(
-        max_length=20,
-        default="none",
-        help_text="Criteria list assertion type"
+        max_length=20, default="none", help_text="Criteria list assertion type"
     )
-    
+
     # Key Usage bits for CriteriaList
     key_usage = models.BooleanField(default=False)
     key_usage_digital_signature = models.BooleanField(default=False)
@@ -972,11 +1052,11 @@ class ServiceHistoryQualification(models.Model):
     key_usage_crl_sign = models.BooleanField(default=False)
     key_usage_encipher_only = models.BooleanField(default=False)
     key_usage_decipher_only = models.BooleanField(default=False)
-    
+
     class Meta:
         verbose_name = "History Qualification"
         verbose_name_plural = "History Qualifications"
-    
+
     def __str__(self):
         return f"Qualification for {self.history}"
 
@@ -984,32 +1064,28 @@ class ServiceHistoryQualification(models.Model):
 class ServiceHistoryAdditionalInfo(models.Model):
     """
     Additional Service Information for Service History Instance.
-    
+
     Used to specify historical additional service info per ETSI TS 119612.
     """
+
     history = models.ForeignKey(
         ServiceHistoryInstance, on_delete=models.CASCADE, related_name="additional_info"
     )
-    
+
     uri = models.CharField(
-        max_length=200,
-        help_text="Additional service information URI"
+        max_length=200, help_text="Additional service information URI"
     )
-    
-    language = models.CharField(
-        max_length=5,
-        default="en"
-    )
-    
+
+    language = models.CharField(max_length=5, default="en")
+
     critical = models.BooleanField(
-        default=True,
-        help_text="Whether this extension is critical"
+        default=True, help_text="Whether this extension is critical"
     )
-    
+
     class Meta:
         verbose_name = "History Additional Info"
         verbose_name_plural = "History Additional Info"
-    
+
     def __str__(self):
         return f"AdditionalInfo for {self.history}"
 
@@ -1022,11 +1098,20 @@ QUALIFIER_URI_CHOICES = [
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCNoQSCD", "QC No QSCD"),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCWithSSCD", "QC With SSCD"),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCWithQSCD", "QC With QSCD"),
-    ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCQSCDManagedOnBehalf", "QC QSCD Managed On Behalf"),
-    ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCQSCDStatusAsInCert", "QC QSCD Status As In Cert"),
+    (
+        "http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCQSCDManagedOnBehalf",
+        "QC QSCD Managed On Behalf",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCQSCDStatusAsInCert",
+        "QC QSCD Status As In Cert",
+    ),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForESig", "QC For ESig"),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForESeal", "QC For ESeal"),
-    ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForWSA", "QC For Web Site Authentication"),
+    (
+        "http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForWSA",
+        "QC For Web Site Authentication",
+    ),
 ]
 
 CRITERIA_ASSERT_CHOICES = [
@@ -1039,30 +1124,30 @@ CRITERIA_ASSERT_CHOICES = [
 class ServiceQualification(models.Model):
     """
     Qualification element for Trust Service (ns5:Qualifications).
-    
+
     Used to specify QC qualifications and criteria lists per ETSI TS 119612.
     """
+
     service = models.ForeignKey(
         TrustService, on_delete=models.CASCADE, related_name="qualifications"
     )
-    
+
     qualifier_uri = models.CharField(
         max_length=200,
         choices=QUALIFIER_URI_CHOICES,
-        help_text="Qualifier URI (e.g., QCNoQSCD)"
+        help_text="Qualifier URI (e.g., QCNoQSCD)",
     )
-    
+
     criteria_assert = models.CharField(
         max_length=20,
         choices=CRITERIA_ASSERT_CHOICES,
         default="none",
-        help_text="Criteria list assertion type"
+        help_text="Criteria list assertion type",
     )
-    
+
     # Key Usage bits for CriteriaList
     key_usage = models.BooleanField(
-        default=False,
-        help_text="Include key usage criteria"
+        default=False, help_text="Include key usage criteria"
     )
     key_usage_digital_signature = models.BooleanField(default=False)
     key_usage_non_repudiation = models.BooleanField(default=True)
@@ -1073,19 +1158,25 @@ class ServiceQualification(models.Model):
     key_usage_crl_sign = models.BooleanField(default=False)
     key_usage_encipher_only = models.BooleanField(default=False)
     key_usage_decipher_only = models.BooleanField(default=False)
-    
+
     class Meta:
         verbose_name = "Service Qualification"
         verbose_name_plural = "Service Qualifications"
-    
+
     def __str__(self):
         return f"{self.get_qualifier_uri_display()} for {self.service}"
 
 
 ADDITIONAL_SERVICE_INFO_CHOICES = [
-    ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/ForeSignatures", "For e-Signatures"),
+    (
+        "http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/ForeSignatures",
+        "For e-Signatures",
+    ),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/ForeSeals", "For e-Seals"),
-    ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/ForWebSiteAuthentication", "For Web Site Authentication"),
+    (
+        "http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/ForWebSiteAuthentication",
+        "For Web Site Authentication",
+    ),
     ("http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/RootCA-QC", "Root CA QC"),
 ]
 
@@ -1093,33 +1184,29 @@ ADDITIONAL_SERVICE_INFO_CHOICES = [
 class AdditionalServiceInformation(models.Model):
     """
     Additional Service Information extension for Trust Service.
-    
+
     Used to specify additional service information URIs per ETSI TS 119612.
     """
+
     service = models.ForeignKey(
         TrustService, on_delete=models.CASCADE, related_name="additional_service_info"
     )
-    
+
     uri = models.CharField(
         max_length=200,
         choices=ADDITIONAL_SERVICE_INFO_CHOICES,
-        help_text="Additional service information URI"
+        help_text="Additional service information URI",
     )
-    
-    language = models.CharField(
-        max_length=5,
-        choices=LANGUAGE_CHOICES,
-        default="en"
-    )
-    
+
+    language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default="en")
+
     critical = models.BooleanField(
-        default=True,
-        help_text="Whether this extension is critical"
+        default=True, help_text="Whether this extension is critical"
     )
-    
+
     class Meta:
         verbose_name = "Additional Service Information"
         verbose_name_plural = "Additional Service Information"
-    
+
     def __str__(self):
         return f"{self.get_uri_display()} for {self.service}"

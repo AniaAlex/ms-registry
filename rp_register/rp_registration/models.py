@@ -1,7 +1,17 @@
 """
-EUDI Wallet Relying Party Registration - Django Models
-Based on: TS5 - Common Formats and API for RP Registration Information
-Version: 1.2 (27.11.2025)
+EUDI Wallet Registered Entity Registration - Django Models
+Based on:
+  - Trust Infrastructure Schema (WEBUILD WP4)
+  - TS5 - Common Formats and API for RP Registration Information
+  - TS6 - Common Set of Information to be Registered
+  - ARF Topic 27 - Registration of PID Providers, Attestation Providers, and Relying Parties
+
+Registered Entity Types (per Trust Infrastructure Schema Section 1.2):
+  - PID Providers: Issue Person Identification Data
+  - Attestation Providers: Issue attestations (QEAA, PuB-EAA, non-qualified EAA)
+  - Relying Parties: Request attributes from Wallet Units
+
+Version: 2.0 (refactored per Trust Infrastructure Schema)
 Source: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications
 """
 
@@ -74,6 +84,20 @@ class EntityType(models.TextChoices):
 
     LEGAL_PERSON = "legal_person", "Legal Person"
     NATURAL_PERSON = "natural_person", "Natural Person"
+
+
+class EntityRole(models.TextChoices):
+    """
+    Primary role in the EUDI Wallet ecosystem.
+    Per Trust Infrastructure Schema Section 1.2 - Registered Entities:
+    - PID Providers: Issue Person Identification Data
+    - Attestation Providers: Issue attestations (QEAA, PuB-EAA, EAA)
+    - Relying Parties: Request attributes from Wallet Units
+    """
+
+    RELYING_PARTY = "relying_party", "Relying Party (Verifier)"
+    PID_PROVIDER = "pid_provider", "PID Provider (Issuer)"
+    ATTESTATION_PROVIDER = "attestation_provider", "Attestation Provider (Issuer)"
 
 
 # ============================================================================
@@ -399,49 +423,72 @@ class SupervisoryAuthority(BaseModel):
 
 
 # ============================================================================
-# SECTION 6: MAIN WALLET RELYING PARTY MODEL
+# SECTION 6: MAIN REGISTERED ENTITY MODEL
 # ============================================================================
 
 
-class WalletRelyingParty(BaseModel):
+class RegisteredEntity(BaseModel):
     """
-    Main table for EUDI Wallet Relying Party registration data per TS5 specification.
-    Inherits from LegalEntity/Provider.
+    Main table for EUDI Wallet Registered Entity data.
+    Per Trust Infrastructure Schema Section 1.2, registered entities include:
+    - PID Providers (issue Person Identification Data)
+    - Attestation Providers (issue QEAA, PuB-EAA, non-qualified EAA)
+    - Relying Parties (request/verify attributes from Wallet Units)
+
+    All entity types share the same registration process with Member State Registrars
+    but have different roles in the ecosystem.
+
+    Since eIDAS 2.0 (Regulation 2024/1183), wallet entities are integrated into
+    Trusted Lists as Trust Service Providers with wallet-specific service types:
+    - EudiWallet/PIDProvider
+    - EudiWallet/QEAAProvider, EAAProvider, PuB-EAAProvider
+    - EudiWallet/RelyingParty
+    - EudiWallet/WalletProvider
     """
 
     legal_entity = models.OneToOneField(
-        LegalEntity, on_delete=models.CASCADE, related_name="wallet_relying_party"
+        LegalEntity, on_delete=models.CASCADE, related_name="registered_entity"
     )
 
-    # WalletRelyingParty specific attributes (Section 2.1)
+    # Note: TrustServiceProvider(s) link to LegalEntity directly.
+    # Access TSPs via: self.legal_entity.trust_service_providers.all()
+
+    # Entity role in the ecosystem (ARF Topic 27)
+    entity_role = models.CharField(
+        max_length=30,
+        choices=EntityRole.choices,
+        help_text="Primary role: RP (verifier), PID Provider, or Attestation Provider",
+    )
+
+    # RegisteredEntity specific attributes (Section 2.1)
     trade_name = models.CharField(
         max_length=500, blank=True, null=True, help_text="Common/service name [0..1]"
     )
 
-    # isPSB: indicates if RP is public sector body
+    # isPSB: indicates if entity is public sector body
     is_psb = models.BooleanField(
         default=False,
         verbose_name="Is Public Sector Body",
-        help_text="Indicates whether the WRP is a public sector body",
+        help_text="Indicates whether the entity is a public sector body (relevant for PuB-EAA Providers)",
     )
 
-    # isIntermediary: indicates if RP acts on behalf of other RPs
+    # isIntermediary: indicates if entity acts on behalf of other entities (RPs only)
     is_intermediary = models.BooleanField(
         default=False,
-        help_text="Indicates whether the WRP acts on behalf of other RPs. Must be FALSE if usesIntermediary is present",
+        help_text="Indicates whether the entity acts as an intermediary. Only applicable to Relying Parties.",
     )
 
     # registryURI: URI for national registry API (provided by Registrar)
     registry_uri = models.URLField(
         max_length=2048,
-        help_text="URI for the national registry API, provided by Registrar upon registration",
+        help_text="National registry API URI, provided by Registrar (per Reg_03, Reg_04)",
     )
 
     # supervisoryAuthority: DPA in charge
     supervisory_authority = models.ForeignKey(
         SupervisoryAuthority,
         on_delete=models.PROTECT,
-        related_name="wallet_relying_parties",
+        related_name="registered_entities",
     )
 
     # Status tracking
@@ -458,14 +505,15 @@ class WalletRelyingParty(BaseModel):
 
     # Many-to-many relationships
     policies = models.ManyToManyField(
-        Policy, through="WRPPolicy", related_name="wallet_relying_parties"
+        Policy, through="RegisteredEntityPolicy", related_name="registered_entities"
     )
 
     class Meta:
-        db_table = "rp_wallet_relying_party"
-        verbose_name = "Wallet Relying Party"
-        verbose_name_plural = "Wallet Relying Parties"
+        db_table = "rp_registered_entity"
+        verbose_name = "Registered Entity"
+        verbose_name_plural = "Registered Entities"
         indexes = [
+            models.Index(fields=["entity_role"]),
             models.Index(fields=["trade_name"]),
             models.Index(fields=["registry_uri"]),
             models.Index(fields=["is_psb"]),
@@ -474,16 +522,19 @@ class WalletRelyingParty(BaseModel):
         ]
 
     def clean(self):
-        """Business rule: isIntermediary SHALL be FALSE if usesIntermediary is present"""
+        """Business rules validation"""
+        # isIntermediary only applies to Relying Parties
+        if self.is_intermediary and self.entity_role != EntityRole.RELYING_PARTY:
+            raise ValidationError("Only Relying Parties can act as intermediaries")
+        # Intermediary cannot use other intermediaries
         if self.is_intermediary and hasattr(self, "id") and self.id:
             if self.used_intermediaries.exists():
-                raise ValidationError(
-                    "A Wallet-Relying Party cannot be an intermediary and use intermediaries at the same time"
-                )
+                raise ValidationError("An intermediary cannot use other intermediaries")
 
     def __str__(self):
         name = self.trade_name or self.legal_entity.display_name
-        return f"{name} ({self.get_registration_status_display()})"
+        role = self.get_entity_role_display() if self.entity_role else "Unknown Role"
+        return f"{name} ({role} - {self.get_registration_status_display()})"
 
     @property
     def display_name(self):
@@ -493,17 +544,30 @@ class WalletRelyingParty(BaseModel):
     def primary_identifier(self):
         return self.legal_entity.primary_identifier
 
+    @property
+    def is_issuer(self):
+        """Returns True if entity is a PID or Attestation Provider (issuer role)"""
+        return self.entity_role in [
+            EntityRole.PID_PROVIDER,
+            EntityRole.ATTESTATION_PROVIDER,
+        ]
+
+    @property
+    def is_verifier(self):
+        """Returns True if entity is a Relying Party (verifier role)"""
+        return self.entity_role == EntityRole.RELYING_PARTY
+
 
 # ============================================================================
 # SECTION 7: SUPPORT URIs (1..* required)
 # ============================================================================
 
 
-class WRPSupportURI(BaseModel):
-    """Support URI for Wallet Relying Party [1..*]"""
+class EntitySupportURI(BaseModel):
+    """Support URI for Registered Entity [1..*]"""
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="support_uris"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="support_uris"
     )
     support_uri = models.URLField(max_length=2048)
     support_type = models.CharField(
@@ -513,11 +577,11 @@ class WRPSupportURI(BaseModel):
     is_primary = models.BooleanField(default=False)
 
     class Meta:
-        db_table = "rp_wrp_support_uri"
+        db_table = "rp_entity_support_uri"
         verbose_name = "Support URI"
         verbose_name_plural = "Support URIs"
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
         ]
 
     def __str__(self):
@@ -529,11 +593,17 @@ class WRPSupportURI(BaseModel):
 # ============================================================================
 
 
-class WRPEntitlement(BaseModel):
-    """Entitlement for Wallet Relying Party [1..*]"""
+class EntityEntitlement(BaseModel):
+    """
+    Entitlement for Registered Entity [1..*]
+    Specifies what the entity is authorized to do:
+    - For Relying Parties: Service_Provider, Intermediary
+    - For PID Providers: PID_Provider
+    - For Attestation Providers: QEAA_Provider, PUB_EAA_Provider, Non_Q_EAA_Provider
+    """
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="entitlements"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="entitlements"
     )
     entitlement_uri = models.URLField(
         max_length=2048,
@@ -545,17 +615,17 @@ class WRPEntitlement(BaseModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        db_table = "rp_wrp_entitlement"
+        db_table = "rp_entity_entitlement"
         verbose_name = "Entitlement"
         verbose_name_plural = "Entitlements"
-        unique_together = ["wallet_relying_party", "entitlement_uri"]
+        unique_together = ["registered_entity", "entitlement_uri"]
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
             models.Index(fields=["entitlement_type"]),
         ]
 
     def __str__(self):
-        return f"{self.get_entitlement_type_display()} - {self.wallet_relying_party}"
+        return f"{self.get_entitlement_type_display()} - {self.registered_entity}"
 
 
 # ============================================================================
@@ -563,11 +633,11 @@ class WRPEntitlement(BaseModel):
 # ============================================================================
 
 
-class WRPServiceDescription(BaseModel):
+class EntityServiceDescription(BaseModel):
     """Multilingual service description [1..*]"""
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty,
+    registered_entity = models.ForeignKey(
+        RegisteredEntity,
         on_delete=models.CASCADE,
         related_name="service_descriptions",
     )
@@ -577,12 +647,12 @@ class WRPServiceDescription(BaseModel):
     content = models.TextField(help_text="Localized description")
 
     class Meta:
-        db_table = "rp_wrp_service_description"
+        db_table = "rp_entity_service_description"
         verbose_name = "Service Description"
         verbose_name_plural = "Service Descriptions"
-        unique_together = ["wallet_relying_party", "lang"]
+        unique_together = ["registered_entity", "lang"]
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
         ]
 
     def __str__(self):
@@ -631,7 +701,8 @@ class Credential(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.get_format_display()} - {self.attestation_type or self.catalogue_schema_uri or 'Custom'}"
+        type_info = self.attestation_type or self.catalogue_schema_uri or "Custom"
+        return f"{self.get_format_display()} - {type_info}"
 
 
 # ============================================================================
@@ -686,10 +757,11 @@ class IntendedUse(BaseModel):
     """
     Intended Use class for data request use cases.
     Per CIR Annex I paragraphs (8), (9) and (10).
+    Applicable primarily to Relying Parties (verifiers) who request attributes.
     """
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="intended_uses"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="intended_uses"
     )
 
     # intendedUseIdentifier: [1..1] Registrar-provided unique ID
@@ -717,7 +789,7 @@ class IntendedUse(BaseModel):
         verbose_name = "Intended Use"
         verbose_name_plural = "Intended Uses"
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
             models.Index(fields=["intended_use_identifier"]),
         ]
 
@@ -835,18 +907,24 @@ class IntendedUseCredential(BaseModel):
 
 
 # ============================================================================
-# SECTION 16: PROVIDES ATTESTATIONS (For Attestation Providers)
+# SECTION 16: PROVIDES ATTESTATIONS (For PID/Attestation Providers - Issuers)
 # ============================================================================
 
 
-class WRPProvidesAttestation(BaseModel):
+class EntityProvidesAttestation(BaseModel):
     """
-    Attestations provided by WRP (for attestation providers).
+    Attestations provided by PID Providers and Attestation Providers (issuers).
+    Per Trust Infrastructure Schema Section 2.1:
+    - PID Providers: Attestation type(s) they intend to issue (e.g., national PID)
+    - QEAA Providers: Attestation type(s) (e.g., diplomas, professional qualifications)
+    - PuB-EAA Providers: Attestation type(s) (e.g., mDLs, vehicle registration cards)
+    - Non-qualified EAA Providers: Attestation type(s)
+
     Note: Claims SHALL NOT be present for these credentials.
     """
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty,
+    registered_entity = models.ForeignKey(
+        RegisteredEntity,
         on_delete=models.CASCADE,
         related_name="provided_attestations",
     )
@@ -855,31 +933,34 @@ class WRPProvidesAttestation(BaseModel):
     )
 
     class Meta:
-        db_table = "rp_wrp_provides_attestation"
+        db_table = "rp_entity_provides_attestation"
         verbose_name = "Provided Attestation"
         verbose_name_plural = "Provided Attestations"
-        unique_together = ["wallet_relying_party", "credential"]
+        unique_together = ["registered_entity", "credential"]
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
         ]
 
     def __str__(self):
-        return f"{self.wallet_relying_party} provides {self.credential}"
+        return f"{self.registered_entity} provides {self.credential}"
 
 
 # ============================================================================
-# SECTION 17: USES INTERMEDIARY (Self-referencing relationship)
+# SECTION 17: USES INTERMEDIARY (Self-referencing relationship for RPs)
 # ============================================================================
 
 
-class WRPUsesIntermediary(BaseModel):
-    """Self-referencing relationship for WRPs using intermediaries"""
+class EntityUsesIntermediary(BaseModel):
+    """
+    Self-referencing relationship for Relying Parties using intermediaries.
+    Per Trust Infrastructure Schema, only Relying Parties can use intermediaries.
+    """
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="used_intermediaries"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="used_intermediaries"
     )
     intermediary = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="clients_using"
+        RegisteredEntity, on_delete=models.CASCADE, related_name="clients_using"
     )
     # Cached for quick access
     intermediary_identifier = models.CharField(max_length=500)
@@ -889,26 +970,28 @@ class WRPUsesIntermediary(BaseModel):
     relationship_end_date = models.DateField(blank=True, null=True)
 
     class Meta:
-        db_table = "rp_wrp_uses_intermediary"
+        db_table = "rp_entity_uses_intermediary"
         verbose_name = "Uses Intermediary"
         verbose_name_plural = "Uses Intermediaries"
-        unique_together = ["wallet_relying_party", "intermediary"]
+        unique_together = ["registered_entity", "intermediary"]
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
             models.Index(fields=["intermediary"]),
         ]
 
     def clean(self):
-        """Prevent self-reference and validate intermediary status"""
-        if self.wallet_relying_party_id == self.intermediary_id:
-            raise ValidationError("A WRP cannot be its own intermediary")
-        if self.wallet_relying_party.is_intermediary:
+        """Validate intermediary relationship"""
+        if self.registered_entity_id == self.intermediary_id:
+            raise ValidationError("An entity cannot be its own intermediary")
+        if self.registered_entity.entity_role != EntityRole.RELYING_PARTY:
+            raise ValidationError("Only Relying Parties can use intermediaries")
+        if self.registered_entity.is_intermediary:
             raise ValidationError(
-                "A WRP that is an intermediary cannot use other intermediaries"
+                "An entity that is an intermediary cannot use other intermediaries"
             )
 
     def __str__(self):
-        return f"{self.wallet_relying_party} uses {self.intermediary}"
+        return f"{self.registered_entity} uses {self.intermediary}"
 
 
 # ============================================================================
@@ -916,11 +999,16 @@ class WRPUsesIntermediary(BaseModel):
 # ============================================================================
 
 
-class WRPAccessCertificate(BaseModel):
-    """Access Certificate history with CT log info per RFC 9162"""
+class EntityAccessCertificate(BaseModel):
+    """
+    Access Certificate history with CT log info per RFC 9162.
+    Per Trust Infrastructure Schema Section 2.2:
+    Access CA issues certificates to all registered entities
+    (PID Providers, Attestation Providers, Relying Parties).
+    """
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="access_certificates"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="access_certificates"
     )
 
     # Certificate details
@@ -949,11 +1037,11 @@ class WRPAccessCertificate(BaseModel):
     certificate_pem = models.TextField(blank=True, null=True)
 
     class Meta:
-        db_table = "rp_wrp_access_certificate"
+        db_table = "rp_entity_access_certificate"
         verbose_name = "Access Certificate"
         verbose_name_plural = "Access Certificates"
         indexes = [
-            models.Index(fields=["wallet_relying_party"]),
+            models.Index(fields=["registered_entity"]),
             models.Index(fields=["is_current"]),
             models.Index(fields=["not_before", "not_after"]),
         ]
@@ -968,8 +1056,15 @@ class WRPAccessCertificate(BaseModel):
 # ============================================================================
 
 
-class WRPRegistrationCertificate(BaseModel):
-    """Registration Certificate (optional per Member State)"""
+class EntityRegistrationCertificate(BaseModel):
+    """
+    Registration Certificate (optional per Member State).
+    Per Trust Infrastructure Schema Section 2.3:
+    - RPRC_09: Registrar MAY decide to issue registration certificates to Relying Parties
+    - RPRC_13: Registrar MAY decide to issue registration certificates to Providers
+
+    Contains (a subset of) the data registered for that entity.
+    """
 
     intended_use = models.OneToOneField(
         IntendedUse, on_delete=models.CASCADE, related_name="registration_certificate"
@@ -1008,28 +1103,28 @@ class WRPRegistrationCertificate(BaseModel):
 
 
 # ============================================================================
-# SECTION 20: WRP POLICIES LINK TABLE
+# SECTION 20: REGISTERED ENTITY POLICIES LINK TABLE
 # ============================================================================
 
 
-class WRPPolicy(BaseModel):
-    """Junction table for WRP to Policies"""
+class RegisteredEntityPolicy(BaseModel):
+    """Junction table for Registered Entity to Policies"""
 
-    wallet_relying_party = models.ForeignKey(
-        WalletRelyingParty, on_delete=models.CASCADE, related_name="policy_links"
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE, related_name="policy_links"
     )
     policy = models.ForeignKey(
-        Policy, on_delete=models.CASCADE, related_name="wrp_links"
+        Policy, on_delete=models.CASCADE, related_name="entity_links"
     )
 
     class Meta:
-        db_table = "rp_wrp_policy"
-        verbose_name = "WRP Policy"
-        verbose_name_plural = "WRP Policies"
-        unique_together = ["wallet_relying_party", "policy"]
+        db_table = "rp_entity_policy"
+        verbose_name = "Entity Policy"
+        verbose_name_plural = "Entity Policies"
+        unique_together = ["registered_entity", "policy"]
 
     def __str__(self):
-        return f"{self.wallet_relying_party} - {self.policy}"
+        return f"{self.registered_entity} - {self.policy}"
 
 
 # ============================================================================

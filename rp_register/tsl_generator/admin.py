@@ -192,6 +192,7 @@ class ServiceHistoryNameInline(admin.TabularInline):
 
 class ServiceHistoryDigitalIdInline(admin.TabularInline):
     """Inline for Service History Digital IDs (X509SubjectName, X509SKI)."""
+
     model = ServiceHistoryDigitalId
     extra = 0
     fields = ["x509_subject_name", "x509_ski"]
@@ -199,27 +200,34 @@ class ServiceHistoryDigitalIdInline(admin.TabularInline):
 
 class ServiceHistoryQualificationInline(admin.StackedInline):
     """Inline for Service History Qualifications."""
+
     model = ServiceHistoryQualification
     extra = 0
     fieldsets = (
-        (None, {
-            "fields": ("qualifier_uri", "criteria_assert")
-        }),
-        ("Key Usage Criteria", {
-            "fields": (
-                "key_usage",
-                ("key_usage_digital_signature", "key_usage_non_repudiation"),
-                ("key_usage_key_encipherment", "key_usage_data_encipherment"),
-                ("key_usage_key_agreement", "key_usage_key_cert_sign"),
-                ("key_usage_crl_sign", "key_usage_encipher_only", "key_usage_decipher_only"),
-            ),
-            "classes": ("collapse",),
-        }),
+        (None, {"fields": ("qualifier_uri", "criteria_assert")}),
+        (
+            "Key Usage Criteria",
+            {
+                "fields": (
+                    "key_usage",
+                    ("key_usage_digital_signature", "key_usage_non_repudiation"),
+                    ("key_usage_key_encipherment", "key_usage_data_encipherment"),
+                    ("key_usage_key_agreement", "key_usage_key_cert_sign"),
+                    (
+                        "key_usage_crl_sign",
+                        "key_usage_encipher_only",
+                        "key_usage_decipher_only",
+                    ),
+                ),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
 
 class ServiceHistoryAdditionalInfoInline(admin.TabularInline):
     """Inline for Service History Additional Information."""
+
     model = ServiceHistoryAdditionalInfo
     extra = 0
     fields = ["uri", "language", "critical"]
@@ -227,27 +235,34 @@ class ServiceHistoryAdditionalInfoInline(admin.TabularInline):
 
 class ServiceQualificationInline(admin.StackedInline):
     """Inline for Service Qualifications (ns5:Qualifications)."""
+
     model = ServiceQualification
     extra = 0
     fieldsets = (
-        (None, {
-            "fields": ("qualifier_uri", "criteria_assert")
-        }),
-        ("Key Usage Criteria", {
-            "fields": (
-                "key_usage",
-                ("key_usage_digital_signature", "key_usage_non_repudiation"),
-                ("key_usage_key_encipherment", "key_usage_data_encipherment"),
-                ("key_usage_key_agreement", "key_usage_key_cert_sign"),
-                ("key_usage_crl_sign", "key_usage_encipher_only", "key_usage_decipher_only"),
-            ),
-            "classes": ("collapse",),
-        }),
+        (None, {"fields": ("qualifier_uri", "criteria_assert")}),
+        (
+            "Key Usage Criteria",
+            {
+                "fields": (
+                    "key_usage",
+                    ("key_usage_digital_signature", "key_usage_non_repudiation"),
+                    ("key_usage_key_encipherment", "key_usage_data_encipherment"),
+                    ("key_usage_key_agreement", "key_usage_key_cert_sign"),
+                    (
+                        "key_usage_crl_sign",
+                        "key_usage_encipher_only",
+                        "key_usage_decipher_only",
+                    ),
+                ),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
 
 class AdditionalServiceInformationInline(admin.TabularInline):
     """Inline for Additional Service Information extensions."""
+
     model = AdditionalServiceInformation
     extra = 0
     fields = ["uri", "language", "critical"]
@@ -255,21 +270,24 @@ class AdditionalServiceInformationInline(admin.TabularInline):
 
 class TrustServiceProviderInline(admin.TabularInline):
     """Inline to show Trust Service Providers aligned to a TSL Scheme."""
+
     model = TrustServiceProvider
     extra = 0
     show_change_link = True
     fields = ["get_name", "country_name", "locality", "is_active", "service_count"]
     readonly_fields = ["get_name", "service_count"]
-    
+
     def get_name(self, obj):
         """Get the primary name of the provider."""
         primary_name = obj.names.first()
         return primary_name.value if primary_name else f"TSP #{obj.pk}"
+
     get_name.short_description = "Provider Name"
-    
+
     def service_count(self, obj):
         """Count active services for this provider."""
         return obj.services.filter(is_active=True).count()
+
     service_count.short_description = "Active Services"
 
 
@@ -297,17 +315,20 @@ class TSLSchemeAdmin(admin.ModelAdmin):
     def provider_count(self, obj):
         """Count active providers aligned to this scheme."""
         return obj.providers.filter(is_active=True).count()
+
     provider_count.short_description = "Providers"
 
     def generate_xml_link(self, obj):
         """Generate XML download link for list view."""
-        from django.utils.html import format_html
         from django.urls import reverse
+        from django.utils.html import format_html
+
         url = reverse("admin:tsl_generator_tslscheme_generate_xml", args=[obj.pk])
         return format_html(
             '<a href="{}" class="button" style="padding: 3px 10px; background: #417223; color: white; text-decoration: none; border-radius: 4px;">Generate XML</a>',
-            url
+            url,
         )
+
     generate_xml_link.short_description = "Generate"
     generate_xml_link.allow_tags = True
 
@@ -384,7 +405,7 @@ class TSLSchemeAdmin(admin.ModelAdmin):
 
         scheme = get_object_or_404(TSLScheme, pk=pk)
         xml_content = scheme.to_xml_etsi()
-        
+
         response = HttpResponse(xml_content, content_type="application/xml")
         response["Content-Disposition"] = (
             f'attachment; filename="{scheme.territory}-TL.xml"'
@@ -451,22 +472,18 @@ class TSLPointerAdmin(admin.ModelAdmin):
 
 @admin.register(TrustServiceProvider)
 class TrustServiceProviderAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "scheme", "country_name", "locality", "is_active"]
-    list_filter = ["scheme", "country_name", "is_active"]
-    search_fields = ["names__value", "locality"]
+    list_display = ["__str__", "scheme", "legal_entity", "country_name", "is_active"]
+    list_filter = ["scheme", "is_active", "legal_entity__physical_address__country_code"]
+    search_fields = ["names__value", "legal_entity__legal_person__legal_name", "legal_entity__natural_person__family_name"]
+    autocomplete_fields = ["legal_entity"]
 
     fieldsets = (
         ("Scheme", {"fields": ("scheme",)}),
         (
-            "Postal Address",
+            "Organization",
             {
-                "fields": (
-                    "street_address",
-                    "locality",
-                    "state_or_province",
-                    "postal_code",
-                    "country_name",
-                )
+                "fields": ("legal_entity",),
+                "description": "Select the legal entity. Address and contact info come from the Legal Entity.",
             },
         ),
         ("Status", {"fields": ("is_active",)}),
@@ -574,7 +591,13 @@ class TSPCertificateAdmin(admin.ModelAdmin):
         "is_active",
     ]
     list_filter = ["certificate_type", "is_active", "provider__scheme"]
-    search_fields = ["subject_cn", "subject_dn", "issuer_cn", "serial_number", "fingerprint_sha256"]
+    search_fields = [
+        "subject_cn",
+        "subject_dn",
+        "issuer_cn",
+        "serial_number",
+        "fingerprint_sha256",
+    ]
     date_hierarchy = "not_after"
 
     fieldsets = (
@@ -621,14 +644,18 @@ class TSPCertificateAdmin(admin.ModelAdmin):
 
     def is_valid_display(self, obj):
         from django.utils.html import format_html
+
         is_valid = obj.is_valid
         if is_valid is None:
             return format_html('<span style="color: gray;">Unknown</span>')
         elif is_valid:
             days = obj.days_until_expiry
             if days and days < 30:
-                return format_html('<span style="color: orange;">✓ Valid ({} days)</span>', days)
+                return format_html(
+                    '<span style="color: orange;">✓ Valid ({} days)</span>', days
+                )
             return format_html('<span style="color: green;">✓ Valid</span>')
         else:
             return format_html('<span style="color: red;">✗ Expired</span>')
+
     is_valid_display.short_description = "Validity"

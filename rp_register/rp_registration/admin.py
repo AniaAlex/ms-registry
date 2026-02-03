@@ -1,6 +1,7 @@
 """
-EUDI Wallet Relying Party Registration - Django Admin Configuration
-Provides comprehensive admin interface for managing Wallet Relying Parties
+EUDI Wallet Registered Entity Registration - Django Admin Configuration
+Provides comprehensive admin interface for managing Registered Entities
+(PID Providers, Attestation Providers, and Relying Parties)
 """
 
 from django.contrib import admin
@@ -10,6 +11,13 @@ from .models import (
     AuditLog,
     Claim,
     Credential,
+    EntityAccessCertificate,
+    EntityEntitlement,
+    EntityProvidesAttestation,
+    EntityRegistrationCertificate,
+    EntityServiceDescription,
+    EntitySupportURI,
+    EntityUsesIntermediary,
     Identifier,
     IntendedUse,
     IntendedUseCredential,
@@ -22,16 +30,9 @@ from .models import (
     NaturalPerson,
     PhysicalAddress,
     Policy,
+    RegisteredEntity,
+    RegisteredEntityPolicy,
     SupervisoryAuthority,
-    WalletRelyingParty,
-    WRPAccessCertificate,
-    WRPEntitlement,
-    WRPPolicy,
-    WRPProvidesAttestation,
-    WRPRegistrationCertificate,
-    WRPServiceDescription,
-    WRPSupportURI,
-    WRPUsesIntermediary,
 )
 
 # ============================================================================
@@ -45,36 +46,36 @@ class LegalEntityIdentifierInline(admin.TabularInline):
     autocomplete_fields = ["identifier"]
 
 
-class WRPSupportURIInline(admin.TabularInline):
-    model = WRPSupportURI
+class EntitySupportURIInline(admin.TabularInline):
+    model = EntitySupportURI
     extra = 1
 
 
-class WRPEntitlementInline(admin.TabularInline):
-    model = WRPEntitlement
+class EntityEntitlementInline(admin.TabularInline):
+    model = EntityEntitlement
     extra = 1
 
 
-class WRPServiceDescriptionInline(admin.TabularInline):
-    model = WRPServiceDescription
+class EntityServiceDescriptionInline(admin.TabularInline):
+    model = EntityServiceDescription
     extra = 1
 
 
-class WRPPolicyInline(admin.TabularInline):
-    model = WRPPolicy
+class RegisteredEntityPolicyInline(admin.TabularInline):
+    model = RegisteredEntityPolicy
     extra = 1
     autocomplete_fields = ["policy"]
 
 
-class WRPProvidesAttestationInline(admin.TabularInline):
-    model = WRPProvidesAttestation
+class EntityProvidesAttestationInline(admin.TabularInline):
+    model = EntityProvidesAttestation
     extra = 1
     autocomplete_fields = ["credential"]
 
 
-class WRPUsesIntermediaryInline(admin.TabularInline):
-    model = WRPUsesIntermediary
-    fk_name = "wallet_relying_party"
+class EntityUsesIntermediaryInline(admin.TabularInline):
+    model = EntityUsesIntermediary
+    fk_name = "registered_entity"
     extra = 1
     autocomplete_fields = ["intermediary"]
     readonly_fields = [
@@ -84,8 +85,8 @@ class WRPUsesIntermediaryInline(admin.TabularInline):
     ]
 
 
-class WRPAccessCertificateInline(admin.TabularInline):
-    model = WRPAccessCertificate
+class EntityAccessCertificateInline(admin.TabularInline):
+    model = EntityAccessCertificate
     extra = 0
     readonly_fields = [
         "certificate_serial",
@@ -273,14 +274,14 @@ class ClaimAdmin(admin.ModelAdmin):
 class IntendedUseAdmin(admin.ModelAdmin):
     list_display = [
         "intended_use_identifier",
-        "wallet_relying_party",
+        "registered_entity",
         "validity_start",
         "validity_end",
         "is_active_display",
     ]
-    list_filter = ["wallet_relying_party", "validity_start"]
-    search_fields = ["intended_use_identifier", "wallet_relying_party__trade_name"]
-    autocomplete_fields = ["wallet_relying_party"]
+    list_filter = ["registered_entity", "validity_start"]
+    search_fields = ["intended_use_identifier", "registered_entity__trade_name"]
+    autocomplete_fields = ["registered_entity"]
     inlines = [
         IntendedUsePurposeInline,
         IntendedUsePrivacyPolicyInline,
@@ -291,7 +292,7 @@ class IntendedUseAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Identification",
-            {"fields": ("wallet_relying_party", "intended_use_identifier")},
+            {"fields": ("registered_entity", "intended_use_identifier")},
         ),
         ("Validity Period", {"fields": ("validity_start", "validity_end")}),
     )
@@ -304,8 +305,8 @@ class IntendedUseAdmin(admin.ModelAdmin):
     is_active_display.short_description = "Status"
 
 
-@admin.register(WRPRegistrationCertificate)
-class WRPRegistrationCertificateAdmin(admin.ModelAdmin):
+@admin.register(EntityRegistrationCertificate)
+class EntityRegistrationCertificateAdmin(admin.ModelAdmin):
     list_display = [
         "certificate_identifier",
         "intended_use",
@@ -343,22 +344,22 @@ class WRPRegistrationCertificateAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(WRPAccessCertificate)
-class WRPAccessCertificateAdmin(admin.ModelAdmin):
+@admin.register(EntityAccessCertificate)
+class EntityAccessCertificateAdmin(admin.ModelAdmin):
     list_display = [
         "certificate_serial",
-        "wallet_relying_party",
+        "registered_entity",
         "not_before",
         "not_after",
         "is_current",
     ]
-    list_filter = ["is_current", "wallet_relying_party"]
-    search_fields = ["certificate_serial", "wallet_relying_party__trade_name"]
-    autocomplete_fields = ["wallet_relying_party"]
+    list_filter = ["is_current", "registered_entity"]
+    search_fields = ["certificate_serial", "registered_entity__trade_name"]
+    autocomplete_fields = ["registered_entity"]
     ordering = ["-not_before"]
 
     fieldsets = (
-        ("Wallet Relying Party", {"fields": ("wallet_relying_party",)}),
+        ("Registered Entity", {"fields": ("registered_entity",)}),
         (
             "Certificate Details",
             {
@@ -389,10 +390,11 @@ class WRPAccessCertificateAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(WalletRelyingParty)
-class WalletRelyingPartyAdmin(admin.ModelAdmin):
+@admin.register(RegisteredEntity)
+class RegisteredEntityAdmin(admin.ModelAdmin):
     list_display = [
         "display_name",
+        "entity_role",
         "legal_entity",
         "registration_status_display",
         "is_psb",
@@ -401,6 +403,7 @@ class WalletRelyingPartyAdmin(admin.ModelAdmin):
         "registered_at",
     ]
     list_filter = [
+        "entity_role",
         "registration_status",
         "is_psb",
         "is_intermediary",
@@ -414,19 +417,23 @@ class WalletRelyingPartyAdmin(admin.ModelAdmin):
     ]
     autocomplete_fields = ["legal_entity", "supervisory_authority"]
     inlines = [
-        WRPServiceDescriptionInline,
-        WRPSupportURIInline,
-        WRPEntitlementInline,
-        WRPPolicyInline,
-        WRPProvidesAttestationInline,
-        WRPUsesIntermediaryInline,
-        WRPAccessCertificateInline,
+        EntityServiceDescriptionInline,
+        EntitySupportURIInline,
+        EntityEntitlementInline,
+        RegisteredEntityPolicyInline,
+        EntityProvidesAttestationInline,
+        EntityUsesIntermediaryInline,
+        EntityAccessCertificateInline,
     ]
     readonly_fields = ["created_at", "updated_at"]
     ordering = ["-created_at"]
 
     fieldsets = (
-        ("Legal Entity", {"fields": ("legal_entity",)}),
+        ("Legal Entity", {
+            "fields": ("legal_entity",),
+            "description": "TSP entries are linked via Legal Entity → trust_service_providers",
+        }),
+        ("Entity Role", {"fields": ("entity_role",)}),
         ("Basic Information", {"fields": ("trade_name", "registry_uri")}),
         ("Classification", {"fields": ("is_psb", "is_intermediary")}),
         ("Supervisory Authority", {"fields": ("supervisory_authority",)}),
@@ -469,37 +476,37 @@ class WalletRelyingPartyAdmin(admin.ModelAdmin):
         )
 
 
-@admin.register(WRPSupportURI)
-class WRPSupportURIAdmin(admin.ModelAdmin):
-    list_display = ["wallet_relying_party", "support_type", "support_uri", "is_primary"]
+@admin.register(EntitySupportURI)
+class EntitySupportURIAdmin(admin.ModelAdmin):
+    list_display = ["registered_entity", "support_type", "support_uri", "is_primary"]
     list_filter = ["support_type", "is_primary"]
-    search_fields = ["support_uri", "wallet_relying_party__trade_name"]
-    autocomplete_fields = ["wallet_relying_party"]
-    ordering = ["wallet_relying_party", "-is_primary"]
+    search_fields = ["support_uri", "registered_entity__trade_name"]
+    autocomplete_fields = ["registered_entity"]
+    ordering = ["registered_entity", "-is_primary"]
 
 
-@admin.register(WRPEntitlement)
-class WRPEntitlementAdmin(admin.ModelAdmin):
+@admin.register(EntityEntitlement)
+class EntityEntitlementAdmin(admin.ModelAdmin):
     list_display = [
-        "wallet_relying_party",
+        "registered_entity",
         "entitlement_type",
         "granted_at",
         "expires_at",
         "is_active",
     ]
     list_filter = ["entitlement_type", "is_active"]
-    search_fields = ["wallet_relying_party__trade_name", "entitlement_uri"]
-    autocomplete_fields = ["wallet_relying_party"]
-    ordering = ["wallet_relying_party", "entitlement_type"]
+    search_fields = ["registered_entity__trade_name", "entitlement_uri"]
+    autocomplete_fields = ["registered_entity"]
+    ordering = ["registered_entity", "entitlement_type"]
 
 
-@admin.register(WRPServiceDescription)
-class WRPServiceDescriptionAdmin(admin.ModelAdmin):
-    list_display = ["wallet_relying_party", "lang", "content_preview"]
+@admin.register(EntityServiceDescription)
+class EntityServiceDescriptionAdmin(admin.ModelAdmin):
+    list_display = ["registered_entity", "lang", "content_preview"]
     list_filter = ["lang"]
-    search_fields = ["content", "wallet_relying_party__trade_name"]
-    autocomplete_fields = ["wallet_relying_party"]
-    ordering = ["wallet_relying_party", "lang"]
+    search_fields = ["content", "registered_entity__trade_name"]
+    autocomplete_fields = ["registered_entity"]
+    ordering = ["registered_entity", "lang"]
 
     def content_preview(self, obj):
         return obj.content[:100] + "..." if len(obj.content) > 100 else obj.content
@@ -507,36 +514,36 @@ class WRPServiceDescriptionAdmin(admin.ModelAdmin):
     content_preview.short_description = "Content Preview"
 
 
-@admin.register(WRPProvidesAttestation)
-class WRPProvidesAttestationAdmin(admin.ModelAdmin):
-    list_display = ["wallet_relying_party", "credential"]
+@admin.register(EntityProvidesAttestation)
+class EntityProvidesAttestationAdmin(admin.ModelAdmin):
+    list_display = ["registered_entity", "credential"]
     list_filter = ["credential__format"]
-    search_fields = ["wallet_relying_party__trade_name", "credential__attestation_type"]
-    autocomplete_fields = ["wallet_relying_party", "credential"]
-    ordering = ["wallet_relying_party"]
+    search_fields = ["registered_entity__trade_name", "credential__attestation_type"]
+    autocomplete_fields = ["registered_entity", "credential"]
+    ordering = ["registered_entity"]
 
 
-@admin.register(WRPUsesIntermediary)
-class WRPUsesIntermediaryAdmin(admin.ModelAdmin):
+@admin.register(EntityUsesIntermediary)
+class EntityUsesIntermediaryAdmin(admin.ModelAdmin):
     list_display = [
-        "wallet_relying_party",
+        "registered_entity",
         "intermediary",
         "relationship_start_date",
         "relationship_end_date",
     ]
     list_filter = ["relationship_start_date"]
     search_fields = [
-        "wallet_relying_party__trade_name",
+        "registered_entity__trade_name",
         "intermediary__trade_name",
         "intermediary_identifier",
     ]
-    autocomplete_fields = ["wallet_relying_party", "intermediary"]
+    autocomplete_fields = ["registered_entity", "intermediary"]
     readonly_fields = [
         "intermediary_identifier",
         "intermediary_trade_name",
         "intermediary_registry_uri",
     ]
-    ordering = ["wallet_relying_party", "-relationship_start_date"]
+    ordering = ["registered_entity", "-relationship_start_date"]
 
 
 @admin.register(IntendedUsePurpose)
@@ -586,12 +593,12 @@ class LegalEntityIdentifierAdmin(admin.ModelAdmin):
     ordering = ["legal_entity", "-is_primary"]
 
 
-@admin.register(WRPPolicy)
-class WRPPolicyAdmin(admin.ModelAdmin):
-    list_display = ["wallet_relying_party", "policy"]
-    search_fields = ["wallet_relying_party__trade_name", "policy__policy_uri"]
-    autocomplete_fields = ["wallet_relying_party", "policy"]
-    ordering = ["wallet_relying_party"]
+@admin.register(RegisteredEntityPolicy)
+class RegisteredEntityPolicyAdmin(admin.ModelAdmin):
+    list_display = ["registered_entity", "policy"]
+    search_fields = ["registered_entity__trade_name", "policy__policy_uri"]
+    autocomplete_fields = ["registered_entity", "policy"]
+    ordering = ["registered_entity"]
 
 
 @admin.register(AuditLog)
@@ -633,6 +640,6 @@ class AuditLogAdmin(admin.ModelAdmin):
 # ADMIN SITE CONFIGURATION
 # ============================================================================
 
-admin.site.site_header = "EUDI Wallet RP Registration"
-admin.site.site_title = "RP Registration Admin"
-admin.site.index_title = "Wallet Relying Party Management"
+admin.site.site_header = "EUDI Wallet Entity Registration"
+admin.site.site_title = "Entity Registration Admin"
+admin.site.index_title = "Registered Entity Management"
