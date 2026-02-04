@@ -429,10 +429,13 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
     ordering = ["-created_at"]
 
     fieldsets = (
-        ("Legal Entity", {
-            "fields": ("legal_entity",),
-            "description": "TSP entries are linked via Legal Entity → trust_service_providers",
-        }),
+        (
+            "Legal Entity",
+            {
+                "fields": ("legal_entity",),
+                "description": "TSP entries are linked via Legal Entity → trust_service_providers",
+            },
+        ),
         ("Entity Role", {"fields": ("entity_role",)}),
         ("Basic Information", {"fields": ("trade_name", "registry_uri")}),
         ("Classification", {"fields": ("is_psb", "is_intermediary")}),

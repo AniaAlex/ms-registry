@@ -160,6 +160,8 @@ class ServiceCertificateInline(admin.StackedInline):
         "not_after",
     ]
     readonly_fields = [
+        "x509_subject_name",
+        "x509_ski",
         "subject_cn",
         "issuer_cn",
         "serial_number",
@@ -274,8 +276,9 @@ class TrustServiceProviderInline(admin.TabularInline):
     model = TrustServiceProvider
     extra = 0
     show_change_link = True
-    fields = ["get_name", "country_name", "locality", "is_active", "service_count"]
+    fields = ["get_name", "legal_entity", "is_active", "service_count"]
     readonly_fields = ["get_name", "service_count"]
+    autocomplete_fields = ["legal_entity"]
 
     def get_name(self, obj):
         """Get the primary name of the provider."""
@@ -472,9 +475,17 @@ class TSLPointerAdmin(admin.ModelAdmin):
 
 @admin.register(TrustServiceProvider)
 class TrustServiceProviderAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "scheme", "legal_entity", "country_name", "is_active"]
-    list_filter = ["scheme", "is_active", "legal_entity__physical_address__country_code"]
-    search_fields = ["names__value", "legal_entity__legal_person__legal_name", "legal_entity__natural_person__family_name"]
+    list_display = ["__str__", "scheme", "legal_entity", "get_country", "is_active"]
+    list_filter = [
+        "scheme",
+        "is_active",
+        "legal_entity__physical_address__country_code",
+    ]
+    search_fields = [
+        "names__value",
+        "legal_entity__legal_person__legal_name",
+        "legal_entity__natural_person__family_name",
+    ]
     autocomplete_fields = ["legal_entity"]
 
     fieldsets = (
@@ -497,6 +508,12 @@ class TrustServiceProviderAdmin(admin.ModelAdmin):
         TSPCertificateInline,
         TrustServiceInline,
     ]
+
+    def get_country(self, obj):
+        """Get country from legal entity's physical address."""
+        return obj.country_name
+
+    get_country.short_description = "Country"
 
 
 @admin.register(TrustService)
@@ -544,11 +561,15 @@ class ServiceCertificateAdmin(admin.ModelAdmin):
         "not_after",
     ]
     list_filter = ["service__provider__scheme"]
-    search_fields = ["subject_cn", "issuer_cn", "serial_number"]
+    search_fields = ["subject_cn", "issuer_cn", "serial_number", "x509_subject_name"]
 
     fieldsets = (
         ("Service", {"fields": ("service",)}),
         ("Certificate Data", {"fields": ("certificate_pem",)}),
+        (
+            "X.509 Digital Identity",
+            {"fields": ("x509_subject_name", "x509_ski")},
+        ),
         (
             "Certificate Metadata",
             {
@@ -562,6 +583,16 @@ class ServiceCertificateAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    readonly_fields = [
+        "x509_subject_name",
+        "x509_ski",
+        "subject_cn",
+        "issuer_cn",
+        "serial_number",
+        "not_before",
+        "not_after",
+    ]
 
 
 @admin.register(ServiceHistoryInstance)

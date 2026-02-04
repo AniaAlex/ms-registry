@@ -74,17 +74,21 @@ TSL_TYPE_CHOICES = [
 # Service Type URIs - ETSI Trust Service types
 # =============================================================================
 SERVICE_TYPE_CHOICES = [
-    # Traditional eIDAS Trust Services
+    # Qualified Certificate Services
     ("http://uri.etsi.org/TrstSvc/Svctype/CA/QC", "Qualified Certificate Authority"),
+    # Public Key Certificate Services
     ("http://uri.etsi.org/TrstSvc/Svctype/CA/PKC", "Public Key Certificate Authority"),
+    # Qualified Time Stamping
     (
         "http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST",
         "Qualified Time Stamping Authority",
     ),
+    # Time Stamping
     (
-        "http://uri.etsi.org/TrstSvc/Svctype/TSA/TSS-QC",
-        "Time Stamping Service - Qualified",
+        "http://uri.etsi.org/TrstSvc/Svctype/TSA",
+        "Time Stamping Authority",
     ),
+    # Other traditional eIDAS services
     (
         "http://uri.etsi.org/TrstSvc/Svctype/Certstatus/OCSP/QC",
         "Qualified OCSP Service",
@@ -111,39 +115,45 @@ SERVICE_TYPE_CHOICES = [
         "http://uri.etsi.org/TrstSvc/Svctype/IdV/nothavingPKIid",
         "Identity Verification (non-PKI)",
     ),
-    # EUDI Wallet Services (eIDAS 2.0 / Regulation 2024/1183)
+    # Wallet Providers (eIDAS 2.0)
     (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PIDProvider",
-        "PID Provider - Person Identification Data Issuer",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/QEAAProvider",
-        "QEAA Provider - Qualified Electronic Attestation of Attributes Issuer",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/EAAProvider",
-        "EAA Provider - Electronic Attestation of Attributes Issuer",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/WalletProvider",
+        "http://uri.etsi.org/TrstSvc/Svctype/WalletProvider",
         "EUDI Wallet Provider",
     ),
     (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty",
-        "EUDI Wallet Relying Party",
+        "http://uri.etsi.org/TrstSvc/Svctype/IndividualWalletProvider",
+        "Individual Wallet Provider (Natural Person)",
     ),
     (
-        "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PuB-EAAProvider",
-        "PuB-EAA Provider - Public Body Attestation Issuer",
+        "http://uri.etsi.org/TrstSvc/Svctype/LegalPersonWalletProvider",
+        "Legal Person Wallet Provider",
+    ),
+    # Credential Issuers (eIDAS 2.0)
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/PID_Issuer",
+        "PID Issuer - Person Identification Data Issuer",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/QEAA_Provider",
+        "QEAA Provider - Qualified Electronic Attestation of Attributes",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/PUB_EAA_Provider",
+        "PuB-EAA Provider - Public Body Attestation Provider",
+    ),
+    (
+        "http://uri.etsi.org/TrstSvc/Svctype/Non_Q_EAA_Provider",
+        "Non-Qualified EAA Provider",
     ),
 ]
 
 # =============================================================================
-# Service Status URIs - ETSI Trust Service statuses
+# Service Status URIs - ETSI TS 119 612 Status Values
 # =============================================================================
 SERVICE_STATUS_CHOICES = [
     ("http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted", "Granted"),
     ("http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn", "Withdrawn"),
+    ("http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/suspended", "Suspended"),
     (
         "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/recognisedatnationallevel",
         "Recognised at National Level",
@@ -151,31 +161,6 @@ SERVICE_STATUS_CHOICES = [
     (
         "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/deprecatedatnationallevel",
         "Deprecated at National Level",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/undersupervision",
-        "Under Supervision",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/supervisionincessation",
-        "Supervision in Cessation",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/supervisionceased",
-        "Supervision Ceased",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/supervisionrevoked",
-        "Supervision Revoked",
-    ),
-    ("http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/accredited", "Accredited"),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/accreditationceased",
-        "Accreditation Ceased",
-    ),
-    (
-        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/accreditationrevoked",
-        "Accreditation Revoked",
     ),
 ]
 
@@ -256,11 +241,11 @@ class TSLScheme(models.Model):
         default=65535, help_text="Historical information period in days"
     )
 
-    # Status determination approach
+    # Status determination approach (ETSI TS 119 612)
     status_determination_approach = models.URLField(
         max_length=500,
-        default="http://uri.etsi.org/TrstSvc/TrustedList/TSLType/StatusDetn/EUappropriate",
-        help_text="Status determination approach URI",
+        default="http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUappropriate",
+        help_text="Status determination approach URI (TS 119 612 clause 5.3.17)",
     )
 
     # Metadata
@@ -450,10 +435,10 @@ class TrustServiceProvider(models.Model):
     Trust Service Provider (TSP) - equivalent to provider.yaml
 
     Represents an organization that provides trust services.
-    
+
     Under eIDAS 2.0, wallet entities (PID Providers, Attestation Providers,
     Relying Parties, Wallet Providers) are TSPs with wallet-specific service types.
-    
+
     Organization data (name, address, contact) is stored in LegalEntity to avoid
     duplication. One LegalEntity can have multiple TSP entries (in different TSL schemes).
     """
@@ -488,7 +473,9 @@ class TrustServiceProvider(models.Model):
         if primary_name:
             return primary_name.value
         # Fallback to LegalEntity name
-        return self.legal_entity.display_name if self.legal_entity else f"TSP #{self.pk}"
+        return (
+            self.legal_entity.display_name if self.legal_entity else f"TSP #{self.pk}"
+        )
 
     @property
     def street_address(self):
@@ -906,6 +893,68 @@ class ServiceCertificate(models.Model):
         lines = pem.split("\n")
         der_lines = [line for line in lines if not line.startswith("-----")]
         return "".join(der_lines)
+
+    def extract_metadata_from_pem(self):
+        """
+        Extract certificate metadata from PEM content.
+        Requires the cryptography library.
+        """
+        try:
+            import base64
+
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+
+            cert = x509.load_pem_x509_certificate(
+                self.certificate_pem.encode(), default_backend()
+            )
+
+            # Subject Distinguished Name (RFC 4514 format)
+            self.x509_subject_name = cert.subject.rfc4514_string()
+
+            # Subject Common Name
+            try:
+                self.subject_cn = cert.subject.get_attributes_for_oid(
+                    x509.oid.NameOID.COMMON_NAME
+                )[0].value
+            except (IndexError, KeyError):
+                pass
+
+            # Issuer Common Name
+            try:
+                self.issuer_cn = cert.issuer.get_attributes_for_oid(
+                    x509.oid.NameOID.COMMON_NAME
+                )[0].value
+            except (IndexError, KeyError):
+                pass
+
+            # Serial number (hex format)
+            self.serial_number = format(cert.serial_number, "x").upper()
+
+            # Validity dates
+            self.not_before = cert.not_valid_before_utc
+            self.not_after = cert.not_valid_after_utc
+
+            # Subject Key Identifier (Base64 encoded)
+            try:
+                ski_ext = cert.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER
+                )
+                self.x509_ski = base64.b64encode(ski_ext.value.digest).decode("ascii")
+            except x509.ExtensionNotFound:
+                pass
+
+            return True
+        except ImportError:
+            return False
+        except Exception:
+            return False
+
+    def save(self, *args, **kwargs):
+        """Auto-extract metadata when saving if PEM is provided."""
+        if self.certificate_pem and not self.x509_subject_name:
+            self.extract_metadata_from_pem()
+        super().save(*args, **kwargs)
 
 
 class ServiceSupplyPoint(models.Model):
