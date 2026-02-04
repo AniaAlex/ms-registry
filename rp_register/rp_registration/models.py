@@ -607,7 +607,13 @@ class EntityEntitlement(BaseModel):
     )
     entitlement_uri = models.URLField(
         max_length=2048,
-        help_text="e.g., https://uri.etsi.org/19475/Entitlement/Service_Provider",
+        help_text=(
+            "EUDI Wallet Entitlement URIs: "
+            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PID_Issuer, "
+            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/QEAA_Provider, "
+            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/WalletProvider, "
+            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty"
+        ),
     )
     entitlement_type = models.CharField(max_length=50, choices=EntitlementType.choices)
     granted_at = models.DateTimeField(default=timezone.now)
