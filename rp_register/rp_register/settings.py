@@ -30,8 +30,19 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Local apps
+    # Third-party apps
+    "rest_framework",
+    "drf_spectacular",
+    "corsheaders",
+    "debug_toolbar",
+    # Local apps - new modular structure
+    "core",
+    "legal_entities",
+    "registry",
+    "credentials",
+    "certificates",
     "tsl_generator",
+    # Legacy app (to be removed after migration)
     "rp_registration",
 ]
 
@@ -155,3 +166,25 @@ LOGGING = {
         },
     },
 }
+
+
+# Django REST Framework
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    "TITLE": "EUDI Wallet RP Registry API",
+    "DESCRIPTION": "API for managing Registered Entities in the EUDI Wallet ecosystem",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+# Debug toolbar
+INTERNAL_IPS = [
+    "127.0.0.1",
+]

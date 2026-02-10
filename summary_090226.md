@@ -21,11 +21,43 @@ Foundational components shared across all apps.
 
 | Component | Purpose |
 |-----------|---------|
-| `BaseModel` | Abstract UUID-based model with timestamps |
+| `UUIDModel` | Abstract model with UUID primary key |
+| `TimestampedModel` | Abstract model with `created_at`/`updated_at` |
 | `Law` | Legal references |
 | `Identifier` | Entity identifiers (EUID, VAT, LEI, etc.) |
 | `Policy` | Privacy/Terms policies |
 | All `TextChoices` enums | `EntityRole`, `EntityType`, `IdentifierType`, `CredentialFormat`, `RegistrationStatus`, etc. |
+
+#### Abstract Base Models
+
+```python
+from __future__ import annotations
+
+import uuid
+
+from django.db import models
+from django.utils import timezone
+
+
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class UUIDModel(models.Model):
+    id = models.UUIDField(primary_key=True, editable=False, default=uuid.uuid4)
+
+    class Meta:
+        abstract = True
+```
+
+Models can inherit from one or both:
+- `class MyModel(UUIDModel, TimestampedModel):` — UUID + timestamps
+- `class MyModel(UUIDModel):` — UUID only
+- `class MyModel(TimestampedModel):` — Auto-increment ID + timestamps
 
 ### 2. `legal_entities` - Legal Entity Management
 Legal person/natural person identity management.
