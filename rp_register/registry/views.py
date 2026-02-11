@@ -1,6 +1,6 @@
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
-from rest_framework.renderers import TemplateHTMLRenderer
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from . import models, serializers
@@ -137,4 +137,114 @@ class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
                 "data": serializer.data,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+# =============================================================================
+# Supervisory Authority Views
+# =============================================================================
+
+
+class SupervisoryAuthorityListCreateView(generics.ListCreateAPIView):
+    """
+    List all supervisory authorities or create a new one via API.
+
+    GET: List all supervisory authorities
+    POST: Create a new supervisory authority
+    """
+
+    permission_classes = []
+    queryset = models.SupervisoryAuthority.objects.all()
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return serializers.SupervisoryAuthorityCreateSerializer
+        return serializers.SupervisoryAuthoritySerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        authority = serializer.save()
+        return Response(
+            {
+                "message": "Supervisory authority created successfully",
+                "data": serializers.SupervisoryAuthoritySerializer(authority).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SupervisoryAuthorityDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete a supervisory authority.
+    """
+
+    permission_classes = []
+    serializer_class = serializers.SupervisoryAuthoritySerializer
+    queryset = models.SupervisoryAuthority.objects.all()
+
+
+class SupervisoryAuthorityFormView(generics.CreateAPIView):
+    """
+    Render supervisory authority creation form on GET, create authority on POST.
+
+    GET: Render the supervisory authority form
+    POST: Create a new supervisory authority
+    """
+
+    permission_classes = []
+    serializer_class = serializers.SupervisoryAuthorityCreateSerializer
+    queryset = models.SupervisoryAuthority.objects.all()
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = "add_supervisory_authority.html"
+
+    def get_context_data(self, errors=None):
+        """Common context for the form"""
+        return {
+            "errors": errors,
+            "legal_entities": LegalEntity.objects.all(),
+        }
+
+    def get(self, request, *args, **kwargs):
+        """Render empty supervisory authority form"""
+        return Response(
+            self.get_context_data(),
+            template_name=self.template_name,
+        )
+
+    def post(self, request, *args, **kwargs):
+        """Handle form submission"""
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                self.get_context_data(errors=serializer.errors),
+                status=status.HTTP_400_BAD_REQUEST,
+                template_name=self.template_name,
+            )
+
+        authority = serializer.save()
+
+        # Check if this is an AJAX/API request
+        if request.accepted_renderer.format == "json":
+            return Response(
+                {
+                    "message": "Supervisory authority created successfully",
+                    "data": serializers.SupervisoryAuthoritySerializer(authority).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        # HTML response - redirect to success page
+        return Response(
+            {
+                "message": "Supervisory authority created successfully",
+                "authority": authority,
+            },
+            status=status.HTTP_201_CREATED,
+            template_name="add_supervisory_authority_success.html",
         )

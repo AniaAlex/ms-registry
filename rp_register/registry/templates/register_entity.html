@@ -41,15 +41,19 @@
             
             <div class="form-group">
                 <label for="legal_entity">Legal Entity *</label>
-                <select name="legal_entity" id="legal_entity" class="form-control" required>
-                    <option value="">-- Select Legal Entity --</option>
-                    {% for entity in legal_entities %}
-                    <option value="{{ entity.id }}"
-                        {% if serializer.data.legal_entity == entity.id %}selected{% endif %}>
-                        {{ entity }}
-                    </option>
-                    {% endfor %}
-                </select>
+                <div class="input-with-action">
+                    <select name="legal_entity" id="legal_entity" class="form-control" required>
+                        <option value="">-- Select Legal Entity --</option>
+                        {% for entity in legal_entities %}
+                        <option value="{{ entity.id }}"
+                            {% if serializer.data.legal_entity == entity.id %}selected{% endif %}>
+                            {{ entity }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                </div>
+                <small class="form-help">Don't see your entity? <a href="{% url 'legal_entities:legal-entity-add-form' %}">Create a new legal entity</a> first.</small>
             </div>
             
             <div class="form-group">
@@ -86,15 +90,19 @@
             
             <div class="form-group">
                 <label for="supervisory_authority">Supervisory Authority (DPA) *</label>
-                <select name="supervisory_authority" id="supervisory_authority" class="form-control" required>
-                    <option value="">-- Select DPA --</option>
-                    {% for authority in supervisory_authorities %}
-                    <option value="{{ authority.id }}"
-                        {% if serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
-                        {{ authority.name }}
-                    </option>
-                    {% endfor %}
-                </select>
+                <div class="input-with-action">
+                    <select name="supervisory_authority" id="supervisory_authority" class="form-control" required>
+                        <option value="">-- Select DPA --</option>
+                        {% for authority in supervisory_authorities %}
+                        <option value="{{ authority.id }}"
+                            {% if serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
+                            {{ authority.authority_name }} ({{ authority.country_code }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <a href="{% url 'registry:supervisory-authority-add-form' %}" class="btn btn-sm btn-outline" title="Add new supervisory authority">+ Add New</a>
+                </div>
+                <small class="form-help">Don't see your DPA? <a href="{% url 'registry:supervisory-authority-add-form' %}">Add a new supervisory authority</a> first.</small>
             </div>
         </fieldset>
         

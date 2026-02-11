@@ -18,6 +18,22 @@ urlpatterns = [
         views.RegisteredEntityListCreateView.as_view(),
         name="entity-list-create",
     ),
+    # Supervisory Authority URLs
+    path(
+        "supervisory-authorities/add/",
+        views.SupervisoryAuthorityFormView.as_view(),
+        name="supervisory-authority-add-form",
+    ),
+    path(
+        "supervisory-authorities/",
+        views.SupervisoryAuthorityListCreateView.as_view(),
+        name="supervisory-authority-list-create",
+    ),
+    path(
+        "supervisory-authorities/<uuid:pk>/",
+        views.SupervisoryAuthorityDetailView.as_view(),
+        name="supervisory-authority-detail",
+    ),
     # path(
     #     "entities/<int:pk>/",
     #     views.RegisteredEntityRetrieveUpdateDestroyView.as_view(),
