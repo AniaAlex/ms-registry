@@ -13,8 +13,10 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from registry.views import HomeView
 
 urlpatterns = [
+    path("", HomeView.as_view(), name="home"),
     path("admin/", admin.site.urls),
     path("api/registry/", include("registry.urls", namespace="registry")),
     path(
