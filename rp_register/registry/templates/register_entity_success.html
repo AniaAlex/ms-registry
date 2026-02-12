@@ -1,89 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registration Successful</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background-color: #f5f5f5;
-        }
-        .success-container {
-            background: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .success-icon {
-            font-size: 4rem;
-            color: #28a745;
-            margin-bottom: 1rem;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 1rem;
-        }
-        .entity-details {
-            background: #f8f9fa;
-            padding: 1.5rem;
-            border-radius: 4px;
-            margin: 1.5rem 0;
-            text-align: left;
-        }
-        .entity-details h2 {
-            margin-top: 0;
-            color: #495057;
-            font-size: 1.1rem;
-        }
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #dee2e6;
-        }
-        .detail-row:last-child {
-            border-bottom: none;
-        }
-        .detail-label {
-            font-weight: 600;
-            color: #6c757d;
-        }
-        .detail-value {
-            color: #212529;
-        }
-        .actions {
-            margin-top: 2rem;
-        }
-        .btn {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: 500;
-            margin: 0 0.5rem;
-        }
-        .btn-primary {
-            background-color: #007bff;
-            color: white;
-        }
-        .btn-primary:hover {
-            background-color: #0056b3;
-        }
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background-color: #545b62;
-        }
-    </style>
-</head>
-<body>
+{% extends "base.html" %}
+
+{% block title %}Registration Successful{% endblock %}
+
+{% block content %}
+<div class="container">
     <div class="success-container">
         <div class="success-icon">✓</div>
         <h1>Entity Registration Successful</h1>
@@ -113,10 +33,130 @@
             </div>
         </div>
         
+        <div class="tsl-action">
+            <h3>Add to Trust Status List</h3>
+            <p class="tsl-hint">Would you like to add a Trust Service for this entity to a Trust Status List (TSL)?</p>
+            <a href="{% url 'tsl_generator:service-add-form' %}" class="btn btn-tsl">
+                <span class="btn-icon">📋</span> Add Entity to TSL (temporarily)
+            </a>
+        </div>
+        
         <div class="actions">
             <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">Register Another Entity</a>
             <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">View All Entities</a>
         </div>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .success-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    .success-icon {
+        font-size: 4rem;
+        color: #28a745;
+        margin-bottom: 1rem;
+    }
+    h1 {
+        color: #333;
+        margin-bottom: 1rem;
+    }
+    .entity-details {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin: 1.5rem 0;
+        text-align: left;
+    }
+    .entity-details h2 {
+        margin-top: 0;
+        color: #495057;
+        font-size: 1.1rem;
+    }
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+    .detail-label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    .detail-value {
+        color: #212529;
+    }
+    .tsl-action {
+        background: #e7f8fb;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin: 1.5rem 0;
+        border: 1px solid #bee5eb;
+    }
+    .tsl-action h3 {
+        margin-top: 0;
+        color: #138496;
+        font-size: 1.1rem;
+    }
+    .tsl-hint {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+    }
+    .btn-tsl {
+        background-color: #17a2b8;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 4px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .btn-tsl:hover {
+        background-color: #138496;
+        color: white;
+    }
+    .btn-icon {
+        font-size: 1.1rem;
+    }
+    .actions {
+        margin-top: 2rem;
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .btn-primary {
+        background-color: #007bff;
+        color: white;
+    }
+    .btn-primary:hover {
+        background-color: #0056b3;
+    }
+    .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+    .btn-secondary:hover {
+        background-color: #545b62;
+    }
+</style>
+{% endblock %}
