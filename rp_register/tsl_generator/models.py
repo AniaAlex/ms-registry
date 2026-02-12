@@ -450,7 +450,7 @@ class TrustServiceProvider(models.Model):
     # Link to LegalEntity for organization data (name, address, contact)
     # ForeignKey allows one organization to be in multiple TSL schemes
     legal_entity = models.ForeignKey(
-        "rp_registration.LegalEntity",
+        "legal_entities.LegalEntity",
         on_delete=models.CASCADE,
         related_name="trust_service_providers",
         help_text="Organization providing the trust services",
