@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Home - EUDI Wallet Registry{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2>Registered Entities</h2>
+        <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">
+            Register New Entity
+        </a>
+    </div>
+
+    {% if entities %}
+    <table class="entity-table">
+        <thead>
+            <tr>
+                <th>Legal Entity</th>
+                <th>Trade Name</th>
+                <th>Entity Role</th>
+                <th>Status</th>
+                <th>Supervisory Authority</th>
+                <th>Registered At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entity in entities %}
+            <tr>
+                <td>{{ entity.legal_entity }}</td>
+                <td>{{ entity.trade_name|default:"-" }}</td>
+                <td>
+                    <span class="badge badge-role-{{ entity.entity_role }}">
+                        {{ entity.get_entity_role_display }}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge badge-status-{{ entity.registration_status }}">
+                        {{ entity.get_registration_status_display }}
+                    </span>
+                </td>
+                <td>{{ entity.supervisory_authority }}</td>
+                <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No registered entities yet.</p>
+        <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">
+            Register Your First Entity
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .page-header h2 {
+        margin: 0;
+    }
+    .entity-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+    .entity-table th,
+    .entity-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .entity-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        color: #495057;
+    }
+    .entity-table tr:hover {
+        background-color: #f8f9fa;
+    }
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border-radius: 4px;
+    }
+    .badge-status-pending {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    .badge-status-active {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    .badge-status-suspended {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    .badge-status-revoked {
+        background-color: #d6d8db;
+        color: #383d41;
+    }
+    .badge-role-relying_party {
+        background-color: #cce5ff;
+        color: #004085;
+    }
+    .badge-role-pid_provider {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    .badge-role-attestation_provider {
+        background-color: #e2d5f1;
+        color: #563d7c;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    .empty-state p {
+        font-size: 1.1rem;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}

@@ -1,9 +1,24 @@
+from django.views.generic import TemplateView
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from . import models, serializers
+
+
+class HomeView(TemplateView):
+    """
+    Home page view that lists all registered entities.
+    """
+    template_name = "home.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["entities"] = models.RegisteredEntity.objects.select_related(
+            "legal_entity", "supervisory_authority"
+        ).order_by("-created_at")
+        return context
 
 
 class RegisterEntityFormView(generics.CreateAPIView):
