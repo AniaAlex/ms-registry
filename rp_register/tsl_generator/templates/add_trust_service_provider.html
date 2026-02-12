@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Add Entity to TSL{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Add Entity to Trust Status List (TSL)</h1>
+    <p class="subtitle">Register as a Trust Service Provider in a TSL scheme</p>
+    
+    {% if errors %}
+    <div class="alert alert-danger">
+        <h4>Please correct the errors below:</h4>
+        <ul>
+            {% for field, field_errors in errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <form method="post" action="" id="tsp-form">
+        {% csrf_token %}
+        
+        <fieldset>
+            <legend>TSL Scheme Selection</legend>
+            
+            <div class="form-group">
+                <label for="scheme">TSL Scheme *</label>
+                <select name="scheme" id="scheme" class="form-control" required>
+                    <option value="">-- Select TSL Scheme --</option>
+                    {% for scheme in tsl_schemes %}
+                    <option value="{{ scheme.id }}">{{ scheme.name }} ({{ scheme.territory }})</option>
+                    {% endfor %}
+                </select>
+                <small class="form-help">Select the Trust Status List where your entity will be published.</small>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Legal Entity</legend>
+            
+            <div class="form-group">
+                <label for="legal_entity">Legal Entity *</label>
+                <div class="input-with-action">
+                    <select name="legal_entity" id="legal_entity" class="form-control" required>
+                        <option value="">-- Select Legal Entity --</option>
+                        {% for entity in legal_entities %}
+                        <option value="{{ entity.id }}">{{ entity }}</option>
+                        {% endfor %}
+                    </select>
+                    <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                </div>
+                <small class="form-help">The organization to be listed as Trust Service Provider.</small>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Provider Information</legend>
+            
+            <div class="form-row">
+                <div class="form-group three-quarter">
+                    <label for="name">Provider Name *</label>
+                    <input type="text" name="name" id="name" class="form-control" required
+                           placeholder="Official name as it appears in TSL">
+                </div>
+                <div class="form-group quarter">
+                    <label for="name_language">Language</label>
+                    <select name="name_language" id="name_language" class="form-control">
+                        <option value="en" selected>English</option>
+                        <option value="sv">Swedish</option>
+                        <option value="de">German</option>
+                        <option value="fr">French</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group three-quarter">
+                    <label for="trade_name">Trade Name</label>
+                    <input type="text" name="trade_name" id="trade_name" class="form-control"
+                           placeholder="Commercial/brand name (optional)">
+                </div>
+                <div class="form-group quarter">
+                    <label for="trade_name_language">Language</label>
+                    <select name="trade_name_language" id="trade_name_language" class="form-control">
+                        <option value="en" selected>English</option>
+                        <option value="sv">Swedish</option>
+                        <option value="de">German</option>
+                        <option value="fr">French</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="electronic_address">Electronic Address</label>
+                <input type="text" name="electronic_address" id="electronic_address" class="form-control"
+                       placeholder="https://example.com or mailto:contact@example.com">
+                <small class="form-help">Website URL, email (mailto:), or phone (tel:) URI.</small>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Initial Trust Service (Optional)</legend>
+            <p class="fieldset-description">Optionally add the first trust service for this provider.</p>
+            
+            <div class="form-group">
+                <label for="service_type">Service Type</label>
+                <select name="service_type" id="service_type" class="form-control">
+                    <option value="">-- No initial service --</option>
+                    <optgroup label="EUDI Wallet Services">
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/WalletProvider">EUDI Wallet Provider</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/PID_Issuer">PID Issuer</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/QEAA_Provider">QEAA Provider</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/PUB_EAA_Provider">PuB-EAA Provider</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/Non_Q_EAA_Provider">Non-Qualified EAA Provider</option>
+                    </optgroup>
+                    <optgroup label="Traditional eIDAS Services">
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/CA/QC">Qualified Certificate Authority</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST">Qualified Time Stamping</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/EDS/Q">Qualified Electronic Delivery</option>
+                        <option value="http://uri.etsi.org/TrstSvc/Svctype/PSES/Q">Qualified Preservation Service</option>
+                    </optgroup>
+                </select>
+            </div>
+            
+            <div class="form-group" id="service-name-group" style="display: none;">
+                <label for="service_name">Service Name</label>
+                <input type="text" name="service_name" id="service_name" class="form-control"
+                       placeholder="Name of the trust service">
+            </div>
+        </fieldset>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add to TSL</button>
+            <a href="{% url 'registry:entity-register-form' %}" class="btn btn-secondary">Back to Registration</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .subtitle {
+        color: #6c757d;
+        margin-bottom: 2rem;
+    }
+    .form-row {
+        display: flex;
+        gap: 1rem;
+    }
+    .form-group.three-quarter {
+        flex: 3;
+    }
+    .form-group.quarter {
+        flex: 1;
+    }
+    .fieldset-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: -0.5rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serviceTypeSelect = document.getElementById('service_type');
+    const serviceNameGroup = document.getElementById('service-name-group');
+    const serviceNameInput = document.getElementById('service_name');
+    
+    serviceTypeSelect.addEventListener('change', function() {
+        if (this.value) {
+            serviceNameGroup.style.display = 'block';
+            serviceNameInput.required = true;
+        } else {
+            serviceNameGroup.style.display = 'none';
+            serviceNameInput.required = false;
+            serviceNameInput.value = '';
+        }
+    });
+});
+</script>
+{% endblock %}

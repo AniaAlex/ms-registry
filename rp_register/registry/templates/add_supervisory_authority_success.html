@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Supervisory Authority Created{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="success-container">
+        <div class="success-icon">✓</div>
+        <h1>Supervisory Authority Created Successfully</h1>
+        <p>The supervisory authority has been added to the system.</p>
+        
+        <div class="entity-details">
+            <h2>Authority Details</h2>
+            <div class="detail-row">
+                <span class="detail-label">Authority ID:</span>
+                <span class="detail-value">{{ authority.id }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Name:</span>
+                <span class="detail-value">{{ authority.authority_name }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Country:</span>
+                <span class="detail-value">{{ authority.country_code }}</span>
+            </div>
+            {% if authority.email %}
+            <div class="detail-row">
+                <span class="detail-label">Email:</span>
+                <span class="detail-value">{{ authority.email }}</span>
+            </div>
+            {% endif %}
+            {% if authority.phone %}
+            <div class="detail-row">
+                <span class="detail-label">Phone:</span>
+                <span class="detail-value">{{ authority.phone }}</span>
+            </div>
+            {% endif %}
+            {% if authority.info_uri %}
+            <div class="detail-row">
+                <span class="detail-label">Website:</span>
+                <span class="detail-value"><a href="{{ authority.info_uri }}" target="_blank">{{ authority.info_uri }}</a></span>
+            </div>
+            {% endif %}
+            <div class="detail-row">
+                <span class="detail-label">Created:</span>
+                <span class="detail-value">{{ authority.created_at|date:"F j, Y, g:i a" }}</span>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">Register an Entity</a>
+            <a href="{% url 'registry:supervisory-authority-add-form' %}" class="btn btn-secondary">Add Another</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .success-container {
+        text-align: center;
+    }
+    .success-icon {
+        font-size: 4rem;
+        color: #28a745;
+        margin-bottom: 1rem;
+    }
+    .entity-details {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin: 1.5rem auto;
+        max-width: 500px;
+        text-align: left;
+    }
+    .entity-details h2 {
+        margin-top: 0;
+        color: #495057;
+        font-size: 1.1rem;
+    }
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+    .detail-label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    .detail-value {
+        color: #212529;
+    }
+    .detail-value a {
+        color: #003399;
+    }
+    .actions {
+        margin-top: 2rem;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load rest_framework %}
+
+{% block title %}Register Entity{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Register New Entity</h1>
+    
+    {% if errors %}
+    <div class="alert alert-danger">
+        <h4>Please correct the errors below:</h4>
+        <ul>
+            {% for field, field_errors in errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <form method="post" action="">
+        {% csrf_token %}
+        
+        <fieldset>
+            <legend>Entity Information</legend>
+            
+            <div class="form-group">
+                <label for="entity_role">Entity Role *</label>
+                <select name="entity_role" id="entity_role" class="form-control" required>
+                    <option value="">-- Select Role --</option>
+                    {% for value, label in entity_roles %}
+                    <option value="{{ value }}"
+                        {% if serializer.data.entity_role == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="legal_entity">Legal Entity *</label>
+                <div class="input-with-action">
+                    <select name="legal_entity" id="legal_entity" class="form-control" required>
+                        <option value="">-- Select Legal Entity --</option>
+                        {% for entity in legal_entities %}
+                        <option value="{{ entity.id }}"
+                            {% if serializer.data.legal_entity == entity.id %}selected{% endif %}>
+                            {{ entity }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                </div>
+                <small class="form-help">Don't see your entity? <a href="{% url 'legal_entities:legal-entity-add-form' %}">Create a new legal entity</a> first.</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="trade_name">Trade Name</label>
+                <input type="text" name="trade_name" id="trade_name" class="form-control" 
+                       value="{{ serializer.data.trade_name|default:'' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="registry_uri">Registry URI *</label>
+                <input type="url" name="registry_uri" id="registry_uri" class="form-control" required
+                       value="{{ serializer.data.registry_uri|default:'' }}">
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Entity Flags</legend>
+            
+            <div class="form-check">
+                <input type="checkbox" name="is_psb" id="is_psb" class="form-check-input"
+                       {% if serializer.data.is_psb %}checked{% endif %}>
+                <label for="is_psb" class="form-check-label">Is Public Sector Body</label>
+            </div>
+            
+            <div class="form-check">
+                <input type="checkbox" name="is_intermediary" id="is_intermediary" class="form-check-input"
+                       {% if serializer.data.is_intermediary %}checked{% endif %}>
+                <label for="is_intermediary" class="form-check-label">Is Intermediary (RPs only)</label>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Supervisory Authority</legend>
+            
+            <div class="form-group">
+                <label for="supervisory_authority">Supervisory Authority (DPA) *</label>
+                <div class="input-with-action">
+                    <select name="supervisory_authority" id="supervisory_authority" class="form-control" required>
+                        <option value="">-- Select DPA --</option>
+                        {% for authority in supervisory_authorities %}
+                        <option value="{{ authority.id }}"
+                            {% if serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
+                            {{ authority.authority_name }} ({{ authority.country_code }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <a href="{% url 'registry:supervisory-authority-add-form' %}" class="btn btn-sm btn-outline" title="Add new supervisory authority">+ Add New</a>
+                </div>
+                <small class="form-help">Don't see your DPA? <a href="{% url 'registry:supervisory-authority-add-form' %}">Add a new supervisory authority</a> first.</small>
+            </div>
+        </fieldset>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Register Entity</button>
+            <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

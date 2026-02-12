@@ -1,0 +1,46 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block admin_change_form_document_ready %}
+{{ block.super }}
+<script>
+(function($) {
+    function toggleEntityFields() {
+        var entityType = $('#id_entity_type').val();
+        
+        // Find fieldsets by their heading text
+        var allFieldsets = $('fieldset');
+        var legalPersonFieldset = null;
+        var naturalPersonFieldset = null;
+        
+        allFieldsets.each(function() {
+            var heading = $(this).find('h2').text().trim();
+            if (heading === 'Legal Person Details') {
+                legalPersonFieldset = $(this);
+            } else if (heading === 'Natural Person Details') {
+                naturalPersonFieldset = $(this);
+            }
+        });
+
+        if (entityType === 'legal_person') {
+            if (legalPersonFieldset) legalPersonFieldset.show();
+            if (naturalPersonFieldset) naturalPersonFieldset.hide();
+        } else if (entityType === 'natural_person') {
+            if (legalPersonFieldset) legalPersonFieldset.hide();
+            if (naturalPersonFieldset) naturalPersonFieldset.show();
+        } else {
+            if (legalPersonFieldset) legalPersonFieldset.show();
+            if (naturalPersonFieldset) naturalPersonFieldset.show();
+        }
+    }
+
+    // Initial toggle
+    toggleEntityFields();
+
+    // Toggle on change
+    $('#id_entity_type').on('change', function() {
+        toggleEntityFields();
+    });
+})(django.jQuery);
+</script>
+{% endblock %}

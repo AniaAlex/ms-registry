@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Add Trust Service to TSL{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Add Trust Service to TSL</h1>
+    <p class="subtitle">Register a Trust Service in a Trust Status List (TSL)</p>
+    
+    {% if errors %}
+    <div class="alert alert-danger">
+        <h4>Please correct the errors below:</h4>
+        <ul>
+            {% for field, field_errors in errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <form method="post" action="" id="trust-service-form">
+        {% csrf_token %}
+        
+        <fieldset>
+            <legend>TSL Scheme Selection</legend>
+            
+            <div class="form-group">
+                <label for="scheme">TSL Scheme *</label>
+                <select name="scheme" id="scheme" class="form-control" required>
+                    <option value="">-- Select TSL Scheme --</option>
+                    {% for scheme in tsl_schemes %}
+                    <option value="{{ scheme.id }}">{{ scheme.name }} ({{ scheme.territory }})</option>
+                    {% endfor %}
+                </select>
+                <small class="form-help">Select the Trust Status List where the service will be published.</small>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Trust Service Provider</legend>
+            
+            <div class="form-group">
+                <label for="provider">Select Existing Provider</label>
+                <div class="input-with-action">
+                    <select name="provider" id="provider" class="form-control">
+                        <option value="">-- Select Provider (or create new below) --</option>
+                        {% for provider in providers %}
+                        <option value="{{ provider.id }}" data-scheme="{{ provider.scheme_id }}">
+                            {{ provider }} - {{ provider.scheme.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <small class="form-help">Select an existing Trust Service Provider, or create a new one below.</small>
+            </div>
+            
+            <div class="create-new-section">
+                <div class="form-check">
+                    <input type="checkbox" name="create_new_provider" id="create_new_provider" class="form-check-input">
+                    <label for="create_new_provider" class="form-check-label">
+                        <strong>Create New Trust Service Provider</strong>
+                    </label>
+                </div>
+                
+                <div id="new-provider-fields" class="new-provider-fields hidden">
+                    <div class="form-group">
+                        <label for="legal_entity">Legal Entity *</label>
+                        <div class="input-with-action">
+                            <select name="legal_entity" id="legal_entity" class="form-control">
+                                <option value="">-- Select Legal Entity --</option>
+                                {% for entity in legal_entities %}
+                                <option value="{{ entity.id }}">{{ entity }}</option>
+                                {% endfor %}
+                            </select>
+                            <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group three-quarter">
+                            <label for="provider_name">Provider Name *</label>
+                            <input type="text" name="provider_name" id="provider_name" class="form-control"
+                                   placeholder="Official provider name as it appears in TSL">
+                        </div>
+                        <div class="form-group quarter">
+                            <label for="provider_name_language">Language</label>
+                            <select name="provider_name_language" id="provider_name_language" class="form-control">
+                                <option value="en" selected>English</option>
+                                <option value="sv">Swedish</option>
+                                <option value="de">German</option>
+                                <option value="fr">French</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group three-quarter">
+                            <label for="trade_name">Trade Name</label>
+                            <input type="text" name="trade_name" id="trade_name" class="form-control"
+                                   placeholder="Commercial/brand name (optional)">
+                        </div>
+                        <div class="form-group quarter">
+                            <label for="trade_name_language">Language</label>
+                            <select name="trade_name_language" id="trade_name_language" class="form-control">
+                                <option value="en" selected>English</option>
+                                <option value="sv">Swedish</option>
+                                <option value="de">German</option>
+                                <option value="fr">French</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="electronic_address">Electronic Address</label>
+                        <input type="text" name="electronic_address" id="electronic_address" class="form-control"
+                               placeholder="https://example.com or mailto:contact@example.com">
+                        <small class="form-help">Website URL, email (mailto:), or phone (tel:) URI.</small>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Trust Service Information</legend>
+            
+            <div class="form-row">
+                <div class="form-group three-quarter">
+                    <label for="service_name">Service Name *</label>
+                    <input type="text" name="service_name" id="service_name" class="form-control" required
+                           placeholder="Name of the trust service">
+                </div>
+                <div class="form-group quarter">
+                    <label for="service_name_language">Language</label>
+                    <select name="service_name_language" id="service_name_language" class="form-control">
+                        <option value="en" selected>English</option>
+                        <option value="sv">Swedish</option>
+                        <option value="de">German</option>
+                        <option value="fr">French</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="service_type">Service Type *</label>
+                <select name="service_type" id="service_type" class="form-control" required>
+                    {% for value, label in service_types %}
+                    <option value="{{ value }}"
+                        {% if value == "http://uri.etsi.org/TrstSvc/Svctype/CA/QC" %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="form-help">Select the type of trust service according to ETSI standards.</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="service_status">Service Status *</label>
+                <select name="service_status" id="service_status" class="form-control" required>
+                    {% for value, label in service_statuses %}
+                    <option value="{{ value }}"
+                        {% if value == "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted" %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="form-help">Current status of the trust service.</small>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Service Certificate (Optional)</legend>
+            
+            <div class="form-group">
+                <label for="certificate_pem">X.509 Certificate (PEM format)</label>
+                <textarea name="certificate_pem" id="certificate_pem" class="form-control certificate-input" 
+                          rows="10" placeholder="-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAKHBfpGLfLMzMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl
+...
+-----END CERTIFICATE-----"></textarea>
+                <small class="form-help">
+                    Paste the PEM-encoded X.509 certificate that identifies this trust service.
+                    The certificate metadata (subject, issuer, validity dates) will be automatically extracted.
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="certificate_file">Or upload certificate file</label>
+                <input type="file" id="certificate_file" class="form-control" accept=".pem,.crt,.cer">
+                <small class="form-help">Upload a .pem, .crt, or .cer file to populate the certificate field above.</small>
+            </div>
+        </fieldset>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Trust Service to TSL</button>
+            <a href="{% url 'tsl_generator:service-list-create' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .subtitle {
+        color: #6c757d;
+        margin-bottom: 2rem;
+    }
+    .form-row {
+        display: flex;
+        gap: 1rem;
+    }
+    .form-group.three-quarter {
+        flex: 3;
+    }
+    .form-group.quarter {
+        flex: 1;
+    }
+    .create-new-section {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin-top: 1rem;
+        border: 1px solid #e9ecef;
+    }
+    .new-provider-fields {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed #dee2e6;
+    }
+    .hidden {
+        display: none;
+    }
+    .form-check {
+        margin-bottom: 0;
+    }
+    .form-check-label strong {
+        color: #495057;
+    }
+    .certificate-input {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.85rem;
+        background-color: #f8f9fa;
+    }
+    input[type="file"] {
+        padding: 0.5rem;
+        border: 1px dashed #ced4da;
+        border-radius: 4px;
+        background-color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const createNewCheckbox = document.getElementById('create_new_provider');
+    const newProviderFields = document.getElementById('new-provider-fields');
+    const providerSelect = document.getElementById('provider');
+    const schemeSelect = document.getElementById('scheme');
+    
+    // Toggle new provider fields visibility
+    createNewCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            newProviderFields.classList.remove('hidden');
+            providerSelect.value = '';
+            providerSelect.disabled = true;
+        } else {
+            newProviderFields.classList.add('hidden');
+            providerSelect.disabled = false;
+        }
+    });
+    
+    // Filter providers by selected scheme
+    schemeSelect.addEventListener('change', function() {
+        const selectedScheme = this.value;
+        const options = providerSelect.querySelectorAll('option');
+        
+        options.forEach(function(option) {
+            if (option.value === '') return; // Skip placeholder
+            
+            const providerScheme = option.getAttribute('data-scheme');
+            if (selectedScheme === '' || providerScheme === selectedScheme) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+        
+        // Reset selection if current selection is now hidden
+        const selectedOption = providerSelect.querySelector('option:checked');
+        if (selectedOption && selectedOption.style.display === 'none') {
+            providerSelect.value = '';
+        }
+    });
+    
+    // If provider is selected, uncheck create new
+    providerSelect.addEventListener('change', function() {
+        if (this.value) {
+            createNewCheckbox.checked = false;
+            newProviderFields.classList.add('hidden');
+        }
+    });
+    
+    // Certificate file upload handling
+    const certificateFile = document.getElementById('certificate_file');
+    const certificatePem = document.getElementById('certificate_pem');
+    
+    certificateFile.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                certificatePem.value = event.target.result;
+            };
+            reader.onerror = function() {
+                alert('Error reading file. Please try again or paste the certificate manually.');
+            };
+            reader.readAsText(file);
+        }
+    });
+});
+</script>
+{% endblock %}

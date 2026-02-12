@@ -1,0 +1,199 @@
+# Generated migration for core app
+
+import uuid
+
+import django.utils.timezone
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = []
+
+    operations = [
+        migrations.CreateModel(
+            name="Law",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "law_uri",
+                    models.URLField(
+                        help_text="URI reference to the law", max_length=2048
+                    ),
+                ),
+                (
+                    "law_name",
+                    models.CharField(help_text="Name of the law", max_length=500),
+                ),
+                (
+                    "law_country_code",
+                    models.CharField(
+                        blank=True,
+                        help_text="ISO 3166-1 alpha-2 country code",
+                        max_length=2,
+                        null=True,
+                    ),
+                ),
+                ("description", models.TextField(blank=True, null=True)),
+            ],
+            options={
+                "verbose_name": "Law",
+                "verbose_name_plural": "Laws",
+                "db_table": "core_law",
+            },
+        ),
+        migrations.CreateModel(
+            name="Identifier",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "identifier_type",
+                    models.CharField(
+                        choices=[
+                            ("EUID", "European Unique Identifier"),
+                            ("VAT_NUMBER", "VAT Registration Number"),
+                            ("LEI", "Legal Entity Identifier"),
+                            (
+                                "EORI",
+                                "Economic Operators Registration and Identification",
+                            ),
+                            (
+                                "NATIONAL_BUSINESS_REG",
+                                "National Business Register Number",
+                            ),
+                            ("NATIONAL_TAX_REG", "National Tax Registration Number"),
+                            ("SERIAL_NUMBER", "Serial Number (Natural Person)"),
+                            ("OTHER", "Other National Identifier"),
+                        ],
+                        default="EUID",
+                        help_text="Type of identifier",
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "identifier_value",
+                    models.CharField(
+                        help_text="The identifier value", max_length=500, unique=True
+                    ),
+                ),
+                (
+                    "identifier_uri",
+                    models.URLField(
+                        blank=True,
+                        help_text="Full URI (e.g., http://data.europa.eu/eudi/id/EUID)",
+                        max_length=2048,
+                        null=True,
+                    ),
+                ),
+                (
+                    "issuing_authority",
+                    models.CharField(blank=True, max_length=500, null=True),
+                ),
+                (
+                    "country_code",
+                    models.CharField(
+                        blank=True,
+                        help_text="ISO 3166-1 alpha-2",
+                        max_length=2,
+                        null=True,
+                    ),
+                ),
+                ("is_primary", models.BooleanField(default=False)),
+            ],
+            options={
+                "verbose_name": "Identifier",
+                "verbose_name_plural": "Identifiers",
+                "db_table": "core_identifier",
+                "unique_together": {("identifier_type", "identifier_value")},
+            },
+        ),
+        migrations.AddIndex(
+            model_name="identifier",
+            index=models.Index(
+                fields=["identifier_type"], name="core_identi_identif_idx"
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="identifier",
+            index=models.Index(
+                fields=["identifier_value"], name="core_identi_identif_val_idx"
+            ),
+        ),
+        migrations.CreateModel(
+            name="Policy",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "policy_type",
+                    models.CharField(
+                        choices=[
+                            ("Privacy_Statement", "Privacy Statement"),
+                            ("Terms_of_Service", "Terms of Service"),
+                            ("Data_Processing_Agreement", "Data Processing Agreement"),
+                            ("Cookie_Policy", "Cookie Policy"),
+                            ("Other", "Other"),
+                        ],
+                        default="Privacy_Statement",
+                        max_length=50,
+                    ),
+                ),
+                ("policy_uri", models.URLField(max_length=2048)),
+                (
+                    "locale",
+                    models.CharField(
+                        blank=True,
+                        help_text="Language/locale code",
+                        max_length=5,
+                        null=True,
+                    ),
+                ),
+                ("version", models.CharField(blank=True, max_length=50, null=True)),
+                ("effective_date", models.DateField(blank=True, null=True)),
+            ],
+            options={
+                "verbose_name": "Policy",
+                "verbose_name_plural": "Policies",
+                "db_table": "core_policy",
+            },
+        ),
+        migrations.AddIndex(
+            model_name="policy",
+            index=models.Index(fields=["policy_type"], name="core_policy_policy_t_idx"),
+        ),
+        migrations.AddIndex(
+            model_name="policy",
+            index=models.Index(fields=["policy_uri"], name="core_policy_policy_u_idx"),
+        ),
+    ]
