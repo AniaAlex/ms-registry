@@ -40,11 +40,6 @@ class EntityUsesIntermediaryInline(admin.TabularInline):
     fk_name = "registered_entity"
     extra = 1
     autocomplete_fields = ["intermediary"]
-    readonly_fields = [
-        "intermediary_identifier",
-        "intermediary_trade_name",
-        "intermediary_registry_uri",
-    ]
 
 
 @admin.register(SupervisoryAuthority)

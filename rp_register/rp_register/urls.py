@@ -17,7 +17,11 @@ from drf_spectacular.views import (
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/registry/", include("registry.urls", namespace="registry")),
-    path("api/legal-entities/", include("legal_entities.urls", namespace="legal_entities")),
+    path(
+        "api/legal-entities/",
+        include("legal_entities.urls", namespace="legal_entities"),
+    ),
+    path("api/tsl/", include("tsl_generator.urls", namespace="tsl_generator")),
 ]
 
 # OpenAPI docs
