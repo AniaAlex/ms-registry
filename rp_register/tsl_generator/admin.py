@@ -7,35 +7,18 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import path, reverse
 
-from .models import (
-    AdditionalServiceInformation,
-    ServiceCertificate,
-    ServiceDefinitionURI,
-    ServiceHistoryAdditionalInfo,
-    ServiceHistoryDigitalId,
-    ServiceHistoryInstance,
-    ServiceHistoryName,
-    ServiceHistoryQualification,
-    ServiceName,
-    ServiceQualification,
-    ServiceSupplyPoint,
-    TrustService,
-    TrustServiceProvider,
-    TSLPointer,
-    TSLPointerCertificate,
-    TSLPointerOperatorName,
-    TSLPolicyOrLegalNotice,
-    TSLScheme,
-    TSLSchemeCommunityRule,
-    TSLSchemeInformationURI,
-    TSLSchemeName,
-    TSLSchemeOperatorName,
-    TSPCertificate,
-    TSPElectronicAddress,
-    TSPInformationURI,
-    TSPName,
-    TSPTradeName,
-)
+from .models import (AdditionalServiceInformation, ServiceCertificate,
+                     ServiceDefinitionURI, ServiceHistoryAdditionalInfo,
+                     ServiceHistoryDigitalId, ServiceHistoryInstance,
+                     ServiceHistoryName, ServiceHistoryQualification,
+                     ServiceName, ServiceQualification, ServiceSupplyPoint,
+                     TrustService, TrustServiceProvider, TSLPointer,
+                     TSLPointerCertificate, TSLPointerOperatorName,
+                     TSLPolicyOrLegalNotice, TSLScheme, TSLSchemeCommunityRule,
+                     TSLSchemeInformationURI, TSLSchemeName,
+                     TSLSchemeOperatorName, TSPCertificate,
+                     TSPElectronicAddress, TSPInformationURI, TSPName,
+                     TSPTradeName)
 
 
 # =============================================================================
