@@ -7,15 +7,33 @@ Provides comprehensive admin interface for managing Registered Entities
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import (AuditLog, Claim, Credential, EntityAccessCertificate,
-                     EntityEntitlement, EntityProvidesAttestation,
-                     EntityRegistrationCertificate, EntityServiceDescription,
-                     EntitySupportURI, EntityUsesIntermediary, Identifier,
-                     IntendedUse, IntendedUseCredential,
-                     IntendedUsePrivacyPolicy, IntendedUsePurpose, Law,
-                     LegalEntity, LegalEntityIdentifier, LegalPerson,
-                     NaturalPerson, PhysicalAddress, Policy, RegisteredEntity,
-                     RegisteredEntityPolicy, SupervisoryAuthority)
+from .models import (
+    AuditLog,
+    Claim,
+    Credential,
+    EntityAccessCertificate,
+    EntityEntitlement,
+    EntityProvidesAttestation,
+    EntityRegistrationCertificate,
+    EntityServiceDescription,
+    EntitySupportURI,
+    EntityUsesIntermediary,
+    Identifier,
+    IntendedUse,
+    IntendedUseCredential,
+    IntendedUsePrivacyPolicy,
+    IntendedUsePurpose,
+    Law,
+    LegalEntity,
+    LegalEntityIdentifier,
+    LegalPerson,
+    NaturalPerson,
+    PhysicalAddress,
+    Policy,
+    RegisteredEntity,
+    RegisteredEntityPolicy,
+    SupervisoryAuthority,
+)
 
 # ============================================================================
 # INLINE ADMINS

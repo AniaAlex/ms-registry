@@ -5,8 +5,13 @@ Serializers for Legal Entity models
 from core.models import Identifier, IdentifierType
 from rest_framework import serializers
 
-from .models import (LegalEntity, LegalEntityIdentifier, LegalPerson,
-                     NaturalPerson, PhysicalAddress)
+from .models import (
+    LegalEntity,
+    LegalEntityIdentifier,
+    LegalPerson,
+    NaturalPerson,
+    PhysicalAddress,
+)
 
 
 class PhysicalAddressSerializer(serializers.ModelSerializer):
