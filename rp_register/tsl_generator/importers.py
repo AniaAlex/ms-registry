@@ -13,15 +13,29 @@ from xml.etree import ElementTree as ET
 
 import yaml
 
-from .models import (LANGUAGE_CHOICES, SERVICE_STATUS_CHOICES,
-                     SERVICE_TYPE_CHOICES, TSL_TYPE_CHOICES,
-                     ServiceCertificate, ServiceHistoryInstance,
-                     ServiceHistoryName, ServiceName, ServiceSupplyPoint,
-                     TrustService, TrustServiceProvider,
-                     TSLPolicyOrLegalNotice, TSLScheme, TSLSchemeCommunityRule,
-                     TSLSchemeInformationURI, TSLSchemeName,
-                     TSLSchemeOperatorName, TSPElectronicAddress,
-                     TSPInformationURI, TSPName, TSPTradeName)
+from .models import (
+    LANGUAGE_CHOICES,
+    SERVICE_STATUS_CHOICES,
+    SERVICE_TYPE_CHOICES,
+    TSL_TYPE_CHOICES,
+    ServiceCertificate,
+    ServiceHistoryInstance,
+    ServiceHistoryName,
+    ServiceName,
+    ServiceSupplyPoint,
+    TrustService,
+    TrustServiceProvider,
+    TSLPolicyOrLegalNotice,
+    TSLScheme,
+    TSLSchemeCommunityRule,
+    TSLSchemeInformationURI,
+    TSLSchemeName,
+    TSLSchemeOperatorName,
+    TSPElectronicAddress,
+    TSPInformationURI,
+    TSPName,
+    TSPTradeName,
+)
 
 
 def import_scheme_from_yaml(yaml_path: str) -> TSLScheme:

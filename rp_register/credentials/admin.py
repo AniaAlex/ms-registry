@@ -2,9 +2,15 @@
 
 from django.contrib import admin
 
-from .models import (Claim, Credential, EntityProvidesAttestation, IntendedUse,
-                     IntendedUseCredential, IntendedUsePrivacyPolicy,
-                     IntendedUsePurpose)
+from .models import (
+    Claim,
+    Credential,
+    EntityProvidesAttestation,
+    IntendedUse,
+    IntendedUseCredential,
+    IntendedUsePrivacyPolicy,
+    IntendedUsePurpose,
+)
 
 
 class ClaimInline(admin.TabularInline):
