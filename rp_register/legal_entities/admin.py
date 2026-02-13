@@ -2,13 +2,8 @@
 
 from django.contrib import admin
 
-from .models import (
-    LegalEntity,
-    LegalEntityIdentifier,
-    LegalPerson,
-    NaturalPerson,
-    PhysicalAddress,
-)
+from .models import (LegalEntity, LegalEntityIdentifier, LegalPerson,
+                     NaturalPerson, PhysicalAddress)
 
 
 class LegalEntityIdentifierInline(admin.TabularInline):

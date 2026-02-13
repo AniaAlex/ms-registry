@@ -11,13 +11,8 @@ Contains:
 - EntityUsesIntermediary: RP → Intermediary relationships
 """
 
-from core.models import (
-    BaseModel,
-    EntitlementType,
-    EntityRole,
-    Policy,
-    RegistrationStatus,
-)
+from core.models import (BaseModel, EntitlementType, EntityRole, Policy,
+                         RegistrationStatus)
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
