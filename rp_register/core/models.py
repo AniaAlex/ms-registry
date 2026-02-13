@@ -158,7 +158,7 @@ class Identifier(BaseModel):
         help_text="Type of identifier",
     )
     identifier_value = models.CharField(
-        max_length=500, unique=True, help_text="The identifier value"
+        max_length=500, help_text="The identifier value"
     )
     identifier_uri = models.URLField(
         max_length=2048,

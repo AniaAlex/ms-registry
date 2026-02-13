@@ -1,0 +1,181 @@
+name: Tests
+
+on:
+    push:
+        branches: [main, master, develop]
+    pull_request:
+        branches: [main, master, develop]
+
+env:
+    PYTHON_VERSION: "3.13"
+    DJANGO_SETTINGS_MODULE: rp_register.settings_test
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+
+        services:
+            postgres:
+                image: postgres:14
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: test_db
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+            redis:
+                image: redis:6.2
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+        env:
+            DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+            POSTGRES_HOST: localhost
+            POSTGRES_PORT: 5432
+            POSTGRES_DB: test_db
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            REDIS_URL: redis://localhost:6379/0
+            SECRET_KEY: test-secret-key-for-ci
+            DEBUG: "False"
+            ENV: TEST
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python ${{ env.PYTHON_VERSION }}
+              uses: actions/setup-python@v5
+              with:
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  cache: "pip"
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r requirements.txt
+
+            - name: Run migrations
+              working-directory: ./rp_register
+              run: |
+                  python manage.py migrate --settings=rp_register.settings_test
+
+            - name: Run tests
+              working-directory: ./rp_register
+              run: |
+                  python manage.py test --settings=rp_register.settings_test --verbosity=2
+
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python ${{ env.PYTHON_VERSION }}
+              uses: actions/setup-python@v5
+              with:
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  cache: "pip"
+
+            - name: Install linting tools
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install flake8 black isort
+
+            - name: Run flake8
+              working-directory: ./rp_register
+              run: |
+                  flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+                  flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+            - name: Check black formatting
+              working-directory: ./rp_register
+              run: |
+                  black --check --diff .
+
+            - name: Check isort
+              working-directory: ./rp_register
+              run: |
+                  isort --check-only --diff .
+
+    coverage:
+        runs-on: ubuntu-latest
+        needs: test
+
+        services:
+            postgres:
+                image: postgres:14
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: test_db
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+            redis:
+                image: redis:6.2
+                ports:
+                    - 6379:6379
+
+        env:
+            DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+            POSTGRES_HOST: localhost
+            POSTGRES_PORT: 5432
+            POSTGRES_DB: test_db
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            REDIS_URL: redis://localhost:6379/0
+            SECRET_KEY: test-secret-key-for-ci
+            DEBUG: "False"
+            ENV: TEST
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python ${{ env.PYTHON_VERSION }}
+              uses: actions/setup-python@v5
+              with:
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  cache: "pip"
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r requirements.txt
+
+            - name: Run migrations
+              working-directory: ./rp_register
+              run: |
+                  python manage.py migrate --settings=rp_register.settings_test
+
+            - name: Run tests with coverage
+              working-directory: ./rp_register
+              run: |
+                  coverage run --source='.' manage.py test --settings=rp_register.settings_test
+                  coverage report -m
+                  coverage xml
+
+            - name: Upload coverage reports
+              uses: codecov/codecov-action@v4
+              with:
+                  file: ./rp_register/coverage.xml
+                  flags: unittests
+                  fail_ci_if_error: false

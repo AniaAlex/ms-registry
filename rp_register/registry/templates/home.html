@@ -6,7 +6,7 @@
 <div class="container">
     <div class="page-header">
         <h2>Registered Entities</h2>
-        <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">
+        <a href="{% url 'registry:entity-list-create' %}" class="btn btn-primary">
             Register New Entity
         </a>
     </div>
@@ -47,7 +47,7 @@
     {% else %}
     <div class="empty-state">
         <p>No registered entities yet.</p>
-        <a href="{% url 'registry:entity-register-form' %}" class="btn btn-primary">
+        <a href="{% url 'registry:entity-list-create' %}" class="btn btn-primary">
             Register Your First Entity
         </a>
     </div>

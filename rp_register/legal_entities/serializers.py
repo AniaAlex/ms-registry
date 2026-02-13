@@ -124,9 +124,7 @@ class LegalEntityCreateSerializer(serializers.Serializer):
     registration_date = serializers.DateField(required=False, allow_null=True)
 
     # Natural Person fields (required if entity_type == 'natural_person')
-    given_name = serializers.CharField(
-        max_length=200, required=False, allow_blank=True
-    )
+    given_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
     family_name = serializers.CharField(
         max_length=200, required=False, allow_blank=True
     )
@@ -161,8 +159,11 @@ class LegalEntityCreateSerializer(serializers.Serializer):
         max_length=500, required=False, allow_blank=True, allow_null=True
     )
     identifier_country_code = serializers.CharField(
-        max_length=2, required=False, allow_blank=True, allow_null=True,
-        help_text="Country code for the identifier (ISO 3166-1 alpha-2)"
+        max_length=2,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        help_text="Country code for the identifier (ISO 3166-1 alpha-2)",
     )
 
     # Contact info
@@ -212,16 +213,20 @@ class LegalEntityCreateSerializer(serializers.Serializer):
                 country_code=validated_data["country_code"],
             )
 
-        # Create Primary Identifier
+        # Create or get Primary Identifier
         primary_identifier = None
         if validated_data.get("identifier_type") and validated_data.get(
             "identifier_value"
         ):
-            primary_identifier = Identifier.objects.create(
+            primary_identifier, created = Identifier.objects.get_or_create(
                 identifier_type=validated_data["identifier_type"],
                 identifier_value=validated_data["identifier_value"],
-                issuing_authority=validated_data.get("issuing_authority") or None,
-                country_code=validated_data.get("identifier_country_code") or None,
+                defaults={
+                    "issuing_authority": validated_data.get("issuing_authority")
+                    or None,
+                    "country_code": validated_data.get("identifier_country_code")
+                    or None,
+                },
             )
 
         # Create Legal Person or Natural Person
