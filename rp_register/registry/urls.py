@@ -9,11 +9,6 @@ app_name = "registry"
 
 urlpatterns = [
     path(
-        "entities/register/",
-        views.RegisterEntityFormView.as_view(),
-        name="entity-register-form",
-    ),
-    path(
         "entities/",
         views.RegisteredEntityListCreateView.as_view(),
         name="entity-list-create",

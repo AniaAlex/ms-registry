@@ -11,6 +11,7 @@ class HomeView(TemplateView):
     """
     Home page view that lists all registered entities.
     """
+
     template_name = "home.html"
 
     def get_context_data(self, **kwargs):
@@ -21,92 +22,81 @@ class HomeView(TemplateView):
         return context
 
 
-class RegisterEntityFormView(generics.CreateAPIView):
+class RegisteredEntityListCreateView(generics.ListCreateAPIView):
     """
-    Render registration form on GET, create entity on POST.
+    List all registered entities or create a new one.
+    Supports both API (JSON) and HTML form rendering.
 
-    GET: Render the registration form
+    GET: List all registered entities (API) or render form (HTML)
     POST: Create a new registered entity
     """
 
     permission_classes = []
     serializer_class = serializers.RegisteredEntitySerializer
     queryset = models.RegisteredEntity.objects.all()
-    renderer_classes = [TemplateHTMLRenderer]
-    template_name = "register_entity.html"
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
 
     def get(self, request, *args, **kwargs):
-        """Render empty registration form"""
-        serializer = self.get_serializer()
-        return Response(
-            {
-                "serializer": serializer,
-                "errors": None,
-                "legal_entities": LegalEntity.objects.all(),
-                "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
-                "entity_roles": models.RegisteredEntity._meta.get_field(
-                    "entity_role"
-                ).choices,
-            },
-            template_name=self.template_name,
-        )
-
-    def post(self, request, *args, **kwargs):
-        """Handle form submission"""
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
+        # If HTML is requested and 'form' param present, show the registration form
+        if request.accepted_renderer.format == "html":
             return Response(
                 {
-                    "serializer": serializer,
-                    "errors": serializer.errors,
+                    "serializer": self.get_serializer(),
+                    "errors": None,
                     "legal_entities": LegalEntity.objects.all(),
                     "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
                     "entity_roles": models.RegisteredEntity._meta.get_field(
                         "entity_role"
                     ).choices,
                 },
-                status=status.HTTP_400_BAD_REQUEST,
-                template_name=self.template_name,
+                template_name="register_entity.html",
             )
-
-        self.perform_create(serializer)
-        # Redirect to entity detail or list on success
-        return Response(
-            {
-                "message": "Entity registered successfully",
-                "entity": serializer.data,
-            },
-            status=status.HTTP_201_CREATED,
-            template_name="register_entity_success.html",
-        )
-
-
-class RegisteredEntityListCreateView(generics.ListCreateAPIView):
-    """
-    List all registered entities or create a new one.
-
-    GET: List all registered entities
-    POST: Create a new registered entity
-    """
-
-    permission_classes = []
-    serializer_class = serializers.RegisteredEntitySerializer
-    queryset = models.RegisteredEntity.objects.all()
+        # Otherwise return JSON list
+        return self.list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            # HTML form submission - re-render form with errors
+            if (
+                hasattr(request, "accepted_renderer")
+                and request.accepted_renderer.format == "html"
+            ):
+                return Response(
+                    {
+                        "serializer": serializer,
+                        "errors": serializer.errors,
+                        "legal_entities": LegalEntity.objects.all(),
+                        "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
+                        "entity_roles": models.RegisteredEntity._meta.get_field(
+                            "entity_role"
+                        ).choices,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                    template_name="register_entity.html",
+                )
             return Response(
-                {
-                    "serializer": serializer,
-                    **serializer.errors,
-                },
+                {"errors": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
-                template_name="register_entity.html",
             )
 
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
+
+        # HTML form submission - show success page
+        if (
+            hasattr(request, "accepted_renderer")
+            and request.accepted_renderer.format == "html"
+        ):
+            return Response(
+                {
+                    "message": "Entity registered successfully",
+                    "entity": serializer.data,
+                },
+                status=status.HTTP_201_CREATED,
+                template_name="register_entity_success.html",
+            )
+
         return Response(
             {
                 "message": "Entity registered successfully",

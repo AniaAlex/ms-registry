@@ -354,12 +354,12 @@ def generate_tsl_xml_gotrust_format(scheme) -> str:
     lines.append(f'<tsl:TrustServiceStatusList xmlns:tsl="{NS_TSL}">')
 
     # Scheme Information
-    lines.append("  <tsl:SchemeInformation>")
-    lines.append("    <tsl:TSLVersionIdentifier>5</tsl:TSLVersionIdentifier>")
+    lines.append("<tsl:SchemeInformation>")
+    lines.append("<tsl:TSLVersionIdentifier>5</tsl:TSLVersionIdentifier>")
     lines.append(
-        f"    <tsl:TSLSequenceNumber>{scheme.sequence_number}</tsl:TSLSequenceNumber>"
+        f"<tsl:TSLSequenceNumber>{scheme.sequence_number}</tsl:TSLSequenceNumber>"
     )
-    lines.append(f"    <tsl:TSLType>{scheme.tsl_type}</tsl:TSLType>")
+    lines.append(f"<tsl:TSLType>{scheme.tsl_type}</tsl:TSLType>")
 
     # Scheme Operator Name
     lines.append("    <tsl:SchemeOperatorName>")
