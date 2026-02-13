@@ -8,13 +8,8 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from . import serializers
-from .models import (
-    SERVICE_STATUS_CHOICES,
-    SERVICE_TYPE_CHOICES,
-    TrustService,
-    TrustServiceProvider,
-    TSLScheme,
-)
+from .models import (SERVICE_STATUS_CHOICES, SERVICE_TYPE_CHOICES,
+                     TrustService, TrustServiceProvider, TSLScheme)
 
 
 class TrustServiceProviderListCreateView(generics.ListCreateAPIView):
