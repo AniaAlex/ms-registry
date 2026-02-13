@@ -5,10 +5,18 @@ Serializers for TSL Generator models
 from legal_entities.models import LegalEntity
 from rest_framework import serializers
 
-from .models import (SERVICE_STATUS_CHOICES, SERVICE_TYPE_CHOICES,
-                     ServiceCertificate, ServiceName, TrustService,
-                     TrustServiceProvider, TSLScheme, TSPElectronicAddress,
-                     TSPName, TSPTradeName)
+from .models import (
+    SERVICE_STATUS_CHOICES,
+    SERVICE_TYPE_CHOICES,
+    ServiceCertificate,
+    ServiceName,
+    TrustService,
+    TrustServiceProvider,
+    TSLScheme,
+    TSPElectronicAddress,
+    TSPName,
+    TSPTradeName,
+)
 
 
 class TSPNameSerializer(serializers.ModelSerializer):

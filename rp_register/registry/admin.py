@@ -3,10 +3,15 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import (EntityEntitlement, EntityServiceDescription,
-                     EntitySupportURI, EntityUsesIntermediary,
-                     RegisteredEntity, RegisteredEntityPolicy,
-                     SupervisoryAuthority)
+from .models import (
+    EntityEntitlement,
+    EntityServiceDescription,
+    EntitySupportURI,
+    EntityUsesIntermediary,
+    RegisteredEntity,
+    RegisteredEntityPolicy,
+    SupervisoryAuthority,
+)
 
 
 class EntitySupportURIInline(admin.TabularInline):

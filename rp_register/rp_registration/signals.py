@@ -6,8 +6,13 @@ Handles automatic population of intermediary cached fields and audit logging
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
-from .models import (AuditLog, EntityUsesIntermediary, IntendedUse,
-                     LegalEntity, RegisteredEntity)
+from .models import (
+    AuditLog,
+    EntityUsesIntermediary,
+    IntendedUse,
+    LegalEntity,
+    RegisteredEntity,
+)
 
 
 @receiver(pre_save, sender=EntityUsesIntermediary)
