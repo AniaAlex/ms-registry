@@ -2,8 +2,6 @@
 Tests for Registry app endpoints and models.
 """
 
-import uuid
-
 from core.models import EntityRole, RegistrationStatus
 from django.test import TestCase
 from django.urls import reverse
@@ -14,7 +12,6 @@ from registry.models import (
     EntitySupportURI,
     EntityUsesIntermediary,
     RegisteredEntity,
-    RegisteredEntityPolicy,
     SupervisoryAuthority,
 )
 from rest_framework import status
