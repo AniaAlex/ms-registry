@@ -2,8 +2,7 @@
 
 from django.contrib import admin
 
-from .models import (AuditLog, EntityAccessCertificate,
-                     EntityRegistrationCertificate)
+from .models import AuditLog, EntityAccessCertificate, EntityRegistrationCertificate
 
 
 class EntityAccessCertificateInline(admin.TabularInline):

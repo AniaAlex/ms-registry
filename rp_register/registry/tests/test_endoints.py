@@ -8,10 +8,15 @@ from core.models import EntityRole, RegistrationStatus
 from django.test import TestCase
 from django.urls import reverse
 from legal_entities.models import LegalEntity, LegalPerson, PhysicalAddress
-from registry.models import (EntityEntitlement, EntityServiceDescription,
-                             EntitySupportURI, EntityUsesIntermediary,
-                             RegisteredEntity, RegisteredEntityPolicy,
-                             SupervisoryAuthority)
+from registry.models import (
+    EntityEntitlement,
+    EntityServiceDescription,
+    EntitySupportURI,
+    EntityUsesIntermediary,
+    RegisteredEntity,
+    RegisteredEntityPolicy,
+    SupervisoryAuthority,
+)
 from rest_framework import status
 from rest_framework.test import APITestCase
 
