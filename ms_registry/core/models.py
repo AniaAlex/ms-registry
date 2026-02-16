@@ -51,13 +51,25 @@ class BaseModel(UUIDModel, TimestampedModel):
 
 
 class EntitlementType(models.TextChoices):
-    """Entitlement types as per CIR for Relying Party Registration"""
+    """Entitlement types as per TS5 / CIR for Relying Party Registration"""
 
+    # Verifier role
     SERVICE_PROVIDER = "Service_Provider", "Service Provider"
+    
+    # Issuer roles
+    PID_PROVIDER = "PID_Provider", "PID Provider"
     QEAA_PROVIDER = "QEAA_Provider", "Qualified EAA Provider"
     NON_Q_EAA_PROVIDER = "Non_Q_EAA_Provider", "Non-Qualified EAA Provider"
     PUB_EAA_PROVIDER = "PUB_EAA_Provider", "Public EAA Provider"
-    PID_PROVIDER = "PID_Provider", "PID Provider"
+    
+    # Qualified Trust Service Provider roles
+    QCERT_ESIG_PROVIDER = "QCert_for_ESig_Provider", "Qualified Certificate for E-Signature Provider"
+    QCERT_ESEAL_PROVIDER = "QCert_for_ESeal_Provider", "Qualified Certificate for E-Seal Provider"
+    RQSIGCDS_PROVIDER = "rQSigCDs_Provider", "Remote Qualified Signature Creation Device Provider"
+    RQSEALCDS_PROVIDER = "rQSealCDs_Provider", "Remote Qualified Seal Creation Device Provider"
+    ESIG_ESEAL_CREATION_PROVIDER = "ESig_ESeal_Creation_Provider", "E-Signature/E-Seal Creation Provider"
+    
+    # Intermediary role
     INTERMEDIARY = "Intermediary", "Intermediary"
 
 

@@ -1,6 +1,7 @@
+from core.models import EntitlementType
 from rest_framework import serializers
 
-from .models import RegisteredEntity, SupervisoryAuthority
+from .models import EntityEntitlement, RegisteredEntity, SupervisoryAuthority
 
 
 class SupervisoryAuthoritySerializer(serializers.ModelSerializer):
@@ -78,7 +79,110 @@ class SupervisoryAuthorityCreateSerializer(serializers.Serializer):
         )
 
 
+class EntityEntitlementSerializer(serializers.ModelSerializer):
+    """Serializer for entity entitlements"""
+
+    class Meta:
+        model = EntityEntitlement
+        fields = [
+            "id",
+            "entitlement_uri",
+            "entitlement_type",
+            "granted_at",
+            "expires_at",
+            "is_active",
+        ]
+        read_only_fields = ["id", "granted_at"]
+
+
 class RegisteredEntitySerializer(serializers.ModelSerializer):
+    """Serializer for creating and listing registered entities"""
+
+    # Accept entitlements as a list of entitlement type values
+    entitlements = serializers.ListField(
+        child=serializers.ChoiceField(choices=EntitlementType.choices),
+        write_only=True,
+        required=False,
+        help_text="List of entitlement types (e.g., Service_Provider, PID_Provider)",
+    )
+    # For reading, return the full entitlement objects
+    entity_entitlements = EntityEntitlementSerializer(
+        source="entitlements", many=True, read_only=True
+    )
+
     class Meta:
         model = RegisteredEntity
-        fields = "__all__"
+        fields = [
+            "id",
+            "legal_entity",
+            "entity_role",
+            "trade_name",
+            "is_psb",
+            "is_intermediary",
+            "registry_uri",
+            "supervisory_authority",
+            "registration_status",
+            "registered_at",
+            "created_at",
+            "updated_at",
+            "entitlements",  # write-only input
+            "entity_entitlements",  # read-only output
+        ]
+        read_only_fields = [
+            "id",
+            "registration_status",
+            "registered_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_entitlements(self, value):
+        """Validate that at least one entitlement is provided"""
+        if not value:
+            raise serializers.ValidationError(
+                "At least one entitlement is required."
+            )
+        return value
+
+    def create(self, validated_data):
+        """Create RegisteredEntity and associated EntityEntitlements"""
+        entitlement_types = validated_data.pop("entitlements", [])
+
+        # Create the registered entity
+        registered_entity = RegisteredEntity.objects.create(**validated_data)
+
+        # Create entitlements for the entity
+        for entitlement_type in entitlement_types:
+            entitlement_uri = f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+            EntityEntitlement.objects.create(
+                registered_entity=registered_entity,
+                entitlement_uri=entitlement_uri,
+                entitlement_type=entitlement_type,
+            )
+
+        return registered_entity
+
+    def update(self, instance, validated_data):
+        """Update RegisteredEntity and associated EntityEntitlements"""
+        entitlement_types = validated_data.pop("entitlements", None)
+
+        # Update entity fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update entitlements if provided
+        if entitlement_types is not None:
+            # Remove existing entitlements
+            instance.entitlements.all().delete()
+
+            # Create new entitlements
+            for entitlement_type in entitlement_types:
+                entitlement_uri = f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+                EntityEntitlement.objects.create(
+                    registered_entity=instance,
+                    entitlement_uri=entitlement_uri,
+                    entitlement_type=entitlement_type,
+                )
+
+        return instance

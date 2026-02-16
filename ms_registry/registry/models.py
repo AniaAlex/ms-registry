@@ -208,10 +208,11 @@ class EntitySupportURI(BaseModel):
 class EntityEntitlement(BaseModel):
     """
     Entitlement for Registered Entity [1..*]
-    Specifies what the entity is authorized to do:
-    - For Relying Parties: Service_Provider, Intermediary
-    - For PID Providers: PID_Provider
-    - For Attestation Providers: QEAA_Provider, PUB_EAA_Provider, Non_Q_EAA_Provider
+    Specifies what the entity is authorized to do per TS5.
+    
+    An entity can have multiple entitlements. For example, an attestation 
+    provider that needs to verify identity before issuance registers with
+    both Service_Provider and their provider entitlement.
     """
 
     registered_entity = models.ForeignKey(
@@ -220,11 +221,17 @@ class EntityEntitlement(BaseModel):
     entitlement_uri = models.URLField(
         max_length=2048,
         help_text=(
-            "EUDI Wallet Entitlement URIs: "
-            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/PID_Issuer, "
-            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/QEAA_Provider, "
-            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/WalletProvider, "
-            "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty"
+            "ETSI Entitlement URIs per TS5: "
+            "https://uri.etsi.org/19475/Entitlement/Service_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/PID_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/QEAA_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/PUB_EAA_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/Non_Q_EAA_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/QCert_for_ESig_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/QCert_for_ESeal_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/rQSigCDs_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/rQSealCDs_Provider, "
+            "https://uri.etsi.org/19475/Entitlement/ESig_ESeal_Creation_Provider"
         ),
     )
     entitlement_type = models.CharField(max_length=50, choices=EntitlementType.choices)

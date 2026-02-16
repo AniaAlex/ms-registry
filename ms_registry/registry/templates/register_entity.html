@@ -106,6 +106,25 @@
             </div>
         </fieldset>
         
+        <fieldset>
+            <legend>Entitlements *</legend>
+            <p class="form-help">Select at least one entitlement. An attestation provider that needs to verify identity before issuance should register with both Service_Provider and their provider entitlement.</p>
+            
+            <div class="entitlements-list">
+                {% for value, label in entitlement_types %}
+                <div class="form-check">
+                    <input type="checkbox" name="entitlements" id="entitlement_{{ value }}" 
+                           class="form-check-input" value="{{ value }}"
+                           {% if value in serializer.data.entitlements %}checked{% endif %}>
+                    <label for="entitlement_{{ value }}" class="form-check-label">
+                        {{ label }}
+                        <small class="text-muted">(https://uri.etsi.org/19475/Entitlement/{{ value }})</small>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </fieldset>
+        
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Register Entity</button>
             <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">Cancel</a>

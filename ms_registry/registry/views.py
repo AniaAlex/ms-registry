@@ -1,3 +1,4 @@
+from core.models import EntitlementType
 from django.views.generic import TemplateView
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
@@ -48,6 +49,7 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                     "entity_roles": models.RegisteredEntity._meta.get_field(
                         "entity_role"
                     ).choices,
+                    "entitlement_types": EntitlementType.choices,
                 },
                 template_name="register_entity.html",
             )
@@ -71,6 +73,7 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                         "entity_roles": models.RegisteredEntity._meta.get_field(
                             "entity_role"
                         ).choices,
+                        "entitlement_types": EntitlementType.choices,
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
