@@ -67,14 +67,14 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Run migrations
-              working-directory: ./rp_register
+              working-directory: ./ms_register
               run: |
                   python manage.py migrate --settings=rp_register.settings_test
 
             - name: Run tests
-              working-directory: ./rp_register
+              working-directory: ./ms_register
               run: |
-                  python manage.py test --settings=rp_register.settings_test --verbosity=2
+                  python manage.py test --settings=ms_register.settings_test --verbosity=2
 
     lint:
         runs-on: ubuntu-latest
@@ -162,20 +162,19 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Run migrations
-              working-directory: ./rp_register
+              working-directory: ./ms_register
               run: |
-                  python manage.py migrate --settings=rp_register.settings_test
-
+                  python manage.py migrate --settings=ms_register.settings_test
             - name: Run tests with coverage
-              working-directory: ./rp_register
+              working-directory: ./ms_register
               run: |
-                  coverage run --source='.' manage.py test --settings=rp_register.settings_test
+                  coverage run --source='.' manage.py test --settings=ms_register.settings_test
                   coverage report -m
                   coverage xml
 
             - name: Upload coverage reports
               uses: codecov/codecov-action@v4
               with:
-                  file: ./rp_register/coverage.xml
+                  file: ./ms_register/coverage.xml
                   flags: unittests
                   fail_ci_if_error: false
