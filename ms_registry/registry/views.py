@@ -256,3 +256,176 @@ class SupervisoryAuthorityFormView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED,
             template_name="add_supervisory_authority_success.html",
         )
+
+
+# =============================================================================
+# WalletRelyingParty API Views (TS5 Specification)
+# =============================================================================
+
+
+class WalletRelyingPartyView(generics.GenericAPIView):
+    """
+    WalletRelyingParty API endpoint per TS5 specification.
+
+    path: /wrp
+
+    Supported methods:
+    - GET: List all WalletRelyingParties (returns 200)
+    - POST: Create a new WalletRelyingParty (returns 201)
+    - PUT: Update an existing WalletRelyingParty (returns 200 or 404)
+    - DELETE: Delete an existing WalletRelyingParty (returns 204)
+
+    Note: The harmonisation of the POST method (means to accomplish registration
+    of a new Wallet-Relying Party) has been left for further study per TS5.
+
+    Reference:
+    https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/
+    blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
+    """
+
+    permission_classes = []
+    serializer_class = serializers.WalletRelyingPartySerializer
+    queryset = models.RegisteredEntity.objects.all().select_related(
+        "legal_entity", "supervisory_authority"
+    )
+
+    def get(self, request, *args, **kwargs):
+        """
+        List all WalletRelyingParties.
+
+        Returns 200 with a list of all registered WRPs.
+        """
+        queryset = self.get_queryset()
+        serializer = self.get_serializer()
+        data = [serializer.to_representation(obj) for obj in queryset]
+        return Response(data, status=status.HTTP_200_OK)
+
+    def post(self, request, *args, **kwargs):
+        """
+        Create a new WalletRelyingParty.
+
+        Expects a request body with the WalletRelyingParty schema.
+        Returns 201 on success with the created WRP data.
+        """
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        registered_entity = serializer.save()
+
+        return Response(
+            serializer.to_representation(registered_entity),
+            status=status.HTTP_201_CREATED,
+        )
+
+    def put(self, request, *args, **kwargs):
+        """
+        Update an existing WalletRelyingParty.
+
+        Expects a request body with the WalletRelyingParty schema including 'id'.
+        Returns 200 on success or 404 if not found.
+        """
+        wrp_id = request.data.get("id")
+        if not wrp_id:
+            return Response(
+                {"error": "WalletRelyingParty 'id' is required for update"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            instance = self.get_queryset().get(id=wrp_id)
+        except models.RegisteredEntity.DoesNotExist:
+            return Response(
+                {"error": f"WalletRelyingParty with id '{wrp_id}' not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated_entity = serializer.update(instance, serializer.validated_data)
+
+        return Response(
+            serializer.to_representation(updated_entity),
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Delete an existing WalletRelyingParty.
+
+        Expects a request body with the WalletRelyingParty identifier.
+        Returns 204 on success.
+        """
+        wrp_id = request.data.get("id")
+        if not wrp_id:
+            return Response(
+                {"error": "WalletRelyingParty 'id' is required for deletion"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            instance = self.get_queryset().get(id=wrp_id)
+        except models.RegisteredEntity.DoesNotExist:
+            return Response(
+                {"error": f"WalletRelyingParty with id '{wrp_id}' not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Delete the registered entity (cascade will handle related records)
+        instance.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WalletRelyingPartyListView(generics.ListAPIView):
+    """
+    List all WalletRelyingParties.
+
+    path: /wrp/list
+
+    GET: Returns a list of all registered WalletRelyingParties.
+    """
+
+    permission_classes = []
+    serializer_class = serializers.WalletRelyingPartySerializer
+    queryset = models.RegisteredEntity.objects.all().select_related(
+        "legal_entity", "supervisory_authority"
+    )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer()
+        data = [serializer.to_representation(obj) for obj in queryset]
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class WalletRelyingPartyDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve a single WalletRelyingParty by ID.
+
+    path: /wrp/<uuid:pk>
+
+    GET: Returns the WalletRelyingParty data for the given ID.
+    """
+
+    permission_classes = []
+    serializer_class = serializers.WalletRelyingPartySerializer
+    queryset = models.RegisteredEntity.objects.filter(
+        entity_role="RELYING_PARTY"
+    ).select_related("legal_entity", "supervisory_authority")
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer()
+        return Response(
+            serializer.to_representation(instance),
+            status=status.HTTP_200_OK,
+        )

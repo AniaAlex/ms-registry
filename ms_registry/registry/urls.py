@@ -8,6 +8,24 @@ from . import views
 app_name = "registry"
 
 urlpatterns = [
+    # ==========================================================================
+    # WalletRelyingParty API (TS5 Specification)
+    # ==========================================================================
+    # GET: List all WRPs, POST: Create new WRP, PUT: Update WRP, DELETE: Delete WRP
+    path(
+        "wrp/",
+        views.WalletRelyingPartyView.as_view(),
+        name="wrp",
+    ),
+    # GET: Retrieve single WRP by ID
+    path(
+        "wrp/<uuid:pk>/",
+        views.WalletRelyingPartyDetailView.as_view(),
+        name="wrp-detail",
+    ),
+    # ==========================================================================
+    # Registered Entity URLs (internal/admin)
+    # ==========================================================================
     path(
         "entities/",
         views.RegisteredEntityListCreateView.as_view(),
