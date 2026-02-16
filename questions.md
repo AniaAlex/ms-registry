@@ -8,3 +8,10 @@
 
 
 
+
+
+-------- 18-02-2026 ----
+
+1. How many registreries do we have? One central or multiple depending on the type f entity? https://github.com/webuild-consortium/wp4-trust-group/issues/1
+
+
