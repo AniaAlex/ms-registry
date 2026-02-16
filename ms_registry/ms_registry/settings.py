@@ -1,5 +1,5 @@
 """
-Django settings for rp_register project.
+Django settings for ms_registry project.
 """
 
 import os
@@ -56,7 +56,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "rp_register.urls"
+ROOT_URLCONF = "ms_registry.urls"
 
 TEMPLATES = [
     {
@@ -74,7 +74,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "rp_register.wsgi.application"
+WSGI_APPLICATION = "ms_registry.wsgi.application"
 
 
 # Database
@@ -83,7 +83,7 @@ WSGI_APPLICATION = "rp_register.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "rp_register"),
+        "NAME": os.environ.get("POSTGRES_DB", "ms_registry"),
         "USER": os.environ.get("POSTGRES_USER", "postgres"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "supersecret"),
         "HOST": os.environ.get("POSTGRES_HOST", "postgres"),

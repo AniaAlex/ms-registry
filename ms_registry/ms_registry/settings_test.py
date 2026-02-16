@@ -6,8 +6,8 @@ DEBUG = False
 # Keep django.contrib.admin - it's used in urls.py
 # if "django.contrib.admin" in INSTALLED_APPS:
 #     INSTALLED_APPS.remove("django.contrib.admin")
-# if "rp_register.apps.OTPAdminConfig" not in INSTALLED_APPS:
-#     INSTALLED_APPS.append("rp_register.apps.OTPAdminConfig")
+# if "ms_registry.apps.OTPAdminConfig" not in INSTALLED_APPS:
+#     INSTALLED_APPS.append("ms_registry.apps.OTPAdminConfig")
 
 
 MIDDLEWARE = [

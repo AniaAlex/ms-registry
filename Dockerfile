@@ -24,7 +24,7 @@ RUN apt-get --purge autoremove -y \
 # uWSGI config
 ADD uwsgi.ini /etc/uwsgi/app.ini
 
-ADD ./rp_register /app
+ADD ./ms_registry /app
 
 EXPOSE 3030 8000
 CMD ["/usr/local/bin/uwsgi", "--ini", "/etc/uwsgi/app.ini"]

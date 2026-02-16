@@ -1,5 +1,5 @@
 """
-rp_register URL Configuration
+ms_registry URL Configuration
 """
 
 import os
