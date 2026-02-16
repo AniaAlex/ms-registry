@@ -8,7 +8,7 @@ on:
 
 env:
     PYTHON_VERSION: "3.13"
-    DJANGO_SETTINGS_MODULE: ms_register.settings_test
+    DJANGO_SETTINGS_MODULE: ms_registry.settings_test
 
 jobs:
     test:
@@ -67,14 +67,14 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Run migrations
-              working-directory: ./ms_register
+              working-directory: ./ms_registry
               run: |
-                  python manage.py migrate --settings=ms_register.settings_test
+                  python manage.py migrate --settings=ms_registry.settings_test
 
             - name: Run tests
-              working-directory: ./ms_register
+              working-directory: ./ms_registry
               run: |
-                  python manage.py test --settings=ms_register.settings_test --verbosity=2
+                  python manage.py test --settings=ms_registry.settings_test --verbosity=2
 
     lint:
         runs-on: ubuntu-latest
@@ -162,19 +162,19 @@ jobs:
                   pip install -r requirements.txt
 
             - name: Run migrations
-              working-directory: ./ms_register
+              working-directory: ./ms_registry
               run: |
-                  python manage.py migrate --settings=ms_register.settings_test
+                  python manage.py migrate --settings=ms_registry.settings_test
             - name: Run tests with coverage
-              working-directory: ./ms_register
+              working-directory: ./ms_registry
               run: |
-                  coverage run --source='.' manage.py test --settings=ms_register.settings_test
+                  coverage run --source='.' manage.py test --settings=ms_registry.settings_test
                   coverage report -m
                   coverage xml
 
             - name: Upload coverage reports
               uses: codecov/codecov-action@v4
               with:
-                  file: ./ms_register/coverage.xml
+                  file: ./ms_registry/coverage.xml
                   flags: unittests
                   fail_ci_if_error: false
