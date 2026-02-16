@@ -209,8 +209,8 @@ class EntityEntitlement(BaseModel):
     """
     Entitlement for Registered Entity [1..*]
     Specifies what the entity is authorized to do per TS5.
-    
-    An entity can have multiple entitlements. For example, an attestation 
+
+    An entity can have multiple entitlements. For example, an attestation
     provider that needs to verify identity before issuance registers with
     both Service_Provider and their provider entitlement.
     """

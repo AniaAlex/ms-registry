@@ -139,9 +139,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
     def validate_entitlements(self, value):
         """Validate that at least one entitlement is provided"""
         if not value:
-            raise serializers.ValidationError(
-                "At least one entitlement is required."
-            )
+            raise serializers.ValidationError("At least one entitlement is required.")
         return value
 
     def create(self, validated_data):
@@ -153,7 +151,9 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
 
         # Create entitlements for the entity
         for entitlement_type in entitlement_types:
-            entitlement_uri = f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+            entitlement_uri = (
+                f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+            )
             EntityEntitlement.objects.create(
                 registered_entity=registered_entity,
                 entitlement_uri=entitlement_uri,
@@ -178,7 +178,9 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
 
             # Create new entitlements
             for entitlement_type in entitlement_types:
-                entitlement_uri = f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+                entitlement_uri = (
+                    f"https://uri.etsi.org/19475/Entitlement/{entitlement_type}"
+                )
                 EntityEntitlement.objects.create(
                     registered_entity=instance,
                     entitlement_uri=entitlement_uri,
