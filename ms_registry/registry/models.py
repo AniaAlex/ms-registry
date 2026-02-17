@@ -1,14 +1,16 @@
 """
-Registry Models for EUDI Wallet Registration System
+Registry Models for EUDI Wallet Registration System (TS5 Implementation)
 
 Contains:
 - SupervisoryAuthority: DPA records
-- RegisteredEntity: Main entity registration (RP, PID Provider, Attestation Provider)
+- RegisteredEntity: WalletRelyingParty per TS5 (covers all entity types)
 - EntitySupportURI: Support URIs [1..*]
 - EntityEntitlement: Authorization entitlements [1..*]
 - EntityServiceDescription: Multilingual descriptions
 - RegisteredEntityPolicy: Policy links
 - EntityUsesIntermediary: RP → Intermediary relationships
+
+Note: IntendedUse, Credential, and Claim models are in the credentials app.
 """
 
 from core.models import (
@@ -61,14 +63,23 @@ class SupervisoryAuthority(BaseModel):
 
 class RegisteredEntity(BaseModel):
     """
-    Main table for EUDI Wallet Registered Entity data.
-    Per Trust Infrastructure Schema Section 1.2, registered entities include:
-    - PID Providers (issue Person Identification Data)
-    - Attestation Providers (issue QEAA, PuB-EAA, non-qualified EAA)
-    - Relying Parties (request/verify attributes from Wallet Units)
+    WalletRelyingParty per TS5 specification.
 
-    All entity types share the same registration process with Member State Registrars
-    but have different roles in the ecosystem.
+    NOTE: This model is equivalent to the WalletRelyingParty class defined in TS5
+    (Common Formats and API for Relying Party Registration Information).
+    The name "WalletRelyingParty" in TS5 is misleading - it covers ALL entities
+    that interact with EUDI Wallets, not just verifiers:
+
+    - Service Providers (verifiers) - entitlement: Service_Provider
+    - PID Providers - entitlement: PID_Provider
+    - Attestation Providers - entitlements: QEAA_Provider, Non_Q_EAA_Provider, PUB_EAA_Provider
+    - QTSPs - entitlements: QCert_for_ESig_Provider, QCert_for_ESeal_Provider, etc.
+
+    The entity's capabilities are defined by their entitlements, not by a role field.
+    The entity_role field is kept for internal classification convenience.
+
+    TS5 Reference: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/
+    blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
     """
 
     legal_entity = models.OneToOneField(

@@ -1,7 +1,10 @@
 """Admin configuration for Registry app"""
 
+from credentials.models import (
+    EntityProvidesAttestation,
+    IntendedUse,
+)
 from django.contrib import admin
-from django.utils.html import format_html
 
 from .models import (
     EntityEntitlement,
@@ -42,6 +45,27 @@ class EntityUsesIntermediaryInline(admin.TabularInline):
     autocomplete_fields = ["intermediary"]
 
 
+# =============================================================================
+# Inlines from credentials app for RegisteredEntity
+# =============================================================================
+
+
+class IntendedUseInline(admin.TabularInline):
+    model = IntendedUse
+    extra = 1
+    show_change_link = True
+
+
+class ProvidesAttestationsInline(admin.TabularInline):
+    """Inline for attestations provided by issuers"""
+
+    model = EntityProvidesAttestation
+    extra = 1
+    autocomplete_fields = ["credential"]
+    verbose_name = "Provided Attestation"
+    verbose_name_plural = "Provided Attestations (for Issuers)"
+
+
 @admin.register(SupervisoryAuthority)
 class SupervisoryAuthorityAdmin(admin.ModelAdmin):
     list_display = ["authority_name", "country_code", "email", "phone"]
@@ -71,6 +95,8 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
         EntityServiceDescriptionInline,
         RegisteredEntityPolicyInline,
         EntityUsesIntermediaryInline,
+        IntendedUseInline,
+        ProvidesAttestationsInline,
     ]
     fieldsets = (
         (None, {"fields": ("legal_entity", "entity_role", "trade_name")}),
