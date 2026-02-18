@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  always-https:
+    image: docker.sunet.se/always-https:latest
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - ACME_URL=http://acme-c.sunet.se/
+
+  # Trust anchor service using go-trust repository
+  go-trust:
+    image: docker.sunet.se/docker-go-trust:<%= @trust_tag || "latest" %>
+    #fix this later for security
+    user: "0:0"
+    restart: always
+    ports:
+      - "443:6001"
+    volumes:
+      - /etc/dehydrated/private/trust-dev-1.iam.sunet.se.pem:/tls_cert.pem:ro
+      - /etc/dehydrated/private/trust-dev-1.iam.sunet.se.key:/tls_key.pem:ro
+    depends_on:
+      - always-https
+
+networks:
+  default:
+    driver_opts:
+      com.docker.network.bridge.name: br-trust

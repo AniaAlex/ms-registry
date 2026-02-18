@@ -1,0 +1,12 @@
+---
+triggers:
+  cron: "@daily"
+
+git:
+  branches:
+    - main
+managed_scripts:
+  - docker_tag.sh
+docker_name: docker-ms-registry
+builders:
+  - docker

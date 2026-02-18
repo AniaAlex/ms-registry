@@ -1,0 +1,36 @@
+class vc::trust (
+  String $trust_tag = 'latest',
+  String $interface = 'ens3',
+){
+  if $::facts['sunet_nftables_enabled'] == 'yes' {
+    sunet::nftables::docker_expose { 'allow_http' :
+      iif           => $interface,
+      allow_clients => 'any',
+      port          => 80,
+    }
+
+    sunet::nftables::docker_expose { 'trust' :
+      iif           => $interface,
+      allow_clients => 'any',
+      port          => 	443,
+    }
+    } else {
+      sunet::misc::ufw_allow { 'allow-http':
+        from => 'any',
+        port => '80'
+      }
+    sunet::misc::ufw_allow { 'allow-https':
+      from => 'any',
+      port => '443'
+    }
+  }
+
+  sunet::docker_compose {'trust':
+    content          => template('vc/trust/docker-compose.yml.erb'),
+    service_name     => 'trust',
+    compose_dir      => '/opt',
+    compose_filename => 'docker-compose.yml',
+    description      => 'Trust engine',
+  }
+
+}

@@ -1,0 +1,26 @@
+---
+# Example Hiera data for MS Registry
+# Encrypt these values with: eyaml encrypt -s 'your-secret-value'
+
+# Django secret key (REQUIRED - encrypt with eyaml)
+ms_registry::secret_key: >
+  ENC[PKCS7,MIICzTCCAskCAQ...]
+
+# Database password (REQUIRED - encrypt with eyaml)
+ms_registry::db_password: >
+  ENC[PKCS7,MIIEYAYJKoZI...]
+
+# Environment (optional)
+ms_registry::env: PRODUCTION
+
+# Debug mode (optional)
+ms_registry::debug: 'False'
+
+# Redis URL (optional)
+ms_registry::redis_url: redis://redis:6379/0
+
+# Docker image tag (optional)
+vc::ms_registry::ms_registry_tag: latest
+
+# Network interface (optional)
+vc::ms_registry::interface: ens3
