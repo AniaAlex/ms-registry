@@ -26,5 +26,11 @@ ADD uwsgi.ini /etc/uwsgi/app.ini
 
 ADD ./ms_registry /app
 
+# Create static and media directories
+RUN mkdir -p /var/www/static /var/www/media
+
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
 EXPOSE 3030 8000
 CMD ["/usr/local/bin/uwsgi", "--ini", "/etc/uwsgi/app.ini"]
