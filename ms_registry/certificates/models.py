@@ -71,7 +71,8 @@ class EntityRegistrationCertificate(BaseModel):
     """
     Registration Certificate (optional per Member State).
     Per Trust Infrastructure Schema Section 2.3:
-    - RPRC_09: Registrar MAY decide to issue registration certificates to Relying Parties
+    - RPRC_09: Registrar MAY decide to issue registration certificates to
+      Relying Parties
     - RPRC_13: Registrar MAY decide to issue registration certificates to Providers
 
     Contains (a subset of) the data registered for that entity.

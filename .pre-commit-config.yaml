@@ -1,0 +1,22 @@
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/pycqa/isort
+    rev: 7.0.0
+    hooks:
+      - id: isort
+  - repo: https://github.com/psf/black
+    rev: 26.1.0
+    hooks:
+      - id: black
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+        args: [--config, .flake8]
+  # - repo: https://github.com/IamTheFij/ansible-pre-commit
+  #   rev: v1.0.0
+  #   hooks:
+  #     - id: ansible-lint
+  #       args: [--config, ms-registry/.ansible-lint.yml]

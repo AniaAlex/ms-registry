@@ -176,7 +176,10 @@ class Law(BaseModel):
 
 
 class Identifier(BaseModel):
-    """Identifier (External class) - stores various identifier types per CIR Annex I (2)"""
+    """
+    Identifier (External class) - stores various identifier types per
+    CIR Annex I (2)
+    """
 
     identifier_type = models.CharField(
         max_length=50,

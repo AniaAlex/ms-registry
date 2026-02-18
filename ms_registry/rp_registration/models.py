@@ -4,15 +4,18 @@ Based on:
   - Trust Infrastructure Schema (WEBUILD WP4)
   - TS5 - Common Formats and API for RP Registration Information
   - TS6 - Common Set of Information to be Registered
-  - ARF Topic 27 - Registration of PID Providers, Attestation Providers, and Relying Parties
+  - ARF Topic 27 - Registration of PID Providers, Attestation Providers,
+    and Relying Parties
 
 Registered Entity Types (per Trust Infrastructure Schema Section 1.2):
   - PID Providers: Issue Person Identification Data
-  - Attestation Providers: Issue attestations (QEAA, PuB-EAA, non-qualified EAA)
+  - Attestation Providers: Issue attestations (QEAA, PuB-EAA,
+    non-qualified EAA)
   - Relying Parties: Request attributes from Wallet Units
 
 Version: 2.0 (refactored per Trust Infrastructure Schema)
-Source: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications
+Source:
+https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications
 """
 
 import uuid
@@ -141,7 +144,10 @@ class Law(BaseModel):
 
 
 class Identifier(BaseModel):
-    """Identifier (External class) - stores various identifier types per CIR Annex I (2)"""
+    """
+    Identifier (External class) - stores various identifier types per
+    CIR Annex I (2)
+    """
 
     identifier_type = models.CharField(
         max_length=50,
@@ -339,12 +345,14 @@ class LegalEntity(BaseModel):
         if self.entity_type == EntityType.LEGAL_PERSON:
             if not self.legal_person or self.natural_person:
                 raise ValidationError(
-                    "Legal person entity type requires legal_person and no natural_person"
+                    "Legal person entity type requires legal_person and no "
+                    "natural_person"
                 )
         elif self.entity_type == EntityType.NATURAL_PERSON:
             if not self.natural_person or self.legal_person:
                 raise ValidationError(
-                    "Natural person entity type requires natural_person and no legal_person"
+                    "Natural person entity type requires natural_person and no "
+                    "legal_person"
                 )
 
     def __str__(self):
@@ -462,26 +470,37 @@ class RegisteredEntity(BaseModel):
 
     # RegisteredEntity specific attributes (Section 2.1)
     trade_name = models.CharField(
-        max_length=500, blank=True, null=True, help_text="Common/service name [0..1]"
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Common/service name [0..1]",
     )
 
     # isPSB: indicates if entity is public sector body
     is_psb = models.BooleanField(
         default=False,
         verbose_name="Is Public Sector Body",
-        help_text="Indicates whether the entity is a public sector body (relevant for PuB-EAA Providers)",
+        help_text=(
+            "Indicates whether the entity is a public sector body "
+            "(relevant for PuB-EAA Providers)"
+        ),
     )
 
     # isIntermediary: indicates if entity acts on behalf of other entities (RPs only)
     is_intermediary = models.BooleanField(
         default=False,
-        help_text="Indicates whether the entity acts as an intermediary. Only applicable to Relying Parties.",
+        help_text=(
+            "Indicates whether the entity acts as an intermediary. "
+            "Only applicable to Relying Parties."
+        ),
     )
 
     # registryURI: URI for national registry API (provided by Registrar)
     registry_uri = models.URLField(
         max_length=2048,
-        help_text="National registry API URI, provided by Registrar (per Reg_03, Reg_04)",
+        help_text=(
+            "National registry API URI, provided by Registrar " "(per Reg_03, Reg_04)"
+        ),
     )
 
     # supervisoryAuthority: DPA in charge
@@ -711,9 +730,9 @@ class Credential(BaseModel):
         return f"{self.get_format_display()} - {type_info}"
 
 
-# ============================================================================
+# ========================================================================
 # SECTION 11: CLAIM TABLE (Section 2.4.1)
-# ============================================================================
+# ========================================================================
 
 
 class Claim(BaseModel):
@@ -723,10 +742,14 @@ class Claim(BaseModel):
     """
 
     credential = models.ForeignKey(
-        Credential, on_delete=models.CASCADE, related_name="claims"
+        Credential,
+        on_delete=models.CASCADE,
+        related_name="claims",
     )
     path = models.JSONField(
-        help_text="JSON path pointer to claim within credential per OpenID4VP Section 6.3"
+        help_text=(
+            "JSON path pointer to claim within credential " "per OpenID4VP Section 6.3"
+        )
     )
     values = models.JSONField(
         blank=True, null=True, help_text="Optional expected values for matching"
@@ -763,18 +786,24 @@ class IntendedUse(BaseModel):
     """
     Intended Use class for data request use cases.
     Per CIR Annex I paragraphs (8), (9) and (10).
-    Applicable primarily to Relying Parties (verifiers) who request attributes.
+    Applicable primarily to Relying Parties (verifiers) who request
+    attributes.
     """
 
     registered_entity = models.ForeignKey(
-        RegisteredEntity, on_delete=models.CASCADE, related_name="intended_uses"
+        RegisteredEntity,
+        on_delete=models.CASCADE,
+        related_name="intended_uses",
     )
 
     # intendedUseIdentifier: [1..1] Registrar-provided unique ID
     intended_use_identifier = models.CharField(
         max_length=500,
         unique=True,
-        help_text="Registrar-provided unique identifier, may match Registration Certificate ID",
+        help_text=(
+            "Registrar-provided unique identifier, "
+            "may match Registration Certificate ID"
+        ),
     )
 
     # createdAt: [1..1] Validity start date
@@ -1057,17 +1086,19 @@ class EntityAccessCertificate(BaseModel):
         return f"{self.certificate_serial} ({status})"
 
 
-# ============================================================================
+# ========================================================================
 # SECTION 19: REGISTRATION CERTIFICATE (Optional per Member State)
-# ============================================================================
+# ========================================================================
 
 
 class EntityRegistrationCertificate(BaseModel):
     """
     Registration Certificate (optional per Member State).
     Per Trust Infrastructure Schema Section 2.3:
-    - RPRC_09: Registrar MAY decide to issue registration certificates to Relying Parties
-    - RPRC_13: Registrar MAY decide to issue registration certificates to Providers
+    - RPRC_09: Registrar MAY decide to issue registration certificates
+      to Relying Parties
+    - RPRC_13: Registrar MAY decide to issue registration certificates
+      to Providers
 
     Contains (a subset of) the data registered for that entity.
     """

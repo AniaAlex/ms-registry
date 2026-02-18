@@ -144,12 +144,14 @@ class LegalEntity(BaseModel):
         if self.entity_type == EntityType.LEGAL_PERSON:
             if not self.legal_person or self.natural_person:
                 raise ValidationError(
-                    "Legal person entity type requires legal_person and no natural_person"
+                    "Legal person entity type requires legal_person and no "
+                    "natural_person"
                 )
         elif self.entity_type == EntityType.NATURAL_PERSON:
             if not self.natural_person or self.legal_person:
                 raise ValidationError(
-                    "Natural person entity type requires natural_person and no legal_person"
+                    "Natural person entity type requires natural_person and no "
+                    "legal_person"
                 )
 
     def __str__(self):

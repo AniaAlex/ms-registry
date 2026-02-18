@@ -331,7 +331,10 @@ class TrustServiceCreateSerializer(serializers.Serializer):
         if not provider and not create_new_provider:
             raise serializers.ValidationError(
                 {
-                    "provider": "Please select an existing Trust Service Provider or create a new one."
+                    "provider": (
+                        "Please select an existing Trust Service Provider or "
+                        "create a new one."
+                    )
                 }
             )
 
@@ -339,13 +342,17 @@ class TrustServiceCreateSerializer(serializers.Serializer):
             if not data.get("legal_entity"):
                 raise serializers.ValidationError(
                     {
-                        "legal_entity": "Legal entity is required when creating a new provider."
+                        "legal_entity": (
+                            "Legal entity is required when creating a " "new provider."
+                        )
                     }
                 )
             if not data.get("provider_name"):
                 raise serializers.ValidationError(
                     {
-                        "provider_name": "Provider name is required when creating a new provider."
+                        "provider_name": (
+                            "Provider name is required when creating a " "new provider."
+                        )
                     }
                 )
 
@@ -357,7 +364,10 @@ class TrustServiceCreateSerializer(serializers.Serializer):
             ).exists():
                 raise serializers.ValidationError(
                     {
-                        "legal_entity": "This legal entity is already registered as a TSP in this TSL scheme."
+                        "legal_entity": (
+                            "This legal entity is already registered as a TSP "
+                            "in this TSL scheme."
+                        )
                     }
                 )
 

@@ -227,7 +227,9 @@ class EntityEntitlementModelTests(TestCase):
 
         entitlement = EntityEntitlement.objects.create(
             registered_entity=self.entity,
-            entitlement_uri="http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty",
+            entitlement_uri=(
+                "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty"
+            ),
             entitlement_type=EntitlementType.SERVICE_PROVIDER,
         )
         self.assertTrue(entitlement.is_active)
@@ -397,7 +399,7 @@ class HomeViewTests(TestCase):
 
     def test_home_page_shows_entities(self):
         """Test that registered entities are shown on home page"""
-        entity = RegisteredEntity.objects.create(
+        RegisteredEntity.objects.create(
             legal_entity=self.legal_entity,
             entity_role=EntityRole.RELYING_PARTY,
             trade_name="Visible Entity",
@@ -460,7 +462,7 @@ class EntityIntermediaryTests(TestCase):
 
     def test_rp_can_use_intermediary(self):
         """Test that a Relying Party can use an intermediary"""
-        relationship = EntityUsesIntermediary.objects.create(
+        EntityUsesIntermediary.objects.create(
             registered_entity=self.rp_entity,
             intermediary=self.intermediary_entity,
             intermediary_identifier="INT-123",

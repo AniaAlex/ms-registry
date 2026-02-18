@@ -72,14 +72,16 @@ class RegisteredEntity(BaseModel):
 
     - Service Providers (verifiers) - entitlement: Service_Provider
     - PID Providers - entitlement: PID_Provider
-    - Attestation Providers - entitlements: QEAA_Provider, Non_Q_EAA_Provider, PUB_EAA_Provider
-    - QTSPs - entitlements: QCert_for_ESig_Provider, QCert_for_ESeal_Provider, etc.
+    - Attestation Providers - entitlements: QEAA_Provider,
+      Non_Q_EAA_Provider, PUB_EAA_Provider
+    - QTSPs - entitlements: QCert_for_ESig_Provider,
+      QCert_for_ESeal_Provider, etc.
 
     The entity's capabilities are defined by their entitlements, not by a role field.
     The entity_role field is kept for internal classification convenience.
 
-    TS5 Reference: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/
-    blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
+    TS5 Reference:
+    https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
     """
 
     legal_entity = models.OneToOneField(
@@ -102,19 +104,27 @@ class RegisteredEntity(BaseModel):
     is_psb = models.BooleanField(
         default=False,
         verbose_name="Is Public Sector Body",
-        help_text="Indicates whether the entity is a public sector body (relevant for PuB-EAA Providers)",
+        help_text=(
+            "Indicates whether the entity is a public sector body "
+            "(relevant for PuB-EAA Providers)"
+        ),
     )
 
     # isIntermediary: indicates if entity acts on behalf of other entities (RPs only)
     is_intermediary = models.BooleanField(
         default=False,
-        help_text="Indicates whether the entity acts as an intermediary. Only applicable to Relying Parties.",
+        help_text=(
+            "Indicates whether the entity acts as an intermediary. "
+            "Only applicable to Relying Parties."
+        ),
     )
 
     # registryURI: URI for national registry API (provided by Registrar)
     registry_uri = models.URLField(
         max_length=2048,
-        help_text="National registry API URI, provided by Registrar (per Reg_03, Reg_04)",
+        help_text=(
+            "National registry API URI, provided by Registrar " "(per Reg_03, Reg_04)"
+        ),
     )
 
     # supervisoryAuthority: DPA in charge

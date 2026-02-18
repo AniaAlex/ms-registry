@@ -328,7 +328,9 @@ class TSLSchemeAdmin(admin.ModelAdmin):
 
         url = reverse("admin:tsl_generator_tslscheme_generate_xml", args=[obj.pk])
         return format_html(
-            '<a href="{}" class="button" style="padding: 3px 10px; background: #417223; color: white; text-decoration: none; border-radius: 4px;">Generate XML</a>',
+            '<a href="{}" class="button" style="padding: 3px 10px; '
+            "background: #417223; color: white; text-decoration: none; "
+            'border-radius: 4px;">Generate XML</a>',
             url,
         )
 
@@ -375,7 +377,8 @@ class TSLSchemeAdmin(admin.ModelAdmin):
             xml_content = scheme.to_xml_gotrust()
             response = HttpResponse(xml_content, content_type="application/xml")
             response["Content-Disposition"] = (
-                f'attachment; filename="{scheme.territory}-TSL-{scheme.sequence_number}.xml"'
+                f'attachment; filename="{scheme.territory}-TSL-'
+                f'{scheme.sequence_number}.xml"'
             )
             return response
         else:
@@ -494,7 +497,10 @@ class TrustServiceProviderAdmin(admin.ModelAdmin):
             "Organization",
             {
                 "fields": ("legal_entity",),
-                "description": "Select the legal entity. Address and contact info come from the Legal Entity.",
+                "description": (
+                    "Select the legal entity. Address and contact info "
+                    "come from the Legal Entity."
+                ),
             },
         ),
         ("Status", {"fields": ("is_active",)}),

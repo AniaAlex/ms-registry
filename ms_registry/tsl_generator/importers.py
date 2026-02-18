@@ -14,7 +14,6 @@ from xml.etree import ElementTree as ET
 import yaml
 
 from .models import (
-    LANGUAGE_CHOICES,
     SERVICE_STATUS_CHOICES,
     SERVICE_TYPE_CHOICES,
     TSL_TYPE_CHOICES,

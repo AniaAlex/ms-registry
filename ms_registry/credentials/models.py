@@ -70,7 +70,9 @@ class Claim(BaseModel):
         Credential, on_delete=models.CASCADE, related_name="claims"
     )
     path = models.JSONField(
-        help_text="JSON path pointer to claim within credential per OpenID4VP Section 6.3"
+        help_text=(
+            "JSON path pointer to claim within credential per " "OpenID4VP Section 6.3"
+        )
     )
     values = models.JSONField(
         blank=True, null=True, help_text="Optional expected values for matching"
@@ -113,7 +115,10 @@ class IntendedUse(BaseModel):
     intended_use_identifier = models.CharField(
         max_length=500,
         unique=True,
-        help_text="Registrar-provided unique identifier, may match Registration Certificate ID",
+        help_text=(
+            "Registrar-provided unique identifier, may match "
+            "Registration Certificate ID"
+        ),
     )
 
     # createdAt: [1..1] Validity start date

@@ -811,7 +811,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
     lines.append("        <SchemeOperatorName>")
     for name in scheme.operator_names.all():
         lines.append(
-            f'            <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+            f'            <Name xml:lang="{name.language}">'
+            f"{_escape_xml(name.value)}</Name>"
         )
     lines.append("        </SchemeOperatorName>")
 
@@ -826,23 +827,26 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
     first_provider = scheme.providers.first()
     if first_provider and first_provider.street_address:
         lines.append(
-            f"                    <StreetAddress>{_escape_xml(first_provider.street_address)}</StreetAddress>"
+            f"                    <StreetAddress>"
+            f"{_escape_xml(first_provider.street_address)}</StreetAddress>"
         )
         if first_provider.locality:
             lines.append(
-                f"                    <Locality>{_escape_xml(first_provider.locality)}</Locality>"
+                f"                    <Locality>"
+                f"{_escape_xml(first_provider.locality)}</Locality>"
             )
         if first_provider.postal_code:
             lines.append(
-                f"                    <PostalCode>{_escape_xml(first_provider.postal_code)}</PostalCode>"
+                f"                    <PostalCode>"
+                f"{_escape_xml(first_provider.postal_code)}</PostalCode>"
             )
         lines.append(
             f"                    <CountryName>{scheme.territory}</CountryName>"
         )
     else:
-        lines.append(f"                    <StreetAddress></StreetAddress>")
-        lines.append(f"                    <Locality></Locality>")
-        lines.append(f"                    <PostalCode></PostalCode>")
+        lines.append("                    <StreetAddress></StreetAddress>")
+        lines.append("                    <Locality></Locality>")
+        lines.append("                    <PostalCode></PostalCode>")
         lines.append(
             f"                    <CountryName>{scheme.territory}</CountryName>"
         )
@@ -854,7 +858,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
     lines.append("            <ElectronicAddress>")
     for uri in scheme.information_uris.all():
         lines.append(
-            f'                <URI xml:lang="{uri.language}">{_escape_xml(uri.uri)}</URI>'
+            f'                <URI xml:lang="{uri.language}">'
+            f"{_escape_xml(uri.uri)}</URI>"
         )
     lines.append("            </ElectronicAddress>")
     lines.append("        </SchemeOperatorAddress>")
@@ -864,7 +869,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <SchemeName>")
         for name in scheme.scheme_names.all():
             lines.append(
-                f'            <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                f'            <Name xml:lang="{name.language}">'
+                f"{_escape_xml(name.value)}</Name>"
             )
         lines.append("        </SchemeName>")
 
@@ -873,13 +879,16 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <SchemeInformationURI>")
         for uri in scheme.information_uris.all():
             lines.append(
-                f'            <URI xml:lang="{uri.language}">{_escape_xml(uri.uri)}</URI>'
+                f'            <URI xml:lang="{uri.language}">'
+                f"{_escape_xml(uri.uri)}</URI>"
             )
         lines.append("        </SchemeInformationURI>")
 
     # Status Determination Approach
     lines.append(
-        f"        <StatusDeterminationApproach>{_escape_xml(scheme.status_determination_approach)}</StatusDeterminationApproach>"
+        f"        <StatusDeterminationApproach>"
+        f"{_escape_xml(scheme.status_determination_approach)}"
+        f"</StatusDeterminationApproach>"
     )
 
     # Scheme Type Community Rules
@@ -887,7 +896,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <SchemeTypeCommunityRules>")
         for rule in scheme.community_rules.all():
             lines.append(
-                f'            <URI xml:lang="{rule.language}">{_escape_xml(rule.uri)}</URI>'
+                f'            <URI xml:lang="{rule.language}">'
+                f"{_escape_xml(rule.uri)}</URI>"
             )
         lines.append("        </SchemeTypeCommunityRules>")
 
@@ -899,13 +909,16 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <PolicyOrLegalNotice>")
         for notice in scheme.legal_notices.all():
             lines.append(
-                f'            <TSLLegalNotice xml:lang="{notice.language}">{_escape_xml(notice.notice)}</TSLLegalNotice>'
+                f'            <TSLLegalNotice xml:lang="{notice.language}">'
+                f"{_escape_xml(notice.notice)}</TSLLegalNotice>"
             )
         lines.append("        </PolicyOrLegalNotice>")
 
     # Historical Information Period
     lines.append(
-        f"        <HistoricalInformationPeriod>{scheme.historical_information_period}</HistoricalInformationPeriod>"
+        f"        <HistoricalInformationPeriod>"
+        f"{scheme.historical_information_period}"
+        f"</HistoricalInformationPeriod>"
     )
 
     # Pointers to Other TSL (for LOTL)
@@ -921,14 +934,16 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                     lines.append("                    <ServiceDigitalIdentity>")
                     lines.append("                        <DigitalId>")
                     lines.append(
-                        f"                            <X509Certificate>{cert.certificate_data}</X509Certificate>"
+                        f"                            <X509Certificate>"
+                        f"{cert.certificate_data}</X509Certificate>"
                     )
                     lines.append("                        </DigitalId>")
                     lines.append("                    </ServiceDigitalIdentity>")
                 lines.append("                </ServiceDigitalIdentities>")
 
             lines.append(
-                f"                <TSLLocation>{_escape_xml(pointer.tsl_location)}</TSLLocation>"
+                f"                <TSLLocation>"
+                f"{_escape_xml(pointer.tsl_location)}</TSLLocation>"
             )
 
             # Additional Information
@@ -940,12 +955,14 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                    </OtherInformation>")
             lines.append("                    <OtherInformation>")
             lines.append(
-                f"                        <SchemeTerritory>{pointer.scheme_territory}</SchemeTerritory>"
+                f"                        <SchemeTerritory>"
+                f"{pointer.scheme_territory}</SchemeTerritory>"
             )
             lines.append("                    </OtherInformation>")
             lines.append("                    <OtherInformation>")
             lines.append(
-                f"                        <ns3:MimeType>{pointer.mime_type}</ns3:MimeType>"
+                f"                        <ns3:MimeType>"
+                f"{pointer.mime_type}</ns3:MimeType>"
             )
             lines.append("                    </OtherInformation>")
             if pointer.operator_names.exists():
@@ -953,7 +970,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                 lines.append("                        <SchemeOperatorName>")
                 for name in pointer.operator_names.all():
                     lines.append(
-                        f'                            <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                        f'                            <Name xml:lang="{name.language}">'
+                        f"{_escape_xml(name.value)}</Name>"
                     )
                 lines.append("                        </SchemeOperatorName>")
                 lines.append("                    </OtherInformation>")
@@ -996,7 +1014,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("                <TSPName>")
         for name in provider.names.all():
             lines.append(
-                f'                    <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                f'                    <Name xml:lang="{name.language}">'
+                f"{_escape_xml(name.value)}</Name>"
             )
         lines.append("                </TSPName>")
 
@@ -1005,7 +1024,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                <TSPTradeName>")
             for name in provider.trade_names.all():
                 lines.append(
-                    f'                    <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                    f'                    <Name xml:lang="{name.language}">'
+                    f"{_escape_xml(name.value)}</Name>"
                 )
             lines.append("                </TSPTradeName>")
 
@@ -1017,22 +1037,27 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                    <PostalAddresses>")
             lines.append('                        <PostalAddress xml:lang="en">')
             lines.append(
-                f"                            <StreetAddress>{_escape_xml(provider.street_address)}</StreetAddress>"
+                f"                            <StreetAddress>"
+                f"{_escape_xml(provider.street_address)}</StreetAddress>"
             )
             if provider.locality:
                 lines.append(
-                    f"                            <Locality>{_escape_xml(provider.locality)}</Locality>"
+                    f"                            <Locality>"
+                    f"{_escape_xml(provider.locality)}</Locality>"
                 )
             if provider.state_or_province:
                 lines.append(
-                    f"                            <StateOrProvince>{_escape_xml(provider.state_or_province)}</StateOrProvince>"
+                    f"                            <StateOrProvince>"
+                    f"{_escape_xml(provider.state_or_province)}</StateOrProvince>"
                 )
             if provider.postal_code:
                 lines.append(
-                    f"                            <PostalCode>{_escape_xml(provider.postal_code)}</PostalCode>"
+                    f"                            <PostalCode>"
+                    f"{_escape_xml(provider.postal_code)}</PostalCode>"
                 )
             lines.append(
-                f"                            <CountryName>{_escape_xml(provider.country_name)}</CountryName>"
+                f"                            <CountryName>"
+                f"{_escape_xml(provider.country_name)}</CountryName>"
             )
             lines.append("                        </PostalAddress>")
             lines.append("                    </PostalAddresses>")
@@ -1042,7 +1067,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                    <ElectronicAddress>")
             for addr in provider.electronic_addresses.all():
                 lines.append(
-                    f'                        <URI xml:lang="{addr.language}">{_escape_xml(addr.uri)}</URI>'
+                    f'                        <URI xml:lang="{addr.language}">'
+                    f"{_escape_xml(addr.uri)}</URI>"
                 )
             lines.append("                    </ElectronicAddress>")
 
@@ -1053,7 +1079,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                <TSPInformationURI>")
             for uri in provider.information_uris.all():
                 lines.append(
-                    f'                    <URI xml:lang="{uri.language}">{_escape_xml(uri.uri)}</URI>'
+                    f'                    <URI xml:lang="{uri.language}">'
+                    f"{_escape_xml(uri.uri)}</URI>"
                 )
             lines.append("                </TSPInformationURI>")
 
@@ -1068,14 +1095,16 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
 
             # Service Type Identifier
             lines.append(
-                f"                        <ServiceTypeIdentifier>{service.service_type}</ServiceTypeIdentifier>"
+                f"                        <ServiceTypeIdentifier>"
+                f"{service.service_type}</ServiceTypeIdentifier>"
             )
 
             # Service Name
             lines.append("                        <ServiceName>")
             for name in service.names.all():
                 lines.append(
-                    f'                            <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                    f'                            <Name xml:lang="{name.language}">'
+                    f"{_escape_xml(name.value)}</Name>"
                 )
             lines.append("                        </ServiceName>")
 
@@ -1086,37 +1115,44 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                     # Output X509Certificate
                     lines.append("                            <DigitalId>")
                     lines.append(
-                        f"                                <X509Certificate>{cert.get_base64_der()}</X509Certificate>"
+                        f"                                <X509Certificate>"
+                        f"{cert.get_base64_der()}</X509Certificate>"
                     )
                     lines.append("                            </DigitalId>")
                     # Output X509SubjectName if available
                     if cert.x509_subject_name:
                         lines.append("                            <DigitalId>")
                         lines.append(
-                            f"                                <X509SubjectName>{_escape_xml(cert.x509_subject_name)}</X509SubjectName>"
+                            f"                                <X509SubjectName>"
+                            f"{_escape_xml(cert.x509_subject_name)}"
+                            f"</X509SubjectName>"
                         )
                         lines.append("                            </DigitalId>")
                     # Output X509SKI if available
                     if cert.x509_ski:
                         lines.append("                            <DigitalId>")
                         lines.append(
-                            f"                                <X509SKI>{cert.x509_ski}</X509SKI>"
+                            f"                                <X509SKI>"
+                            f"{cert.x509_ski}</X509SKI>"
                         )
                         lines.append("                            </DigitalId>")
                 lines.append("                        </ServiceDigitalIdentity>")
 
             # Service Status
             lines.append(
-                f"                        <ServiceStatus>{service.status}</ServiceStatus>"
+                f"                        <ServiceStatus>"
+                f"{service.status}</ServiceStatus>"
             )
 
             # Status Starting Time
             status_time = service.status_starting_time.strftime("%Y-%m-%dT%H:%M:%SZ")
             lines.append(
-                f"                        <StatusStartingTime>{status_time}</StatusStartingTime>"
+                f"                        <StatusStartingTime>"
+                f"{status_time}</StatusStartingTime>"
             )
 
-            # Service Information Extensions (if any qualifications or additional info exist)
+            # Service Information Extensions
+            # (if any qualifications or additional info exist)
             has_extensions = (
                 hasattr(service, "qualifications") and service.qualifications.exists()
             ) or (
@@ -1142,24 +1178,30 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                     lines.append("                                <ns5:Qualifications>")
                     for qual in service.qualifications.all():
                         lines.append(
-                            "                                    <ns5:QualificationElement>"
+                            "                                    "
+                            "<ns5:QualificationElement>"
                         )
                         lines.append(
-                            "                                        <ns5:Qualifiers>"
+                            "                                        "
+                            "<ns5:Qualifiers>"
                         )
                         lines.append(
-                            f'                                            <ns5:Qualifier uri="{_escape_xml(qual.qualifier_uri)}"/>'
+                            f"                                            "
+                            f'<ns5:Qualifier uri="{_escape_xml(qual.qualifier_uri)}"/>'
                         )
                         lines.append(
-                            "                                        </ns5:Qualifiers>"
+                            "                                        "
+                            "</ns5:Qualifiers>"
                         )
                         lines.append(
-                            f'                                        <ns5:CriteriaList assert="{qual.criteria_assert}">'
+                            f"                                        "
+                            f'<ns5:CriteriaList assert="{qual.criteria_assert}">'
                         )
                         # Add key usage bits if specified
                         if qual.key_usage:
                             lines.append(
-                                "                                            <ns5:KeyUsage>"
+                                "                                            "
+                                "<ns5:KeyUsage>"
                             )
                             for ku_name, ku_value in [
                                 ("digitalSignature", qual.key_usage_digital_signature),
@@ -1173,19 +1215,24 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                                 ("decipherOnly", qual.key_usage_decipher_only),
                             ]:
                                 lines.append(
-                                    f'                                                <ns5:KeyUsageBit name="{ku_name}">{str(ku_value).lower()}</ns5:KeyUsageBit>'
+                                    f"                                                "
+                                    f'<ns5:KeyUsageBit name="{ku_name}">'
+                                    f"{str(ku_value).lower()}</ns5:KeyUsageBit>"
                                 )
                             lines.append(
-                                "                                            </ns5:KeyUsage>"
+                                "                                            "
+                                "</ns5:KeyUsage>"
                             )
                         lines.append(
-                            "                                        </ns5:CriteriaList>"
+                            "                                        "
+                            "</ns5:CriteriaList>"
                         )
                         lines.append(
-                            "                                    </ns5:QualificationElement>"
+                            "                                    "
+                            "</ns5:QualificationElement>"
                         )
                     lines.append(
-                        "                                </ns5:Qualifications>"
+                        "                                " "</ns5:Qualifications>"
                     )
                     lines.append("                            </Extension>")
 
@@ -1197,16 +1244,21 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                     for info in service.additional_service_info.all():
                         critical = "true" if info.critical else "false"
                         lines.append(
-                            f'                            <Extension Critical="{critical}">'
+                            f"                            "
+                            f'<Extension Critical="{critical}">'
                         )
                         lines.append(
-                            "                                <AdditionalServiceInformation>"
+                            "                                "
+                            "<AdditionalServiceInformation>"
                         )
                         lines.append(
-                            f'                                    <URI xml:lang="{info.language}">{_escape_xml(info.uri)}</URI>'
+                            f"                                    "
+                            f'<URI xml:lang="{info.language}">'
+                            f"{_escape_xml(info.uri)}</URI>"
                         )
                         lines.append(
-                            "                                </AdditionalServiceInformation>"
+                            "                                "
+                            "</AdditionalServiceInformation>"
                         )
                         lines.append("                            </Extension>")
 
@@ -1220,25 +1272,31 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                 for hist in service.history.all().order_by("-status_starting_time"):
                     lines.append("                        <ServiceHistoryInstance>")
                     lines.append(
-                        f"                            <ServiceTypeIdentifier>{hist.service_type}</ServiceTypeIdentifier>"
+                        f"                            <ServiceTypeIdentifier>"
+                        f"{hist.service_type}</ServiceTypeIdentifier>"
                     )
                     lines.append("                            <ServiceName>")
                     for name in hist.names.all():
                         lines.append(
-                            f'                                <Name xml:lang="{name.language}">{_escape_xml(name.value)}</Name>'
+                            f"                                "
+                            f'<Name xml:lang="{name.language}">'
+                            f"{_escape_xml(name.value)}</Name>"
                         )
                     lines.append("                            </ServiceName>")
 
                     # History Digital Identity (X509SubjectName and X509SKI)
                     if hasattr(hist, "digital_ids") and hist.digital_ids.exists():
                         lines.append(
-                            "                            <ServiceDigitalIdentity>"
+                            "                            " "<ServiceDigitalIdentity>"
                         )
                         for digital_id in hist.digital_ids.all():
                             lines.append("                                <DigitalId>")
                             if digital_id.x509_subject_name:
                                 lines.append(
-                                    f"                                    <X509SubjectName>{_escape_xml(digital_id.x509_subject_name)}</X509SubjectName>"
+                                    f"                                    "
+                                    f"<X509SubjectName>"
+                                    f"{_escape_xml(digital_id.x509_subject_name)}"
+                                    f"</X509SubjectName>"
                                 )
                             lines.append("                                </DigitalId>")
                             if digital_id.x509_ski:
@@ -1246,21 +1304,24 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                                     "                                <DigitalId>"
                                 )
                                 lines.append(
-                                    f"                                    <X509SKI>{digital_id.x509_ski}</X509SKI>"
+                                    f"                                    <X509SKI>"
+                                    f"{digital_id.x509_ski}</X509SKI>"
                                 )
                                 lines.append(
                                     "                                </DigitalId>"
                                 )
                         lines.append(
-                            "                            </ServiceDigitalIdentity>"
+                            "                            " "</ServiceDigitalIdentity>"
                         )
 
                     lines.append(
-                        f"                            <ServiceStatus>{hist.status}</ServiceStatus>"
+                        f"                            <ServiceStatus>"
+                        f"{hist.status}</ServiceStatus>"
                     )
                     hist_time = hist.status_starting_time.strftime("%Y-%m-%dT%H:%M:%SZ")
                     lines.append(
-                        f"                            <StatusStartingTime>{hist_time}</StatusStartingTime>"
+                        f"                            <StatusStartingTime>"
+                        f"{hist_time}</StatusStartingTime>"
                     )
 
                     # History Service Information Extensions
@@ -1273,7 +1334,8 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
 
                     if has_hist_extensions:
                         lines.append(
-                            "                            <ServiceInformationExtensions>"
+                            "                            "
+                            "<ServiceInformationExtensions>"
                         )
 
                         # History Qualifications
@@ -1282,30 +1344,40 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                             and hist.qualifications.exists()
                         ):
                             lines.append(
-                                '                                <Extension Critical="true">'
+                                "                                "
+                                '<Extension Critical="true">'
                             )
                             lines.append(
-                                "                                    <ns5:Qualifications>"
+                                "                                    "
+                                "<ns5:Qualifications>"
                             )
                             for qual in hist.qualifications.all():
                                 lines.append(
-                                    "                                        <ns5:QualificationElement>"
+                                    "                                        "
+                                    "<ns5:QualificationElement>"
                                 )
                                 lines.append(
-                                    "                                            <ns5:Qualifiers>"
+                                    "                                            "
+                                    "<ns5:Qualifiers>"
                                 )
                                 lines.append(
-                                    f'                                                <ns5:Qualifier uri="{_escape_xml(qual.qualifier_uri)}"/>'
+                                    f"                                                "
+                                    f"<ns5:Qualifier uri="
+                                    f'"{_escape_xml(qual.qualifier_uri)}"/>'
                                 )
                                 lines.append(
-                                    "                                            </ns5:Qualifiers>"
+                                    "                                            "
+                                    "</ns5:Qualifiers>"
                                 )
                                 lines.append(
-                                    f'                                            <ns5:CriteriaList assert="{qual.criteria_assert}">'
+                                    f"                                            "
+                                    f"<ns5:CriteriaList assert="
+                                    f'"{qual.criteria_assert}">'
                                 )
                                 if qual.key_usage:
                                     lines.append(
-                                        "                                                <ns5:KeyUsage>"
+                                        "                                        "
+                                        "        <ns5:KeyUsage>"
                                     )
                                     for ku_name, ku_value in [
                                         (
@@ -1324,26 +1396,49 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                                             "dataEncipherment",
                                             qual.key_usage_data_encipherment,
                                         ),
-                                        ("keyAgreement", qual.key_usage_key_agreement),
-                                        ("keyCertSign", qual.key_usage_key_cert_sign),
-                                        ("crlSign", qual.key_usage_crl_sign),
-                                        ("encipherOnly", qual.key_usage_encipher_only),
-                                        ("decipherOnly", qual.key_usage_decipher_only),
+                                        (
+                                            "keyAgreement",
+                                            qual.key_usage_key_agreement,
+                                        ),
+                                        (
+                                            "keyCertSign",
+                                            qual.key_usage_key_cert_sign,
+                                        ),
+                                        (
+                                            "crlSign",
+                                            qual.key_usage_crl_sign,
+                                        ),
+                                        (
+                                            "encipherOnly",
+                                            qual.key_usage_encipher_only,
+                                        ),
+                                        (
+                                            "decipherOnly",
+                                            qual.key_usage_decipher_only,
+                                        ),
                                     ]:
                                         lines.append(
-                                            f'                                                    <ns5:KeyUsageBit name="{ku_name}">{str(ku_value).lower()}</ns5:KeyUsageBit>'
+                                            f"                                        "
+                                            f"            <ns5:KeyUsageBit "
+                                            f'name="{ku_name}">'
+                                            f"{str(ku_value).lower()}"
+                                            f"</ns5:KeyUsageBit>"
                                         )
                                     lines.append(
-                                        "                                                </ns5:KeyUsage>"
+                                        "                                        "
+                                        "        </ns5:KeyUsage>"
                                     )
                                 lines.append(
-                                    "                                            </ns5:CriteriaList>"
+                                    "                                            "
+                                    "</ns5:CriteriaList>"
                                 )
                                 lines.append(
-                                    "                                        </ns5:QualificationElement>"
+                                    "                                        "
+                                    "</ns5:QualificationElement>"
                                 )
                             lines.append(
-                                "                                    </ns5:Qualifications>"
+                                "                                    "
+                                "</ns5:Qualifications>"
                             )
                             lines.append("                                </Extension>")
 
@@ -1355,23 +1450,29 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                             for info in hist.additional_info.all():
                                 critical = "true" if info.critical else "false"
                                 lines.append(
-                                    f'                                <Extension Critical="{critical}">'
+                                    f"                                "
+                                    f'<Extension Critical="{critical}">'
                                 )
                                 lines.append(
-                                    "                                    <AdditionalServiceInformation>"
+                                    "                                    "
+                                    "<AdditionalServiceInformation>"
                                 )
                                 lines.append(
-                                    f'                                        <URI xml:lang="{info.language}">{_escape_xml(info.uri)}</URI>'
+                                    f"                                        "
+                                    f'<URI xml:lang="{info.language}">'
+                                    f"{_escape_xml(info.uri)}</URI>"
                                 )
                                 lines.append(
-                                    "                                    </AdditionalServiceInformation>"
+                                    "                                    "
+                                    "</AdditionalServiceInformation>"
                                 )
                                 lines.append(
-                                    "                                </Extension>"
+                                    "                                " "</Extension>"
                                 )
 
                         lines.append(
-                            "                            </ServiceInformationExtensions>"
+                            "                            "
+                            "</ServiceInformationExtensions>"
                         )
 
                     lines.append("                        </ServiceHistoryInstance>")

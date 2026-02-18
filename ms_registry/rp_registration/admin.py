@@ -126,11 +126,6 @@ class IntendedUseCredentialInline(admin.TabularInline):
     autocomplete_fields = ["credential"]
 
 
-# ============================================================================
-# MODEL ADMINS
-# ============================================================================
-
-
 @admin.register(Law)
 class LawAdmin(admin.ModelAdmin):
     list_display = ["law_name", "law_country_code", "law_uri"]
@@ -433,7 +428,10 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
             "Legal Entity",
             {
                 "fields": ("legal_entity",),
-                "description": "TSP entries are linked via Legal Entity → trust_service_providers",
+                "description": (
+                    "TSP entries are linked via "
+                    "Legal Entity → trust_service_providers"
+                ),
             },
         ),
         ("Entity Role", {"fields": ("entity_role",)}),
@@ -638,10 +636,6 @@ class AuditLogAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-
-# ============================================================================
-# ADMIN SITE CONFIGURATION
-# ============================================================================
 
 admin.site.site_header = "EUDI Wallet Entity Registration"
 admin.site.site_title = "Entity Registration Admin"

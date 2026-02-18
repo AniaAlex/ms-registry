@@ -439,8 +439,9 @@ class TrustServiceProvider(models.Model):
     Under eIDAS 2.0, wallet entities (PID Providers, Attestation Providers,
     Relying Parties, Wallet Providers) are TSPs with wallet-specific service types.
 
-    Organization data (name, address, contact) is stored in LegalEntity to avoid
-    duplication. One LegalEntity can have multiple TSP entries (in different TSL schemes).
+    Organization data (name, address, contact) is stored in LegalEntity to
+    avoid duplication. One LegalEntity can have multiple TSP entries (in
+    different TSL schemes).
     """
 
     scheme = models.ForeignKey(

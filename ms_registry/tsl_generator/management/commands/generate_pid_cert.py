@@ -92,7 +92,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Serial Number: {cert.serial_number}")
         self.stdout.write(f"Not Valid Before: {cert.not_valid_before_utc}")
         self.stdout.write(f"Not Valid After:  {cert.not_valid_after_utc}")
-        self.stdout.write(f"Algorithm: ECDSA with SHA-256 (P-256/secp256r1)")
+        self.stdout.write("Algorithm: ECDSA with SHA-256 (P-256/secp256r1)")
 
         # Calculate fingerprint
         fingerprint = cert.fingerprint(hashes.SHA256()).hex().upper()

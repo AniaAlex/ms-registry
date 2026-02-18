@@ -520,7 +520,9 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             "is_intermediary": instance.is_intermediary,
             "registry_uri": instance.registry_uri,
             "supervisory_authority_name": instance.supervisory_authority.authority_name,
-            "supervisory_authority_country": instance.supervisory_authority.country_code,
+            "supervisory_authority_country": (
+                instance.supervisory_authority.country_code
+            ),
             "service_descriptions": [
                 {"lang": d.language, "description": d.description}
                 for d in instance.service_descriptions.all()

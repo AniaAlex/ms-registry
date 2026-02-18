@@ -6,13 +6,19 @@ from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = "Import TSL data from a go-trust example-tsl directory structure or ETSI TS 119612 XML file"
+    help = (
+        "Import TSL data from a go-trust example-tsl directory structure "
+        "or ETSI TS 119612 XML file"
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
             "path",
             type=str,
-            help="Path to TSL directory (with scheme.yaml) or XML file (with --xml flag)",
+            help=(
+                "Path to TSL directory (with scheme.yaml) or XML file "
+                "(with --xml flag)"
+            ),
         )
         parser.add_argument(
             "--xml",

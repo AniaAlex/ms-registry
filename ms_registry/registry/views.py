@@ -45,7 +45,9 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                     "serializer": self.get_serializer(),
                     "errors": None,
                     "legal_entities": LegalEntity.objects.all(),
-                    "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
+                    "supervisory_authorities": (
+                        models.SupervisoryAuthority.objects.all()
+                    ),
                     "entity_roles": models.RegisteredEntity._meta.get_field(
                         "entity_role"
                     ).choices,
@@ -69,7 +71,9 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                         "serializer": serializer,
                         "errors": serializer.errors,
                         "legal_entities": LegalEntity.objects.all(),
-                        "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
+                        "supervisory_authorities": (
+                            models.SupervisoryAuthority.objects.all()
+                        ),
                         "entity_roles": models.RegisteredEntity._meta.get_field(
                             "entity_role"
                         ).choices,
