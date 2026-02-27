@@ -60,7 +60,9 @@ def generate_tsl_xml(scheme) -> str:
     scheme_info = ET.SubElement(root, f"{{{NS_TSL}}}SchemeInformation")
 
     # TSL Version Identifier
-    ET.SubElement(scheme_info, f"{{{NS_TSL}}}TSLVersionIdentifier").text = "5"
+    ET.SubElement(scheme_info, f"{{{NS_TSL}}}TSLVersionIdentifier").text = str(
+        scheme.version
+    )
 
     # TSL Sequence Number
     ET.SubElement(scheme_info, f"{{{NS_TSL}}}TSLSequenceNumber").text = str(
@@ -355,7 +357,9 @@ def generate_tsl_xml_gotrust_format(scheme) -> str:
 
     # Scheme Information
     lines.append("<tsl:SchemeInformation>")
-    lines.append("<tsl:TSLVersionIdentifier>5</tsl:TSLVersionIdentifier>")
+    lines.append(
+        f"<tsl:TSLVersionIdentifier>{scheme.version}</tsl:TSLVersionIdentifier>"
+    )
     lines.append(
         f"<tsl:TSLSequenceNumber>{scheme.sequence_number}</tsl:TSLSequenceNumber>"
     )
@@ -778,7 +782,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
     lines = []
 
     # XML declaration
-    lines.append('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')
+    lines.append('<?xml version="1.0" encoding="UTF-8"?>')
 
     # Root element with all ETSI namespaces
     lines.append(
@@ -789,15 +793,17 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         f'xmlns:ns4="{NS_XADES}" '
         f'xmlns:ns5="{NS_EIDAS_SIG}" '
         f'xmlns:ns6="{NS_XADES_141}" '
-        'Id="id_for_enveloped_signing_of_the_entire_list" '
+        f'Id="{scheme.tsl_id}" '
         'TSLTag="http://uri.etsi.org/19612/TSLTag">'
     )
 
     # SchemeInformation section
     lines.append("    <SchemeInformation>")
 
-    # TSL Version Identifier (always 5 for current ETSI spec)
-    lines.append("        <TSLVersionIdentifier>5</TSLVersionIdentifier>")
+    # TSL Version Identifier
+    lines.append(
+        f"        <TSLVersionIdentifier>{scheme.version}</TSLVersionIdentifier>"
+    )
 
     # TSL Sequence Number
     lines.append(
@@ -811,65 +817,17 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
     lines.append("        <SchemeOperatorName>")
     for name in scheme.operator_names.all():
         lines.append(
-            f'            <Name xml:lang="{name.language}">'
+            f'            <Name lang="{name.language}">'
             f"{_escape_xml(name.value)}</Name>"
         )
     lines.append("        </SchemeOperatorName>")
-
-    # Scheme Operator Address
-    lines.append("        <SchemeOperatorAddress>")
-
-    # Postal Addresses - Get from first provider or use scheme territory defaults
-    lines.append("            <PostalAddresses>")
-    lines.append('                <PostalAddress xml:lang="en">')
-
-    # Try to get address from the scheme's first provider, or use defaults
-    first_provider = scheme.providers.first()
-    if first_provider and first_provider.street_address:
-        lines.append(
-            f"                    <StreetAddress>"
-            f"{_escape_xml(first_provider.street_address)}</StreetAddress>"
-        )
-        if first_provider.locality:
-            lines.append(
-                f"                    <Locality>"
-                f"{_escape_xml(first_provider.locality)}</Locality>"
-            )
-        if first_provider.postal_code:
-            lines.append(
-                f"                    <PostalCode>"
-                f"{_escape_xml(first_provider.postal_code)}</PostalCode>"
-            )
-        lines.append(
-            f"                    <CountryName>{scheme.territory}</CountryName>"
-        )
-    else:
-        lines.append("                    <StreetAddress></StreetAddress>")
-        lines.append("                    <Locality></Locality>")
-        lines.append("                    <PostalCode></PostalCode>")
-        lines.append(
-            f"                    <CountryName>{scheme.territory}</CountryName>"
-        )
-
-    lines.append("                </PostalAddress>")
-    lines.append("            </PostalAddresses>")
-
-    # Electronic Address
-    lines.append("            <ElectronicAddress>")
-    for uri in scheme.information_uris.all():
-        lines.append(
-            f'                <URI xml:lang="{uri.language}">'
-            f"{_escape_xml(uri.uri)}</URI>"
-        )
-    lines.append("            </ElectronicAddress>")
-    lines.append("        </SchemeOperatorAddress>")
 
     # Scheme Name
     if scheme.scheme_names.exists():
         lines.append("        <SchemeName>")
         for name in scheme.scheme_names.all():
             lines.append(
-                f'            <Name xml:lang="{name.language}">'
+                f'            <Name lang="{name.language}">'
                 f"{_escape_xml(name.value)}</Name>"
             )
         lines.append("        </SchemeName>")
@@ -879,7 +837,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <SchemeInformationURI>")
         for uri in scheme.information_uris.all():
             lines.append(
-                f'            <URI xml:lang="{uri.language}">'
+                f'            <URI lang="{uri.language}">'
                 f"{_escape_xml(uri.uri)}</URI>"
             )
         lines.append("        </SchemeInformationURI>")
@@ -896,7 +854,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <SchemeTypeCommunityRules>")
         for rule in scheme.community_rules.all():
             lines.append(
-                f'            <URI xml:lang="{rule.language}">'
+                f'            <URI lang="{rule.language}">'
                 f"{_escape_xml(rule.uri)}</URI>"
             )
         lines.append("        </SchemeTypeCommunityRules>")
@@ -909,7 +867,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("        <PolicyOrLegalNotice>")
         for notice in scheme.legal_notices.all():
             lines.append(
-                f'            <TSLLegalNotice xml:lang="{notice.language}">'
+                f'            <TSLLegalNotice lang="{notice.language}">'
                 f"{_escape_xml(notice.notice)}</TSLLegalNotice>"
             )
         lines.append("        </PolicyOrLegalNotice>")
@@ -970,7 +928,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                 lines.append("                        <SchemeOperatorName>")
                 for name in pointer.operator_names.all():
                     lines.append(
-                        f'                            <Name xml:lang="{name.language}">'
+                        f'                            <Name lang="{name.language}">'
                         f"{_escape_xml(name.value)}</Name>"
                     )
                 lines.append("                        </SchemeOperatorName>")
@@ -1014,7 +972,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         lines.append("                <TSPName>")
         for name in provider.names.all():
             lines.append(
-                f'                    <Name xml:lang="{name.language}">'
+                f'                    <Name lang="{name.language}">'
                 f"{_escape_xml(name.value)}</Name>"
             )
         lines.append("                </TSPName>")
@@ -1024,7 +982,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                <TSPTradeName>")
             for name in provider.trade_names.all():
                 lines.append(
-                    f'                    <Name xml:lang="{name.language}">'
+                    f'                    <Name lang="{name.language}">'
                     f"{_escape_xml(name.value)}</Name>"
                 )
             lines.append("                </TSPTradeName>")
@@ -1035,7 +993,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
         # Postal Addresses
         if provider.street_address:
             lines.append("                    <PostalAddresses>")
-            lines.append('                        <PostalAddress xml:lang="en">')
+            lines.append('                        <PostalAddress lang="en">')
             lines.append(
                 f"                            <StreetAddress>"
                 f"{_escape_xml(provider.street_address)}</StreetAddress>"
@@ -1067,7 +1025,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                    <ElectronicAddress>")
             for addr in provider.electronic_addresses.all():
                 lines.append(
-                    f'                        <URI xml:lang="{addr.language}">'
+                    f'                        <URI lang="{addr.language}">'
                     f"{_escape_xml(addr.uri)}</URI>"
                 )
             lines.append("                    </ElectronicAddress>")
@@ -1079,7 +1037,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                <TSPInformationURI>")
             for uri in provider.information_uris.all():
                 lines.append(
-                    f'                    <URI xml:lang="{uri.language}">'
+                    f'                    <URI lang="{uri.language}">'
                     f"{_escape_xml(uri.uri)}</URI>"
                 )
             lines.append("                </TSPInformationURI>")
@@ -1103,7 +1061,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             lines.append("                        <ServiceName>")
             for name in service.names.all():
                 lines.append(
-                    f'                            <Name xml:lang="{name.language}">'
+                    f'                            <Name lang="{name.language}">'
                     f"{_escape_xml(name.value)}</Name>"
                 )
             lines.append("                        </ServiceName>")
@@ -1112,30 +1070,22 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
             if service.certificates.exists():
                 lines.append("                        <ServiceDigitalIdentity>")
                 for cert in service.certificates.all():
-                    # Output X509Certificate
                     lines.append("                            <DigitalId>")
                     lines.append(
                         f"                                <X509Certificate>"
                         f"{cert.get_base64_der()}</X509Certificate>"
                     )
+                    lines.append(
+                        f"                                <X509SubjectName>"
+                        f"{_escape_xml(cert.x509_subject_name) if cert.x509_subject_name else ''}"  # noqa: E501
+                        f"</X509SubjectName>"
+                    )
+                    lines.append(
+                        f"                                <X509SKI>"
+                        f"{cert.x509_ski if cert.x509_ski else ''}"
+                        f"</X509SKI>"
+                    )
                     lines.append("                            </DigitalId>")
-                    # Output X509SubjectName if available
-                    if cert.x509_subject_name:
-                        lines.append("                            <DigitalId>")
-                        lines.append(
-                            f"                                <X509SubjectName>"
-                            f"{_escape_xml(cert.x509_subject_name)}"
-                            f"</X509SubjectName>"
-                        )
-                        lines.append("                            </DigitalId>")
-                    # Output X509SKI if available
-                    if cert.x509_ski:
-                        lines.append("                            <DigitalId>")
-                        lines.append(
-                            f"                                <X509SKI>"
-                            f"{cert.x509_ski}</X509SKI>"
-                        )
-                        lines.append("                            </DigitalId>")
                 lines.append("                        </ServiceDigitalIdentity>")
 
             # Service Status
@@ -1253,7 +1203,7 @@ def generate_tsl_xml_etsi_format(scheme) -> str:
                         )
                         lines.append(
                             f"                                    "
-                            f'<URI xml:lang="{info.language}">'
+                            f'<URI lang="{info.language}">'
                             f"{_escape_xml(info.uri)}</URI>"
                         )
                         lines.append(

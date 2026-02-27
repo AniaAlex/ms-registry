@@ -206,6 +206,15 @@ class TSLScheme(models.Model):
 
     # Basic identification
     name = models.CharField(max_length=200, help_text="Internal name for this scheme")
+    tsl_id = models.CharField(
+        max_length=200,
+        default="id_for_enveloped_signing_of_the_entire_list",
+        help_text="TSL identifier used as the Id attribute in the root XML element (e.g. BE-TL-071)",  # noqa: E501
+    )
+    version = models.PositiveIntegerField(
+        default=5,
+        help_text="TSL version identifier (TSLVersionIdentifier)",
+    )
     tsl_type = models.CharField(
         max_length=200,
         choices=TSL_TYPE_CHOICES,
@@ -660,7 +669,11 @@ class TSPCertificate(models.Model):
         pem = self.certificate_pem.strip()
         # Remove PEM headers/footers
         lines = pem.split("\n")
-        der_lines = [line for line in lines if not line.startswith("-----")]
+        der_lines = [
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("-----")
+        ]
         return "".join(der_lines)
 
     def extract_metadata_from_pem(self):
@@ -892,7 +905,11 @@ class ServiceCertificate(models.Model):
         pem = self.certificate_pem.strip()
         # Remove PEM headers/footers
         lines = pem.split("\n")
-        der_lines = [line for line in lines if not line.startswith("-----")]
+        der_lines = [
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("-----")
+        ]
         return "".join(der_lines)
 
     def extract_metadata_from_pem(self):
