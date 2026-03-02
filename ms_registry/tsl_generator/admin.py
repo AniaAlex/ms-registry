@@ -340,7 +340,16 @@ class TSLSchemeAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("name", "tsl_type", "sequence_number", "territory")},
+            {
+                "fields": (
+                    "name",
+                    "tsl_id",
+                    "version",
+                    "tsl_type",
+                    "sequence_number",
+                    "territory",
+                )
+            },
         ),
         ("Timestamps", {"fields": ("issue_date", "next_update")}),
         (
