@@ -47,4 +47,9 @@ urlpatterns = [
         views.TSLSchemeListView.as_view(),
         name="scheme-list",
     ),
+    path(
+        "schemes/<int:pk>/xml/",
+        views.TSLSchemeXMLView.as_view(),
+        name="scheme-xml",
+    ),
 ]

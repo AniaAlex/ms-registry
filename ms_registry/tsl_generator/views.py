@@ -2,6 +2,7 @@
 Views for TSL Generator
 """
 
+from django.http import HttpResponse
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -15,6 +16,7 @@ from .models import (
     TrustServiceProvider,
     TSLScheme,
 )
+from .xml_generator import generate_tsl_xml_etsi_format
 
 
 class TrustServiceProviderListCreateView(generics.ListCreateAPIView):
@@ -132,6 +134,22 @@ class TSLSchemeListView(generics.ListAPIView):
     permission_classes = []
     serializer_class = serializers.TSLSchemeSerializer
     queryset = TSLScheme.objects.filter(is_active=True)
+
+
+class TSLSchemeXMLView(generics.RetrieveAPIView):
+    """
+    Return the ETSI TS 119612 compliant XML for a TSL Scheme.
+
+    GET: Returns application/xml
+    """
+
+    permission_classes = []
+    queryset = TSLScheme.objects.filter(is_active=True)
+
+    def retrieve(self, request, *args, **kwargs):
+        scheme = self.get_object()
+        xml_content = generate_tsl_xml_etsi_format(scheme)
+        return HttpResponse(xml_content, content_type="application/xml")
 
 
 # =============================================================================
