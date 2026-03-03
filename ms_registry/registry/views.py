@@ -1,5 +1,6 @@
 from core.models import EntitlementType
 from django.views.generic import TemplateView
+from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -293,13 +294,37 @@ class WalletRelyingPartyView(generics.GenericAPIView):
         "legal_entity", "supervisory_authority"
     )
 
+    @extend_schema(
+        parameters=[serializers.WRPQueryParameterSerializer],
+        description=(
+            "List all WalletRelyingParties, optionally filtered by "
+            "entitlement URI or intermediary status."
+        ),
+    )
     def get(self, request, *args, **kwargs):
         """
         List all WalletRelyingParties.
 
-        Returns 200 with a list of all registered WRPs.
+        Supports filtering by entitlement URI and intermediary status:
+        GET /wrp?entitlement=http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider
+        GET /wrp?isintermediary=true
+
+        Returns 200 with a list of all registered WRPs
+        (filtered if query param provided).
         """
         queryset = self.get_queryset()
+
+        # Filter by entitlement URI if provided
+        entitlement_filter = request.query_params.get("entitlement")
+        if entitlement_filter:
+            queryset = queryset.filter(entitlements__entitlement_uri=entitlement_filter)
+
+        # Filter by intermediary status if provided
+        isintermediary = request.query_params.get("isintermediary")
+        if isintermediary is not None:
+            is_intermediary_bool = isintermediary.lower() in ("true", "1", "yes")
+            queryset = queryset.filter(is_intermediary=is_intermediary_bool)
+
         serializer = self.get_serializer()
         data = [serializer.to_representation(obj) for obj in queryset]
         return Response(data, status=status.HTTP_200_OK)

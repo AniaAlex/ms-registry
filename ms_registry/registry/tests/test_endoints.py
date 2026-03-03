@@ -2,7 +2,7 @@
 Tests for Registry app endpoints and models.
 """
 
-from core.models import EntityRole, RegistrationStatus
+from core.models import EntitlementType, EntityRole, RegistrationStatus
 from django.test import TestCase
 from django.urls import reverse
 from legal_entities.models import LegalEntity, LegalPerson, PhysicalAddress
@@ -223,8 +223,6 @@ class EntityEntitlementModelTests(TestCase):
 
     def test_create_entitlement(self):
         """Test creating an entitlement"""
-        from core.models import EntitlementType
-
         entitlement = EntityEntitlement.objects.create(
             registered_entity=self.entity,
             entitlement_uri=(
@@ -523,3 +521,258 @@ class EntityServiceDescriptionTests(TestCase):
                 lang="en",
                 content="Second English description",
             )
+
+
+class WRPFilterAPITests(APITestCase):
+    """API tests for WalletRelyingParty filter endpoints"""
+
+    def setUp(self):
+        """Set up test data with various entities and entitlements"""
+        # Create addresses
+        self.address1 = PhysicalAddress.objects.create(country_code="SE")
+        self.address2 = PhysicalAddress.objects.create(country_code="DE")
+        self.address3 = PhysicalAddress.objects.create(country_code="FR")
+
+        # Create legal persons
+        self.legal_person1 = LegalPerson.objects.create(legal_name="Company A")
+        self.legal_person2 = LegalPerson.objects.create(legal_name="Company B")
+        self.legal_person3 = LegalPerson.objects.create(legal_name="Company C")
+
+        # Create legal entities
+        self.legal_entity1 = LegalEntity.objects.create(
+            entity_type="legal_person",
+            legal_person=self.legal_person1,
+            physical_address=self.address1,
+        )
+        self.legal_entity2 = LegalEntity.objects.create(
+            entity_type="legal_person",
+            legal_person=self.legal_person2,
+            physical_address=self.address2,
+        )
+        self.legal_entity3 = LegalEntity.objects.create(
+            entity_type="legal_person",
+            legal_person=self.legal_person3,
+            physical_address=self.address3,
+        )
+
+        # Create supervisory authority
+        self.authority = SupervisoryAuthority.objects.create(
+            authority_name="Test DPA",
+            country_code="SE",
+            email="dpa@test.se",
+        )
+
+        # Create registered entities with different intermediary status
+        self.entity_intermediary = RegisteredEntity.objects.create(
+            legal_entity=self.legal_entity1,
+            entity_role=EntityRole.RELYING_PARTY,
+            registry_uri="https://registry.example.com/1",
+            supervisory_authority=self.authority,
+            is_intermediary=True,
+        )
+        self.entity_not_intermediary = RegisteredEntity.objects.create(
+            legal_entity=self.legal_entity2,
+            entity_role=EntityRole.RELYING_PARTY,
+            registry_uri="https://registry.example.com/2",
+            supervisory_authority=self.authority,
+            is_intermediary=False,
+        )
+        self.entity_pub_eaa = RegisteredEntity.objects.create(
+            legal_entity=self.legal_entity3,
+            entity_role=EntityRole.ATTESTATION_PROVIDER,
+            registry_uri="https://registry.example.com/3",
+            supervisory_authority=self.authority,
+            is_intermediary=False,
+            is_psb=True,
+        )
+
+        # Create entitlements
+        EntityEntitlement.objects.create(
+            registered_entity=self.entity_intermediary,
+            entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
+            entitlement_type=EntitlementType.SERVICE_PROVIDER,
+        )
+        EntityEntitlement.objects.create(
+            registered_entity=self.entity_not_intermediary,
+            entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
+            entitlement_type=EntitlementType.SERVICE_PROVIDER,
+        )
+        EntityEntitlement.objects.create(
+            registered_entity=self.entity_pub_eaa,
+            entitlement_uri="http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",
+            entitlement_type=EntitlementType.PUB_EAA_PROVIDER,
+        )
+
+        # Create support URIs (required for WRP)
+        EntitySupportURI.objects.create(
+            registered_entity=self.entity_intermediary,
+            support_uri="https://support1.example.com",
+        )
+        EntitySupportURI.objects.create(
+            registered_entity=self.entity_not_intermediary,
+            support_uri="https://support2.example.com",
+        )
+        EntitySupportURI.objects.create(
+            registered_entity=self.entity_pub_eaa,
+            support_uri="https://support3.example.com",
+        )
+
+    # =========================================================================
+    # Entitlement Filter Tests - Success Cases
+    # =========================================================================
+
+    def test_filter_by_entitlement_success_service_provider(self):
+        """Test filtering WRP by Service_Provider entitlement returns matching entities"""  # noqa: E501
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {"entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    def test_filter_by_entitlement_success_pub_eaa_provider(self):
+        """Test filtering WRP by PUB_EAA_Provider entitlement returns matching entity"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {"entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_filter_by_entitlement_no_filter_returns_all(self):
+        """Test that no entitlement filter returns all entities"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)
+
+    # =========================================================================
+    # Entitlement Filter Tests - Failure/Empty Cases
+    # =========================================================================
+
+    def test_filter_by_entitlement_no_match_returns_empty(self):
+        """Test filtering by non-existent entitlement returns empty list"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {"entitlement": "http://data.europa.eu/eudi/entitlement/NonExistent"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_filter_by_entitlement_invalid_uri_returns_empty(self):
+        """Test filtering by invalid URI returns empty list"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {"entitlement": "invalid-uri"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    # =========================================================================
+    # isintermediary Filter Tests - Success Cases
+    # =========================================================================
+
+    def test_filter_by_isintermediary_true_success(self):
+        """Test filtering WRP by isintermediary=true returns only intermediaries"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url, {"isintermediary": "true"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertTrue(response.data[0]["is_intermediary"])
+
+    def test_filter_by_isintermediary_false_success(self):
+        """Test filtering WRP by isintermediary=false returns non-intermediaries"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url, {"isintermediary": "false"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        for entity in response.data:
+            self.assertFalse(entity["is_intermediary"])
+
+    def test_filter_by_isintermediary_1_success(self):
+        """Test filtering WRP by isintermediary=1 returns intermediaries"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url, {"isintermediary": "1"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_filter_by_isintermediary_0_success(self):
+        """Test filtering WRP by isintermediary=0 returns non-intermediaries"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url, {"isintermediary": "0"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    # =========================================================================
+    # isintermediary Filter Tests - Failure/Edge Cases
+    # =========================================================================
+
+    def test_filter_by_isintermediary_invalid_value_returns_non_intermediaries(self):
+        """Test filtering with invalid value treats it as false"""
+        url = reverse("registry:wrp")
+        response = self.client.get(url, {"isintermediary": "invalid"})
+
+        # Invalid values are treated as false (not in true/1/yes)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    # =========================================================================
+    # Combined Filter Tests
+    # =========================================================================
+
+    def test_combined_filter_entitlement_and_isintermediary_true(self):
+        """Test combining entitlement and isintermediary=true filters"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {
+                "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",  # noqa: E501
+                "isintermediary": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertTrue(response.data[0]["is_intermediary"])
+
+    def test_combined_filter_entitlement_and_isintermediary_false(self):
+        """Test combining entitlement and isintermediary=false filters"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {
+                "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",  # noqa: E501
+                "isintermediary": "false",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertFalse(response.data[0]["is_intermediary"])
+
+    def test_combined_filter_no_match(self):
+        """Test combined filters that match no entities"""
+        url = reverse("registry:wrp")
+        response = self.client.get(
+            url,
+            {
+                "entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",  # noqa: E501
+                "isintermediary": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)

@@ -4,6 +4,25 @@ from rest_framework import serializers
 from .models import EntityEntitlement, RegisteredEntity, SupervisoryAuthority
 
 
+class WRPQueryParameterSerializer(serializers.Serializer):
+    """Query parameters for filtering WalletRelyingParty list endpoint."""
+
+    entitlement = serializers.URLField(
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Filter by entitlement URI. Example: "
+            "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider"
+        ),
+    )
+    isintermediary = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Filter by intermediary status. Set to true or false.",
+    )
+
+
 class SupervisoryAuthoritySerializer(serializers.ModelSerializer):
     """Serializer for listing/retrieving supervisory authorities"""
 
