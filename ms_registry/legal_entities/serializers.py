@@ -2,6 +2,8 @@
 Serializers for Legal Entity models
 """
 
+import re
+
 from core.models import Identifier, IdentifierType
 from rest_framework import serializers
 
@@ -12,6 +14,16 @@ from .models import (
     NaturalPerson,
     PhysicalAddress,
 )
+
+LETTERS_ONLY_RE = re.compile(r"^[A-Za-z]+$")
+
+
+def validate_letters_only(value, field_name):
+    if value and not LETTERS_ONLY_RE.match(value):
+        raise serializers.ValidationError(
+            f"{field_name} must contain only letters (A-Z, a-z)."
+        )
+    return value
 
 
 class PhysicalAddressSerializer(serializers.ModelSerializer):
@@ -42,6 +54,9 @@ class LegalPersonSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
+    def validate_legal_name(self, value):
+        return validate_letters_only(value, "Legal name")
+
 
 class NaturalPersonSerializer(serializers.ModelSerializer):
     class Meta:
@@ -54,6 +69,12 @@ class NaturalPersonSerializer(serializers.ModelSerializer):
             "nationality",
         ]
         read_only_fields = ["id"]
+
+    def validate_given_name(self, value):
+        return validate_letters_only(value, "Given name")
+
+    def validate_family_name(self, value):
+        return validate_letters_only(value, "Family name")
 
 
 class IdentifierSerializer(serializers.ModelSerializer):
@@ -176,6 +197,15 @@ class LegalEntityCreateSerializer(serializers.Serializer):
     info_uri = serializers.URLField(
         max_length=2048, required=False, allow_blank=True, allow_null=True
     )
+
+    def validate_legal_name(self, value):
+        return validate_letters_only(value, "Legal name")
+
+    def validate_given_name(self, value):
+        return validate_letters_only(value, "Given name")
+
+    def validate_family_name(self, value):
+        return validate_letters_only(value, "Family name")
 
     def validate(self, data):
         """Validate that required fields are present based on entity_type"""
