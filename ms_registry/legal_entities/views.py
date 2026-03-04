@@ -68,10 +68,11 @@ class LegalEntityFormView(generics.CreateAPIView):
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
     template_name = "add_legal_entity.html"
 
-    def get_context_data(self, errors=None):
+    def get_context_data(self, errors=None, form_data=None):
         """Common context for the form"""
         return {
             "errors": errors,
+            "form_data": form_data or {},
             "entity_types": EntityType.choices,
             "identifier_types": IdentifierType.choices,
         }
@@ -88,7 +89,7 @@ class LegalEntityFormView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return Response(
-                self.get_context_data(errors=serializer.errors),
+                self.get_context_data(errors=serializer.errors, form_data=request.data),
                 status=status.HTTP_400_BAD_REQUEST,
                 template_name=self.template_name,
             )

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container">
     <h1>Add New Supervisory Authority (DPA)</h1>
-    
+
     {% if errors %}
     <div class="alert alert-danger">
         <h4>Please correct the errors below:</h4>
@@ -18,32 +18,34 @@
         </ul>
     </div>
     {% endif %}
-    
+
     <form method="post" action="" id="supervisory-authority-form">
         {% csrf_token %}
-        
+
         <fieldset>
             <legend>Authority Information</legend>
-            
+
             <div class="form-group">
                 <label for="authority_name">Authority Name *</label>
                 <input type="text" name="authority_name" id="authority_name" class="form-control" required
-                       placeholder="e.g., Swedish Authority for Privacy Protection (IMY)">
+                       placeholder="e.g., Swedish Authority for Privacy Protection (IMY)"
+                       value="{{ form_data.authority_name|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="country_code">Country Code *</label>
-                <input type="text" name="country_code" id="country_code" class="form-control" 
-                       maxlength="2" required placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE, FR)">
+                <input type="text" name="country_code" id="country_code" class="form-control"
+                       maxlength="2" required placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE, FR)"
+                       value="{{ form_data.country_code|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="legal_entity">Legal Entity (Optional)</label>
                 <div class="input-with-action">
                     <select name="legal_entity" id="legal_entity" class="form-control">
                         <option value="">-- No linked legal entity --</option>
                         {% for entity in legal_entities %}
-                        <option value="{{ entity.id }}">{{ entity }}</option>
+                        <option value="{{ entity.id }}" {% if form_data.legal_entity == entity.id|stringformat:"s" %}selected{% endif %}>{{ entity }}</option>
                         {% endfor %}
                     </select>
                     <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
@@ -51,30 +53,33 @@
                 <small class="form-help">Optionally link to an existing legal entity record.</small>
             </div>
         </fieldset>
-        
+
         <fieldset>
             <legend>Contact Information</legend>
             <p class="fieldset-description">At least one contact method is required.</p>
-            
+
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" name="email" id="email" class="form-control"
-                       placeholder="contact@dpa.example.eu">
+                       placeholder="contact@dpa.example.eu"
+                       value="{{ form_data.email|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="phone">Phone</label>
                 <input type="tel" name="phone" id="phone" class="form-control"
-                       placeholder="+46 8 123 4567">
+                       placeholder="+46 8 123 4567"
+                       value="{{ form_data.phone|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="info_uri">Information URI</label>
                 <input type="url" name="info_uri" id="info_uri" class="form-control"
-                       placeholder="https://www.imy.se/">
+                       placeholder="https://www.imy.se/"
+                       value="{{ form_data.info_uri|default:'' }}">
             </div>
         </fieldset>
-        
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Create Supervisory Authority</button>
             <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">Cancel</a>
