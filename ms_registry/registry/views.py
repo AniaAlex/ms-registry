@@ -297,6 +297,7 @@ class WalletRelyingPartyView(generics.GenericAPIView):
 
     @extend_schema(
         parameters=[serializers.WRPQueryParameterSerializer],
+        responses={200: serializers.WalletRelyingPartyResponseSerializer(many=True)},
         description=(
             "List all WalletRelyingParties, optionally filtered by "
             "entitlement URI or intermediary status."
@@ -330,6 +331,10 @@ class WalletRelyingPartyView(generics.GenericAPIView):
         data = [serializer.to_representation(obj) for obj in queryset]
         return Response(data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        request=serializers.WalletRelyingPartySerializer,
+        responses={201: serializers.WalletRelyingPartyResponseSerializer},
+    )
     def post(self, request, *args, **kwargs):
         """
         Create a new WalletRelyingParty.
@@ -351,6 +356,10 @@ class WalletRelyingPartyView(generics.GenericAPIView):
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(
+        request=serializers.WalletRelyingPartySerializer,
+        responses={200: serializers.WalletRelyingPartyResponseSerializer},
+    )
     def put(self, request, *args, **kwargs):
         """
         Update an existing WalletRelyingParty.
@@ -452,6 +461,7 @@ class WalletRelyingPartyDetailView(generics.RetrieveAPIView):
         entity_role="RELYING_PARTY"
     ).select_related("legal_entity", "supervisory_authority")
 
+    @extend_schema(responses={200: serializers.WalletRelyingPartyResponseSerializer})
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer()

@@ -115,6 +115,8 @@ This codebase implements EU Digital Identity Wallet standards:
 - **ARF Topic 27**: Registration of PID/Attestation Providers and RPs
 - **ETSI TS 119612**: Trust Status Lists XML format
 
+**Official JSON Schema**: [ts5-json-common-rp-data-model.json](https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/api/ts5-json-common-rp-data-model.json) - defines `WalletRelyingParty`, `Credential`, `Claim`, `IntendedUse`, `Identifier`, `SupervisoryAuthority` structures. The `/api/registry/wrp/` endpoint returns responses conforming to this schema.
+
 The `RegisteredEntity` model is named differently from TS5's `WalletRelyingParty` but serves the same purpose - it covers ALL entity types (verifiers, issuers, QTSPs), not just relying parties.
 
 ## Authentication

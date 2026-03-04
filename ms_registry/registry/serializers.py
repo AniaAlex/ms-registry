@@ -315,7 +315,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
     service_descriptions = serializers.ListField(
         child=serializers.DictField(),
         required=False,
-        help_text="List of {lang: 'en', description: '...'} objects",
+        help_text="List of {lang: 'en', content: '...'} objects (MultiLangString)",
     )
 
     # Policies (optional)
@@ -426,8 +426,8 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         for desc in service_descriptions:
             EntityServiceDescription.objects.create(
                 registered_entity=registered_entity,
-                language=desc.get("lang", "en"),
-                description=desc.get("description", ""),
+                lang=desc.get("lang", "en"),
+                content=desc.get("content", ""),
             )
 
         # Create policy links
@@ -504,57 +504,225 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             for desc in validated_data["service_descriptions"]:
                 EntityServiceDescription.objects.create(
                     registered_entity=instance,
-                    language=desc.get("lang", "en"),
-                    description=desc.get("description", ""),
+                    lang=desc.get("lang", "en"),
+                    content=desc.get("content", ""),
                 )
 
         return instance
 
     def to_representation(self, instance):
-        """Convert RegisteredEntity to WalletRelyingParty schema"""
-        primary_id = instance.legal_entity.primary_identifier
-        # Get country code from address, identifier, or supervisory authority
-        country_code = None
-        if instance.legal_entity.physical_address:
-            country_code = instance.legal_entity.physical_address.country_code
-        elif primary_id and primary_id.country_code:
-            country_code = primary_id.country_code
-        elif instance.supervisory_authority:
-            country_code = instance.supervisory_authority.country_code
+        """
+        Convert RegisteredEntity to WalletRelyingParty schema per TS5.
+        Reference: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/  # noqa: E501
+        blob/main/docs/technical-specifications/api/ts5-json-common-rp-data-model.json
+        """
+        # Build identifier array (TS5: array of {identifier, type})
+        identifiers = []
+        if instance.legal_entity.primary_identifier:
+            primary_id = instance.legal_entity.primary_identifier
+            identifiers.append(
+                {
+                    "identifier": primary_id.identifier_value,
+                    "type": primary_id.identifier_type,
+                }
+            )
+        # Add additional identifiers
+        for link in instance.legal_entity.entity_identifiers.exclude(
+            identifier=instance.legal_entity.primary_identifier
+        ):
+            identifiers.append(
+                {
+                    "identifier": link.identifier.identifier_value,
+                    "type": link.identifier.identifier_type,
+                }
+            )
 
+        # Build supervisoryAuthority object (TS5: nested object)
+        supervisory_authority = None
+        if instance.supervisory_authority:
+            sa = instance.supervisory_authority
+            supervisory_authority = {
+                "name": sa.authority_name,
+                "country": sa.country_code,
+            }
+            if sa.email:
+                supervisory_authority["email"] = [sa.email]
+            if sa.phone:
+                supervisory_authority["phone"] = [sa.phone]
+            if sa.info_uri:
+                supervisory_authority["formURI"] = [sa.info_uri]
+
+        # Build intendedUse array (TS5: array with purpose, credentials, claims)
+        intended_use = []
+        for iu in instance.intended_uses.all():
+            # Build purpose array (multilingual)
+            purposes = [
+                {"lang": p.lang, "content": p.content} for p in iu.purposes.all()
+            ]
+
+            # Build credentials array with claims
+            credentials = []
+            for cred_link in iu.credential_links.select_related("credential"):
+                cred = cred_link.credential
+                cred_data = {
+                    "format": cred.format,
+                    "meta": cred.meta,
+                }
+                # Add claims for this credential
+                claims = [
+                    {"path": claim.path, "values": claim.values}
+                    for claim in cred.claims.all()
+                ]
+                if claims:
+                    cred_data["claims"] = claims
+                credentials.append(cred_data)
+
+            # Build privacyPolicy: single Policy object {policyURI, type}
+            privacy_policy = None
+            primary_pp = iu.privacy_policies.filter(is_primary=True).first()
+            if not primary_pp:
+                primary_pp = iu.privacy_policies.first()
+            if primary_pp:
+                privacy_policy = {
+                    "policyURI": primary_pp.policy.policy_uri,
+                    "type": primary_pp.policy.policy_type,
+                }
+
+            intended_use.append(
+                {
+                    "intendedUseIdentifier": iu.intended_use_identifier,
+                    "purpose": purposes,
+                    "credentials": credentials,
+                    "privacyPolicy": privacy_policy,
+                    "createdAt": iu.validity_start.isoformat(),
+                    "revokedAt": (
+                        iu.validity_end.isoformat() if iu.validity_end else None
+                    ),
+                }
+            )
+
+        # Build srvDescription (TS5: array of arrays of MultiLangString)
+        srv_descriptions = list(instance.service_descriptions.all())
+        srv_description = (
+            [[{"lang": d.lang, "content": d.content} for d in srv_descriptions]]
+            if srv_descriptions
+            else None
+        )
+
+        # Build usesIntermediary (TS5: array of full WRP objects)
+        uses_intermediary = [
+            self.to_representation(ui.intermediary)
+            for ui in instance.used_intermediaries.select_related("intermediary")
+        ]
+
+        # Build providesAttestations (TS5: [{format, meta}])
+        provides_attestations = [
+            {"format": pa.credential.format, "meta": pa.credential.meta}
+            for pa in instance.provided_attestations.select_related("credential")
+        ]
+
+        # Build policy list (Provider base: [{policyURI, type}])
+        policy = [
+            {"policyURI": pl.policy.policy_uri, "type": pl.policy.policy_type}
+            for pl in instance.policy_links.select_related("policy")
+        ]
+
+        # TS5 compliant response
         return {
             "id": str(instance.id),
-            "legal_entity_identifier": (
-                primary_id.identifier_value if primary_id else None
-            ),
-            "legal_entity_identifier_type": (
-                primary_id.identifier_type if primary_id else None
-            ),
-            "legal_name": instance.legal_entity.display_name,
-            "trade_name": instance.trade_name,
-            "country_code": country_code,
+            "identifier": identifiers,
+            "legalName": instance.legal_entity.display_name,
+            "tradeName": instance.trade_name,
             "entitlements": [e.entitlement_uri for e in instance.entitlements.all()],
-            "support_uris": [s.support_uri for s in instance.support_uris.all()],
-            "is_psb": instance.is_psb,
-            "is_intermediary": instance.is_intermediary,
-            "registry_uri": instance.registry_uri,
-            "supervisory_authority_name": instance.supervisory_authority.authority_name,
-            "supervisory_authority_country": (
-                instance.supervisory_authority.country_code
+            "intendedUse": intended_use if intended_use else None,
+            "srvDescription": srv_description,
+            "supervisoryAuthority": supervisory_authority,
+            "supportURI": [s.support_uri for s in instance.support_uris.all()],
+            "registryURI": instance.registry_uri or None,
+            "isIntermediary": instance.is_intermediary,
+            "usesIntermediary": uses_intermediary if uses_intermediary else None,
+            "isPSB": instance.is_psb,
+            "providesAttestations": (
+                provides_attestations if provides_attestations else None
             ),
-            "service_descriptions": [
-                {"lang": d.language, "description": d.description}
-                for d in instance.service_descriptions.all()
-            ],
-            "policies": [p.uri for p in instance.policies.all()],
-            "uses_intermediaries": [
-                str(ui.intermediary.id) for ui in instance.used_intermediaries.all()
-            ],
-            "registration_status": instance.registration_status,
-            "created_at": (
-                instance.created_at.isoformat() if instance.created_at else None
-            ),
-            "updated_at": (
-                instance.updated_at.isoformat() if instance.updated_at else None
-            ),
+            "policy": policy if policy else None,
         }
+
+
+# ---------------------------------------------------------------------------
+# TS5 Response Serializers (for Swagger / drf-spectacular schema generation)
+# These mirror the to_representation output of WalletRelyingPartySerializer.
+# ---------------------------------------------------------------------------
+
+
+class _MultiLangStringSerializer(serializers.Serializer):
+    lang = serializers.CharField()
+    content = serializers.CharField()
+
+
+class _IdentifierSerializer(serializers.Serializer):
+    identifier = serializers.CharField()
+    type = serializers.CharField()
+
+
+class _PolicyResponseSerializer(serializers.Serializer):
+    policyURI = serializers.URLField()
+    type = serializers.CharField()
+
+
+class _ClaimResponseSerializer(serializers.Serializer):
+    path = serializers.CharField()
+
+
+class _CredentialResponseSerializer(serializers.Serializer):
+    format = serializers.CharField()
+    meta = serializers.JSONField()
+    claims = _ClaimResponseSerializer(many=True, required=False)
+
+
+class _IntendedUseResponseSerializer(serializers.Serializer):
+    intendedUseIdentifier = serializers.CharField()
+    purpose = _MultiLangStringSerializer(many=True)
+    credentials = _CredentialResponseSerializer(many=True)
+    privacyPolicy = _PolicyResponseSerializer(allow_null=True, required=False)
+    createdAt = serializers.CharField()
+    revokedAt = serializers.CharField(allow_null=True)
+
+
+class _SupervisoryAuthorityResponseSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    country = serializers.CharField()
+    email = serializers.ListField(child=serializers.CharField(), required=False)
+    phone = serializers.ListField(child=serializers.CharField(), required=False)
+    formURI = serializers.ListField(child=serializers.URLField(), required=False)
+
+
+class _ProvidedAttestationResponseSerializer(serializers.Serializer):
+    format = serializers.CharField()
+    meta = serializers.JSONField()
+
+
+class WalletRelyingPartyResponseSerializer(serializers.Serializer):
+    """Read-only serializer matching WalletRelyingPartySerializer.to_representation output."""  # noqa: E501
+
+    id = serializers.UUIDField()
+    identifier = _IdentifierSerializer(many=True)
+    legalName = serializers.CharField()
+    tradeName = serializers.CharField(allow_null=True)
+    entitlements = serializers.ListField(child=serializers.CharField())
+    intendedUse = _IntendedUseResponseSerializer(many=True, allow_null=True)
+    srvDescription = serializers.ListField(
+        child=_MultiLangStringSerializer(many=True), allow_null=True
+    )
+    supervisoryAuthority = _SupervisoryAuthorityResponseSerializer(allow_null=True)
+    supportURI = serializers.ListField(child=serializers.CharField())
+    registryURI = serializers.URLField(allow_null=True)
+    isIntermediary = serializers.BooleanField()
+    usesIntermediary = serializers.ListField(
+        child=serializers.DictField(), allow_null=True
+    )
+    isPSB = serializers.BooleanField()
+    providesAttestations = _ProvidedAttestationResponseSerializer(
+        many=True, allow_null=True
+    )
+    policy = _PolicyResponseSerializer(many=True, allow_null=True)
