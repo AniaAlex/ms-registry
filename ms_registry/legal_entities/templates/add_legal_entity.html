@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container">
     <h1>Add New Legal Entity</h1>
-    
+
     {% if errors %}
     <div class="alert alert-danger">
         <h4>Please correct the errors below:</h4>
@@ -18,177 +18,196 @@
         </ul>
     </div>
     {% endif %}
-    
+
     <form method="post" action="" id="legal-entity-form">
         {% csrf_token %}
-        
+
         <fieldset>
             <legend>Entity Type</legend>
-            
+
             <div class="form-group">
                 <label for="entity_type">Entity Type *</label>
                 <select name="entity_type" id="entity_type" class="form-control" required>
                     <option value="">-- Select Type --</option>
                     {% for value, label in entity_types %}
-                    <option value="{{ value }}">{{ label }}</option>
+                    <option value="{{ value }}" {% if form_data.entity_type == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
         </fieldset>
-        
+
         <!-- Legal Person Fields -->
         <fieldset id="legal-person-fields" style="display: none;">
             <legend>Legal Person Information</legend>
-            
+
             <div class="form-group">
                 <label for="legal_name">Legal Name *</label>
-                <input type="text" name="legal_name" id="legal_name" class="form-control" 
-                       placeholder="Official registered name of the organization">
+                <input type="text" name="legal_name" id="legal_name" class="form-control"
+                       placeholder="Official registered name of the organization"
+                       value="{{ form_data.legal_name|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="legal_form">Legal Form</label>
                 <input type="text" name="legal_form" id="legal_form" class="form-control"
-                       placeholder="e.g., LLC, GmbH, AB, Ltd">
+                       placeholder="e.g., LLC, GmbH, AB, Ltd"
+                       value="{{ form_data.legal_form|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="legal_form_uri">Legal Form URI</label>
                 <input type="url" name="legal_form_uri" id="legal_form_uri" class="form-control"
-                       placeholder="https://example.com/legal-forms/llc">
+                       placeholder="https://example.com/legal-forms/llc"
+                       value="{{ form_data.legal_form_uri|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="registration_date">Registration Date</label>
-                <input type="date" name="registration_date" id="registration_date" class="form-control">
+                <input type="date" name="registration_date" id="registration_date" class="form-control"
+                       value="{{ form_data.registration_date|default:'' }}">
             </div>
         </fieldset>
-        
+
         <!-- Natural Person Fields -->
         <fieldset id="natural-person-fields" style="display: none;">
             <legend>Natural Person Information</legend>
-            
+
             <div class="form-group">
                 <label for="given_name">Given Name *</label>
                 <input type="text" name="given_name" id="given_name" class="form-control"
-                       placeholder="First name">
+                       placeholder="First name"
+                       value="{{ form_data.given_name|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="family_name">Family Name *</label>
                 <input type="text" name="family_name" id="family_name" class="form-control"
-                       placeholder="Last name">
+                       placeholder="Last name"
+                       value="{{ form_data.family_name|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="date_of_birth">Date of Birth</label>
-                <input type="date" name="date_of_birth" id="date_of_birth" class="form-control">
+                <input type="date" name="date_of_birth" id="date_of_birth" class="form-control"
+                       value="{{ form_data.date_of_birth|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="nationality">Nationality</label>
                 <input type="text" name="nationality" id="nationality" class="form-control" maxlength="2"
-                       placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE, FR)">
+                       placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE, FR)"
+                       value="{{ form_data.nationality|default:'' }}">
             </div>
         </fieldset>
-        
+
         <!-- Physical Address -->
         <fieldset>
             <legend>Physical Address</legend>
-            
+
             <div class="form-group">
                 <label for="street_address">Street Address</label>
                 <input type="text" name="street_address" id="street_address" class="form-control"
-                       placeholder="Street name and number">
+                       placeholder="Street name and number"
+                       value="{{ form_data.street_address|default:'' }}">
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group half">
                     <label for="locality">City/Town</label>
                     <input type="text" name="locality" id="locality" class="form-control"
-                           placeholder="City">
+                           placeholder="City"
+                           value="{{ form_data.locality|default:'' }}">
                 </div>
-                
+
                 <div class="form-group half">
                     <label for="region">State/Province</label>
                     <input type="text" name="region" id="region" class="form-control"
-                           placeholder="State or Province">
+                           placeholder="State or Province"
+                           value="{{ form_data.region|default:'' }}">
                 </div>
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group half">
                     <label for="postal_code">Postal Code</label>
                     <input type="text" name="postal_code" id="postal_code" class="form-control"
-                           placeholder="Postal/ZIP code">
+                           placeholder="Postal/ZIP code"
+                           value="{{ form_data.postal_code|default:'' }}">
                 </div>
-                
+
                 <div class="form-group half">
                     <label for="country_code">Country Code *</label>
-                    <input type="text" name="country_code" id="country_code" class="form-control" 
-                           maxlength="2" required placeholder="ISO 3166-1 alpha-2 (e.g., SE)">
+                    <input type="text" name="country_code" id="country_code" class="form-control"
+                           maxlength="2" required placeholder="ISO 3166-1 alpha-2 (e.g., SE)"
+                           value="{{ form_data.country_code|default:'' }}">
                 </div>
             </div>
         </fieldset>
-        
+
         <!-- Primary Identifier -->
         <fieldset>
             <legend>Primary Identifier</legend>
-            
+
             <div class="form-group">
                 <label for="identifier_type">Identifier Type</label>
                 <select name="identifier_type" id="identifier_type" class="form-control">
                     <option value="">-- Select Type --</option>
                     {% for value, label in identifier_types %}
-                    <option value="{{ value }}">{{ label }}</option>
+                    <option value="{{ value }}" {% if form_data.identifier_type == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
-            
+
             <div class="form-group">
                 <label for="identifier_value">Identifier Value</label>
                 <input type="text" name="identifier_value" id="identifier_value" class="form-control"
-                       placeholder="The identifier value (e.g., VAT number, LEI)">
+                       placeholder="The identifier value (e.g., VAT number, LEI)"
+                       value="{{ form_data.identifier_value|default:'' }}">
             </div>
-            
+
             <div class="form-row">
                 <div class="form-group half">
                     <label for="issuing_authority">Issuing Authority</label>
                     <input type="text" name="issuing_authority" id="issuing_authority" class="form-control"
-                           placeholder="Authority that issued the identifier">
+                           placeholder="Authority that issued the identifier"
+                           value="{{ form_data.issuing_authority|default:'' }}">
                 </div>
-                
+
                 <div class="form-group half">
                     <label for="identifier_country_code">Identifier Country</label>
-                    <input type="text" name="identifier_country_code" id="identifier_country_code" class="form-control" 
-                           maxlength="2" placeholder="ISO 3166-1 alpha-2">
+                    <input type="text" name="identifier_country_code" id="identifier_country_code" class="form-control"
+                           maxlength="2" placeholder="ISO 3166-1 alpha-2"
+                           value="{{ form_data.identifier_country_code|default:'' }}">
                 </div>
             </div>
         </fieldset>
-        
+
         <!-- Contact Information -->
         <fieldset>
             <legend>Contact Information</legend>
-            
+
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" name="email" id="email" class="form-control"
-                       placeholder="contact@example.com">
+                       placeholder="contact@example.com"
+                       value="{{ form_data.email|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="phone">Phone</label>
                 <input type="tel" name="phone" id="phone" class="form-control"
-                       placeholder="+46 8 123 4567">
+                       placeholder="+46 8 123 4567"
+                       value="{{ form_data.phone|default:'' }}">
             </div>
-            
+
             <div class="form-group">
                 <label for="info_uri">Information URI</label>
                 <input type="url" name="info_uri" id="info_uri" class="form-control"
-                       placeholder="https://example.com/about">
+                       placeholder="https://example.com/about"
+                       value="{{ form_data.info_uri|default:'' }}">
             </div>
         </fieldset>
-        
+
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Create Legal Entity</button>
             <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">Cancel</a>
@@ -215,10 +234,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const entityTypeSelect = document.getElementById('entity_type');
     const legalPersonFields = document.getElementById('legal-person-fields');
     const naturalPersonFields = document.getElementById('natural-person-fields');
-    
+
     function toggleFields() {
         const entityType = entityTypeSelect.value;
-        
+
         if (entityType === 'legal_person') {
             legalPersonFields.style.display = 'block';
             naturalPersonFields.style.display = 'none';
@@ -238,9 +257,9 @@ document.addEventListener('DOMContentLoaded', function() {
             naturalPersonFields.style.display = 'none';
         }
     }
-    
+
     entityTypeSelect.addEventListener('change', toggleFields);
-    
+
     // Initial state
     toggleFields();
 });
