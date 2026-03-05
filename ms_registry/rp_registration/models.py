@@ -1,4 +1,6 @@
 """
+Legacy version, this models to be ignored in any flows
+
 EUDI Wallet Registered Entity Registration - Django Models
 Based on:
   - Trust Infrastructure Schema (WEBUILD WP4)
