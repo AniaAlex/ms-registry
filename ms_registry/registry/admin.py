@@ -19,29 +19,29 @@ from .models import (
 
 class EntitySupportURIInline(admin.TabularInline):
     model = EntitySupportURI
-    extra = 1
+    extra = 0
 
 
 class EntityEntitlementInline(admin.TabularInline):
     model = EntityEntitlement
-    extra = 1
+    extra = 0
 
 
 class EntityServiceDescriptionInline(admin.TabularInline):
     model = EntityServiceDescription
-    extra = 1
+    extra = 0
 
 
 class RegisteredEntityPolicyInline(admin.TabularInline):
     model = RegisteredEntityPolicy
-    extra = 1
+    extra = 0
     autocomplete_fields = ["policy"]
 
 
 class EntityUsesIntermediaryInline(admin.TabularInline):
     model = EntityUsesIntermediary
     fk_name = "registered_entity"
-    extra = 1
+    extra = 0
     autocomplete_fields = ["intermediary"]
 
 
@@ -52,7 +52,7 @@ class EntityUsesIntermediaryInline(admin.TabularInline):
 
 class IntendedUseInline(admin.TabularInline):
     model = IntendedUse
-    extra = 1
+    extra = 0
     show_change_link = True
 
 
@@ -60,7 +60,7 @@ class ProvidesAttestationsInline(admin.TabularInline):
     """Inline for attestations provided by issuers"""
 
     model = EntityProvidesAttestation
-    extra = 1
+    extra = 0
     autocomplete_fields = ["credential"]
     verbose_name = "Provided Attestation"
     verbose_name_plural = "Provided Attestations (for Issuers)"
