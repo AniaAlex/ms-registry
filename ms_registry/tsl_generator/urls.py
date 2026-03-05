@@ -52,4 +52,10 @@ urlpatterns = [
         views.TSLSchemeXMLView.as_view(),
         name="scheme-xml",
     ),
+    # XML endpoint - returns XML for default active scheme (no ID needed)
+    path(
+        "SE-TL.xml",
+        views.TSLXMLView.as_view(),
+        name="tsl-xml",
+    ),
 ]

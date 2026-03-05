@@ -152,6 +152,35 @@ class TSLSchemeXMLView(generics.RetrieveAPIView):
         return HttpResponse(xml_content, content_type="application/xml")
 
 
+class TSLXMLView(generics.GenericAPIView):
+    """
+    Return the ETSI TS 119612 compliant XML for the default active TSL Scheme.
+
+    GET /api/tsl/xml/ - Returns XML for the first active scheme
+    GET /api/tsl/xml/?download=true - Returns XML as downloadable file
+    """
+
+    permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+        scheme = TSLScheme.objects.filter(is_active=True).first()
+        if not scheme:
+            return HttpResponse(
+                "No active TSL Scheme found", status=404, content_type="text/plain"
+            )
+
+        xml_content = generate_tsl_xml_etsi_format(scheme)
+
+        # Check if download is requested
+        if request.query_params.get("download", "").lower() in ("true", "1", "yes"):
+            response = HttpResponse(xml_content, content_type="application/xml")
+            filename = f"tsl-{scheme.territory}-{scheme.sequence_number}.xml"
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        return HttpResponse(xml_content, content_type="application/xml")
+
+
 # =============================================================================
 # Trust Service Views
 # =============================================================================
