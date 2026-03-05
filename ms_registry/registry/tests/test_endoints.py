@@ -688,7 +688,7 @@ class WRPFilterAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertTrue(response.data[0]["is_intermediary"])
+        self.assertTrue(response.data[0]["isIntermediary"])
 
     def test_filter_by_isintermediary_false_success(self):
         """Test filtering WRP by isintermediary=false returns non-intermediaries"""
@@ -698,7 +698,7 @@ class WRPFilterAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
         for entity in response.data:
-            self.assertFalse(entity["is_intermediary"])
+            self.assertFalse(entity["isIntermediary"])
 
     def test_filter_by_isintermediary_1_success(self):
         """Test filtering WRP by isintermediary=1 returns intermediaries"""
@@ -746,7 +746,7 @@ class WRPFilterAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertTrue(response.data[0]["is_intermediary"])
+        self.assertTrue(response.data[0]["isIntermediary"])
 
     def test_combined_filter_entitlement_and_isintermediary_false(self):
         """Test combining entitlement and isintermediary=false filters"""
@@ -761,7 +761,7 @@ class WRPFilterAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertFalse(response.data[0]["is_intermediary"])
+        self.assertFalse(response.data[0]["isIntermediary"])
 
     def test_combined_filter_no_match(self):
         """Test combined filters that match no entities"""
