@@ -5,6 +5,7 @@ from legal_entities.models import LegalEntity
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from . import models, serializers
 
@@ -469,3 +470,44 @@ class WalletRelyingPartyDetailView(generics.RetrieveAPIView):
             serializer.to_representation(instance),
             status=status.HTTP_200_OK,
         )
+
+
+# =============================================================================
+# JWKS endpoint
+# =============================================================================
+
+
+class JWKSView(APIView):
+    """
+    /.well-known/jwks.json
+
+    Publishes the registrar's public signing key in JWK Set format (RFC 7517).
+    Consumers (WRPAC/WRPRC providers) use this to verify JWS-signed responses.
+
+    TODO: Replace the placeholder key with the real registrar public key.
+          The corresponding private key should be stored in Hiera (eyaml-encrypted)
+          and injected via REGISTRY_SIGNING_KEY env var.
+    """
+
+    permission_classes = []
+    authentication_classes = []
+
+    # Placeholder EC P-256 public key (fake - for development only).
+    # Replace x, y, and kid before pilot go-live.
+    _PLACEHOLDER_JWKS = {
+        "keys": [
+            {
+                "kty": "EC",
+                "crv": "P-256",
+                "use": "sig",
+                "alg": "ES256",
+                "kid": "ms-registry-signing-key-v1",
+                # Coordinates from RFC 7517 Appendix A example — NOT a real key
+                "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
+            }
+        ]
+    }
+
+    def get(self, request, *args, **kwargs):
+        return Response(self._PLACEHOLDER_JWKS, status=status.HTTP_200_OK)

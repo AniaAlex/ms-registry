@@ -10,8 +10,19 @@
 
 
 
+
 -------- 18-02-2026 ----
 
 1. How many registreries do we have? One central or multiple depending on the type f entity? https://github.com/webuild-consortium/wp4-trust-group/issues/1
+
+
+
+
+--------06-03-2026----
+
+1. Identity proofing: Legal and natural person(BankID/Freja ID integration)
+
+2. Registration certificate from the attributes 
+https://www.etsi.org/deliver/etsi_ts/119400_119499/119475/01.01.01_60/ts_119475v010101p.pdf
 
 

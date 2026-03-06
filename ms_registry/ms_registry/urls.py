@@ -13,10 +13,11 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
-from registry.views import HomeView
+from registry.views import HomeView, JWKSView
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
+    path(".well-known/jwks.json", JWKSView.as_view(), name="jwks"),
     path("admin/", admin.site.urls),
     path("api/registry/", include("registry.urls", namespace="registry")),
     path(
