@@ -1,7 +1,8 @@
-from core.models import EntitlementType
+from core.models import EntitlementType, EntityType, IdentifierType
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
+from legal_entities.serializers import LegalEntityCreateSerializer
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
@@ -39,29 +40,85 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
     queryset = models.RegisteredEntity.objects.all()
     renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
 
+    def get_form_context(
+        self,
+        errors=None,
+        legal_entity_errors=None,
+        le_form_data=None,
+        new_legal_entity_id=None,
+    ):
+        """Common context for the registration form"""
+        return {
+            "serializer": self.get_serializer(),
+            "errors": errors,
+            "legal_entity_errors": legal_entity_errors,
+            "le_form_data": le_form_data or {},
+            "new_legal_entity_id": new_legal_entity_id,
+            "legal_entities": LegalEntity.objects.all(),
+            "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
+            "entity_roles": models.RegisteredEntity._meta.get_field(
+                "entity_role"
+            ).choices,
+            "entitlement_types": EntitlementType.choices,
+            "entity_types": EntityType.choices,
+            "identifier_types": IdentifierType.choices,
+        }
+
     def get(self, request, *args, **kwargs):
         # If HTML is requested and 'form' param present, show the registration form
         if request.accepted_renderer.format == "html":
             return Response(
-                {
-                    "serializer": self.get_serializer(),
-                    "errors": None,
-                    "legal_entities": LegalEntity.objects.all(),
-                    "supervisory_authorities": (
-                        models.SupervisoryAuthority.objects.all()
-                    ),
-                    "entity_roles": models.RegisteredEntity._meta.get_field(
-                        "entity_role"
-                    ).choices,
-                    "entitlement_types": EntitlementType.choices,
-                },
+                self.get_form_context(),
                 template_name="register_entity.html",
             )
         # Otherwise return JSON list
         return self.list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        # Check if we need to create a new legal entity first
+        create_new_legal_entity = request.data.get("create_new_legal_entity") == "true"
+        new_legal_entity_id = None
+
+        if create_new_legal_entity and request.accepted_renderer.format == "html":
+            # Extract legal entity data from prefixed fields
+            le_data = {
+                "entity_type": request.data.get("le_entity_type"),
+                "legal_name": request.data.get("le_legal_name"),
+                "legal_form": request.data.get("le_legal_form"),
+                "registration_date": request.data.get("le_registration_date") or None,
+                "given_name": request.data.get("le_given_name"),
+                "family_name": request.data.get("le_family_name"),
+                "nationality": request.data.get("le_nationality"),
+                "street_address": request.data.get("le_street_address"),
+                "locality": request.data.get("le_locality"),
+                "country_code": request.data.get("le_country_code"),
+                "identifier_type": request.data.get("le_identifier_type"),
+                "identifier_value": request.data.get("le_identifier_value"),
+                "email": request.data.get("le_email"),
+            }
+
+            le_serializer = LegalEntityCreateSerializer(data=le_data)
+            if not le_serializer.is_valid():
+                return Response(
+                    self.get_form_context(
+                        legal_entity_errors=le_serializer.errors,
+                        le_form_data=le_data,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                    template_name="register_entity.html",
+                )
+
+            # Create the legal entity
+            legal_entity = le_serializer.save()
+            new_legal_entity_id = str(legal_entity.id)
+
+            # Update request data to use the new legal entity
+            request_data = request.data.copy()
+            request_data["legal_entity"] = new_legal_entity_id
+        else:
+            request_data = request.data
+
+        serializer = self.get_serializer(data=request_data)
         if not serializer.is_valid():
             # HTML form submission - re-render form with errors
             if (
@@ -69,18 +126,10 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                 and request.accepted_renderer.format == "html"
             ):
                 return Response(
-                    {
-                        "serializer": serializer,
-                        "errors": serializer.errors,
-                        "legal_entities": LegalEntity.objects.all(),
-                        "supervisory_authorities": (
-                            models.SupervisoryAuthority.objects.all()
-                        ),
-                        "entity_roles": models.RegisteredEntity._meta.get_field(
-                            "entity_role"
-                        ).choices,
-                        "entitlement_types": EntitlementType.choices,
-                    },
+                    self.get_form_context(
+                        errors=serializer.errors,
+                        new_legal_entity_id=new_legal_entity_id,
+                    ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
                 )

@@ -19,6 +19,19 @@
         </ul>
     </div>
     {% endif %}
+
+    {% if legal_entity_errors %}
+    <div class="alert alert-danger">
+        <h4>Legal Entity Errors:</h4>
+        <ul>
+            {% for field, field_errors in legal_entity_errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     
     <form method="post" action="">
         {% csrf_token %}
@@ -42,18 +55,134 @@
             <div class="form-group">
                 <label for="legal_entity">Legal Entity *</label>
                 <div class="input-with-action">
-                    <select name="legal_entity" id="legal_entity" class="form-control" required>
+                    <select name="legal_entity" id="legal_entity" class="form-control">
                         <option value="">-- Select Legal Entity --</option>
                         {% for entity in legal_entities %}
                         <option value="{{ entity.id }}"
-                            {% if serializer.data.legal_entity == entity.id %}selected{% endif %}>
+                            {% if serializer.data.legal_entity == entity.id or new_legal_entity_id == entity.id|stringformat:"s" %}selected{% endif %}>
                             {{ entity }}
                         </option>
                         {% endfor %}
                     </select>
-                    <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                    <button type="button" class="btn btn-sm btn-outline" id="toggle-new-entity-btn" title="Add new legal entity">+ Add New</button>
                 </div>
-                <small class="form-help">Don't see your entity? <a href="{% url 'legal_entities:legal-entity-add-form' %}">Create a new legal entity</a> first.</small>
+                <small class="form-help">Select an existing entity or create a new one below.</small>
+            </div>
+
+            <!-- Inline Legal Entity Creation Form -->
+            <div id="new-legal-entity-section" class="nested-form" style="display: none;">
+                <div class="nested-form-header">
+                    <h3>Create New Legal Entity</h3>
+                    <button type="button" class="btn btn-sm btn-text" id="close-new-entity-btn">&times; Close</button>
+                </div>
+
+                <input type="hidden" name="create_new_legal_entity" id="create_new_legal_entity" value="">
+
+                <div class="form-group">
+                    <label for="le_entity_type">Entity Type *</label>
+                    <select name="le_entity_type" id="le_entity_type" class="form-control">
+                        <option value="">-- Select Type --</option>
+                        {% for value, label in entity_types %}
+                        <option value="{{ value }}" {% if le_form_data.entity_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Legal Person Fields -->
+                <div id="le-legal-person-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="le_legal_name">Legal Name *</label>
+                        <input type="text" name="le_legal_name" id="le_legal_name" class="form-control"
+                               placeholder="Official registered name of the organization"
+                               value="{{ le_form_data.legal_name|default:'' }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="le_legal_form">Legal Form</label>
+                        <input type="text" name="le_legal_form" id="le_legal_form" class="form-control"
+                               placeholder="e.g., LLC, GmbH, AB, Ltd"
+                               value="{{ le_form_data.legal_form|default:'' }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="le_registration_date">Registration Date</label>
+                        <input type="date" name="le_registration_date" id="le_registration_date" class="form-control"
+                               value="{{ le_form_data.registration_date|default:'' }}">
+                    </div>
+                </div>
+
+                <!-- Natural Person Fields -->
+                <div id="le-natural-person-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="le_given_name">Given Name *</label>
+                        <input type="text" name="le_given_name" id="le_given_name" class="form-control"
+                               placeholder="First name"
+                               value="{{ le_form_data.given_name|default:'' }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="le_family_name">Family Name *</label>
+                        <input type="text" name="le_family_name" id="le_family_name" class="form-control"
+                               placeholder="Last name"
+                               value="{{ le_form_data.family_name|default:'' }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="le_nationality">Nationality</label>
+                        <input type="text" name="le_nationality" id="le_nationality" class="form-control" maxlength="2"
+                               placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE)"
+                               value="{{ le_form_data.nationality|default:'' }}">
+                    </div>
+                </div>
+
+                <!-- Physical Address -->
+                <div class="form-group">
+                    <label for="le_street_address">Street Address</label>
+                    <input type="text" name="le_street_address" id="le_street_address" class="form-control"
+                           placeholder="Street name and number"
+                           value="{{ le_form_data.street_address|default:'' }}">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="le_locality">City/Town</label>
+                        <input type="text" name="le_locality" id="le_locality" class="form-control"
+                               placeholder="City"
+                               value="{{ le_form_data.locality|default:'' }}">
+                    </div>
+                    <div class="form-group half">
+                        <label for="le_country_code">Country Code *</label>
+                        <input type="text" name="le_country_code" id="le_country_code" class="form-control"
+                               maxlength="2" placeholder="ISO 3166-1 alpha-2 (e.g., SE)"
+                               value="{{ le_form_data.country_code|default:'' }}">
+                    </div>
+                </div>
+
+                <!-- Primary Identifier -->
+                <div class="form-group">
+                    <label for="le_identifier_type">Identifier Type</label>
+                    <select name="le_identifier_type" id="le_identifier_type" class="form-control">
+                        <option value="">-- Select Type --</option>
+                        {% for value, label in identifier_types %}
+                        <option value="{{ value }}" {% if le_form_data.identifier_type == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="le_identifier_value">Identifier Value</label>
+                    <input type="text" name="le_identifier_value" id="le_identifier_value" class="form-control"
+                           placeholder="The identifier value (e.g., VAT number, LEI)"
+                           value="{{ le_form_data.identifier_value|default:'' }}">
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-group">
+                    <label for="le_email">Email</label>
+                    <input type="email" name="le_email" id="le_email" class="form-control"
+                           placeholder="contact@example.com"
+                           value="{{ le_form_data.email|default:'' }}">
+                </div>
             </div>
             
             <div class="form-group">
@@ -131,4 +260,112 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nested-form {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
+    .nested-form-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .nested-form-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+    }
+    .btn-text {
+        background: none;
+        border: none;
+        color: #6c757d;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+    .btn-text:hover {
+        color: #343a40;
+    }
+    .form-row {
+        display: flex;
+        gap: 1rem;
+    }
+    .form-group.half {
+        flex: 1;
+    }
+    .input-with-action {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    .input-with-action select {
+        flex: 1;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('toggle-new-entity-btn');
+    const closeBtn = document.getElementById('close-new-entity-btn');
+    const newEntitySection = document.getElementById('new-legal-entity-section');
+    const legalEntitySelect = document.getElementById('legal_entity');
+    const createNewField = document.getElementById('create_new_legal_entity');
+    
+    const entityTypeSelect = document.getElementById('le_entity_type');
+    const legalPersonFields = document.getElementById('le-legal-person-fields');
+    const naturalPersonFields = document.getElementById('le-natural-person-fields');
+
+    function showNewEntityForm() {
+        newEntitySection.style.display = 'block';
+        createNewField.value = 'true';
+        legalEntitySelect.removeAttribute('required');
+        toggleBtn.style.display = 'none';
+    }
+
+    function hideNewEntityForm() {
+        newEntitySection.style.display = 'none';
+        createNewField.value = '';
+        legalEntitySelect.setAttribute('required', 'required');
+        toggleBtn.style.display = 'inline-block';
+    }
+
+    toggleBtn.addEventListener('click', showNewEntityForm);
+    closeBtn.addEventListener('click', hideNewEntityForm);
+
+    // Toggle legal/natural person fields
+    function toggleEntityTypeFields() {
+        const entityType = entityTypeSelect.value;
+
+        if (entityType === 'legal_person') {
+            legalPersonFields.style.display = 'block';
+            naturalPersonFields.style.display = 'none';
+        } else if (entityType === 'natural_person') {
+            legalPersonFields.style.display = 'none';
+            naturalPersonFields.style.display = 'block';
+        } else {
+            legalPersonFields.style.display = 'none';
+            naturalPersonFields.style.display = 'none';
+        }
+    }
+
+    entityTypeSelect.addEventListener('change', toggleEntityTypeFields);
+    toggleEntityTypeFields();
+
+    // If there were legal entity errors, show the form
+    {% if legal_entity_errors or le_form_data %}
+    showNewEntityForm();
+    {% endif %}
+});
+</script>
 {% endblock %}
