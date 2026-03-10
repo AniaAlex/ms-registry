@@ -219,6 +219,177 @@ eIDAS Regulation (legal mandate)
 
 ---
 
+## Who Issues the PID Provider Certificate
+
+### Role of the PID Provider
+
+A PID Provider **issues** credentials (Personal Identification Data) to citizens. It does **not** request
+credentials from Wallets. It is on the issuer side, not the relying party side.
+
+| | Relying Party (RP) | PID Provider |
+|---|---|---|
+| Role | Requests credentials from Wallet | Issues credentials to Wallet |
+| Gets WRPAC? | Yes | No |
+| Gets WRPRC? | Yes | No |
+| Certificate purpose | Authenticate presentation requests | Sign PIDs issued to citizens |
+| Appears in TSL? | No | Yes — as `TrustServiceProvider` under `IdV` service type |
+| Registered in ms-registry? | Yes — `RegisteredEntity` (role=`RELYING_PARTY`) | Yes — `RegisteredEntity` (role=`PID_PROVIDER`) |
+
+### What Certificate Does a PID Provider Hold?
+
+An end-entity electronic seal certificate containing the `id-etsi-qct-pid` QCStatement OID
+(`0.4.0.194126.1.1`), per ETSI TS 119 412-6. This certificate is used to sign PIDs issued to citizens.
+
+### Who Issues It — The Open Question
+
+**ETSI TS 119 412-6** defines the `id-etsi-qct-pid` OID and requires it in the certificate.
+It says **nothing** about who issues the certificate.
+
+**ETSI TS 119 475** defines WRPAC/WRPRC profiles. It does **not** define a PID Issuer CA profile at all.
+
+There is no dedicated PID Issuer CA profile in any ETSI standard.
+
+### Two Practical Options
+
+| Option | Issuer | Basis |
+|---|---|---|
+| **A — National QTSP** | e.g. Telia CA, Nexus | Issues qualified seal cert, injects `id-etsi-qct-pid` OID — X.509 path, nothing forbids this |
+| **B — Federation Trust Anchor** | National or EU federation operator | Issues Entity Statement (JWT) carrying `id-etsi-qct-pid` — EUDI ARF preferred model |
+
+Option B is preferred by the EUDI ARF because the Federation Trust Anchor already knows
+which entities are authorised PID Providers (it controls federation onboarding). Adding a
+separate CA would be redundant. This is also the conclusion from IT-Wallet Issue #1055:
+https://github.com/italia/eid-wallet-it-docs/issues/1055
+
+### Accuracy Caveat
+
+| Claim | Accuracy |
+|---|---|
+| `id-etsi-qct-pid` OID is required | Correct — ETSI TS 119 412-6 |
+| Federation Trust Anchor issues it | **Interpretation** — from Issue #1055 / EUDI ARF, not universal law |
+| No separate PID Issuer CA profile exists | Correct — no ETSI profile defines one |
+
+A Member State **could** still issue an X.509 certificate with the `id-etsi-qct-pid` OID via a
+national QTSP — nothing in the standards forbids it. The federation path is the EUDI ARF preferred
+model but not the only compliant approach.
+
+### Recommendation for ms-registry UC4
+
+Support both paths:
+- Federation Trust Anchor API client (ARF preferred)
+- National QTSP / CA fallback (X.509 with `id-etsi-qct-pid` OID)
+
+---
+
+## Can WRPAC/WRPRC Be Issued by the Federation Trust Anchor?
+
+**No.** WRPAC and WRPRC are X.509 certificates only. The Federation Trust Anchor path does not apply to them.
+
+| | WRPAC / WRPRC | PID Provider cert |
+|---|---|---|
+| Format | X.509 v3 (RFC 5280) | X.509 or Entity Statement (JWT) |
+| Issuer | National QTSP (TSL-listed) | QTSP or Federation Trust Anchor |
+| Standard | ETSI TS 119 475 | ETSI TS 119 412-6 |
+| Federation TA can issue? | **No** | Yes (ARF preferred) |
+
+ETSI TS 119 475 explicitly defines WRPAC and WRPRC as X.509 certificate profiles. The standard mandates:
+- The issuer must be a TSP **listed in the national TSL**
+- The certificate must follow the X.509 v3 profile (Subject DN, Key Usage, EKU extensions)
+
+A Federation Trust Anchor issues **Entity Statements** (JWTs) — a completely different format and
+trust model. There is no WRPAC/WRPRC profile defined for JWT/OpenID Federation.
+
+The Federation Trust Anchor enters the picture only for **issuers** (PID Providers, QEAA Providers)
+— entities that issue credentials to citizens. RPs (which consume credentials) use the X.509/TSL
+path exclusively.
+
+---
+
+## How the PID Signing Certificate Ties Together
+
+The certificate issued to the PID Provider (by QTSP or Federation TA) is **the same certificate**
+that signs credentials issued to citizens, AND the same certificate published in the TSL.
+
+```
+QTSP (or Federation TA)
+└── issues signing cert to PID Provider (with id-etsi-qct-pid OID)
+    └── PID Provider uses this cert to sign PIDs → citizens
+        └── Citizen Wallet presents PID to Relying Party
+            └── RP verifies PID signature against cert
+                └── RP finds that cert in Swedish TSL
+                    └── RP trusts TSL because PTS signed it
+                        └── RP trusts PTS cert because EC LOTL lists it
+```
+
+The TSL is the **public registry of legitimate signing certs** — it tells a Relying Party which
+certificates are authorised to sign PIDs, without needing to know each issuer in advance.
+
+| Step | What happens |
+|---|---|
+| QTSP/Federation TA issues cert | PID Provider gets signing cert with `id-etsi-qct-pid` |
+| ms-registry publishes TSL | PID Provider's cert appears as `ServiceCertificate` under `IdV` service type |
+| PID Provider signs PID | Uses that same private key to sign the SD-JWT/mdoc |
+| Wallet delivers PID to RP | PID header contains `x5c` with the signing cert |
+| RP verifies | Finds cert in TSL → chain verified → signature verified → trusts PID claims |
+
+---
+
+## Why Can the Federation Trust Anchor Issue for PID Providers but Not for RPs?
+
+Because the PID Provider is a **credential issuer**, not a relying party — and the trust model for
+issuers in the EUDI framework runs through the OpenID Federation, not the X.509/TSL path.
+
+The Federation Trust Anchor already controls who is an authorised PID Provider — it approves them
+during federation onboarding and issues Entity Statements carrying the PID Provider's public key,
+metadata, and `id-etsi-qct-pid` assertion. There is no need for a separate CA to issue an X.509
+certificate saying the same thing — the Federation TA's signature *is* the authorisation.
+
+| | RP (gets WRPAC/WRPRC) | PID Provider (gets pid cert) |
+|---|---|---|
+| What needs to be proven | "This RP is registered and approved to request credentials" | "This entity is authorised to issue PIDs" |
+| Who controls that approval | Member State registry → QTSP | Federation Trust Anchor |
+| Trust mechanism | X.509 chain → national TSL → PTS → LOTL | OpenID Federation chain → Trust Anchor |
+| Format mandated by standard | X.509 v3 — ETSI TS 119 475 is explicit | No format mandated — standard only defines the OID content |
+
+The key difference: **ETSI TS 119 475 explicitly defines an X.509 profile** for WRPAC/WRPRC.
+**ETSI TS 119 412-6 only defines the QCStatement OID content** — it says nothing about format or
+issuer. That gap is what allows the Federation TA path to work for PID Providers.
+
+---
+
+## Can the PID Provider Signing Cert Be Added to the TSL?
+
+Yes — and it **must** be, for Relying Parties to trust it.
+
+The PID Provider's signing cert (qualified seal with `id-etsi-qct-pid`) is published in the TSL
+as a `ServiceCertificate` under the `IdV` service type. That is how an RP knows the cert is legitimate.
+
+There is a subtlety depending on which path was used to issue it:
+
+### Path A — National QTSP issues X.509 cert
+
+Straightforward — the cert is a standard X.509 certificate. It goes directly into the TSL as a
+`ServiceCertificate`. RP extracts it from the PID's `x5c` header, finds it in the TSL, done.
+
+### Path B — Federation Trust Anchor issues Entity Statement (JWT)
+
+More complex. The Entity Statement is a JWT — not an X.509 cert. But the TSL expects X.509
+(`ServiceCertificate` is a DER-encoded certificate element per ETSI TS 119 612).
+
+Two ways this is handled:
+
+| Option | What happens |
+|---|---|
+| **Entity Statement contains an X.509 cert** | Federation TA embeds an X.509 cert in the Entity Statement's `jwks` — that X.509 cert is what gets published in the TSL |
+| **Dual publication** | PID Provider holds both an X.509 cert (for TSL/x5c) and is registered in the federation (for OpenID Federation trust chain) — both exist in parallel |
+
+In practice the EUDI ARF assumes **both trust paths run in parallel** — the TSL (X.509) path for
+credential signature verification, and the OpenID Federation path for metadata/endpoint trust.
+They are not mutually exclusive. Regardless of who issued the cert, the X.509 representation of
+the PID Provider's signing key ends up in the TSL.
+
+---
+
 ## References
 
 - **eIDAS Regulation (EU) No 910/2014** — Legal framework, Art. 17, 20, 22
@@ -230,5 +401,83 @@ eIDAS Regulation (legal mandate)
 - **Commission Implementing Decision (EU) 2015/1505** — TSL technical specifications
 - **EC LOTL** — List of Trusted Lists published by European Commission
 - **PTS** — Post- och telestyrelsen, Swedish TSL Scheme Operator
+- **IT-Wallet Issue #1055** — QCStatement profiles for PID/QEAA/PSB: https://github.com/italia/eid-wallet-it-docs/issues/1055
 - `tsl_generator/` — ms-registry TSL XML generation (unsigned output)
 - `CA_role_certificates_20260310.md` — CA role and certificate types breakdown
+
+
+PID provider 4.5 
+
+https://www.etsi.org/deliver/etsi_ts/119400_119499/11941206/01.01.01_60/ts_11941206v010101p.pdf
+
+
+https://www.etsi.org/deliver/etsi_en/319400_319499/31941205/02.05.01_60/en_31941205v020501p.pdf
+QCS-4.3.5-02: [CONDITIONAL] If this qcStatement is included in the certificate, it shall contain the OID value
+corresponding to the identification used for identity verification of the certificate
+
+id-etsi-qct-pid: OID 0.4.0.194126.1.1 OID arc
+
+---
+
+## What Does the Federation Trust Anchor Actually Issue?
+
+The Federation Trust Anchor issues **Entity Statements** (JWTs) — not X.509 certificates.
+
+An Entity Statement for a PID Provider contains:
+
+```json
+{
+  "iss": "https://trust-anchor.example.eu",
+  "sub": "https://pid-provider.skatteverket.se",
+  "jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "...",
+        "y": "...",
+        "kid": "pid-signing-key-2026"
+      }
+    ]
+  },
+  "metadata": {
+    "openid_credential_issuer": {
+      "credential_issuer": "https://pid-provider.skatteverket.se",
+      "credential_configurations_supported": {}
+    }
+  },
+  "trust_marks": [
+    {
+      "id": "http://uri.etsi.org/TrstSvc/Svctype/PID_Issuer",
+      "trust_mark": "<signed JWT asserting PID Provider status>"
+    }
+  ]
+}
+```
+
+| What it contains | Purpose |
+|---|---|
+| PID Provider's **public key** (`jwks`) | Used to verify PIDs the provider signs |
+| **Endpoints** (issuer URL, credential endpoint) | Wallet knows where to request PID from |
+| **Trust marks** | Asserts the entity is an approved PID Provider |
+| Implicitly carries `id-etsi-qct-pid` assertion | Via trust mark or metadata claim |
+
+The Entity Statement itself is the credential of trust — a JWT signed by the Trust Anchor's
+private key. It does **not** issue an X.509 certificate.
+
+### The Gap with the TSL
+
+The Entity Statement covers the **OpenID Federation trust path** — Wallet discovering and trusting
+the PID Provider's endpoint and key. But the TSL requires an **X.509 cert** (`ServiceCertificate`
+is DER-encoded per ETSI TS 119 612).
+
+This is why two parallel credentials exist for the same PID Provider entity:
+
+| Credential | Issued by | Used for |
+|---|---|---|
+| Entity Statement (JWT) | Federation Trust Anchor | OpenID Federation trust path — Wallet discovers PID Provider endpoint and key |
+| X.509 qualified seal cert | QTSP (or embedded in Entity Statement `jwks`) | TSL publication — RP verifies PID signature via TSL chain |
+
+Both are required. They are not alternatives — they serve different trust paths that run in parallel
+in the EUDI framework.
+
