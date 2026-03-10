@@ -77,6 +77,50 @@ It talks to the Federation Trust Anchor — different endpoint, different protoc
 
 ---
 
+## Caveat: How Strong Is the "Federation Trust Anchor = CA" Claim?
+
+Worth scrutinising — the claim in CA_usecases_20260310.md is stronger than what
+the standards actually mandate.
+
+### What ETSI TS 119 412-6 actually says
+
+ETSI TS 119 412-6 defines the `id-etsi-qct-pid` QCStatement OID and says it must
+appear in the certificate of a PID Provider. It defines the *content* of the
+certificate. It does **not** say who issues it, and does **not** state that the
+Federation Trust Anchor replaces a CA.
+
+### What Issue #1055 actually says
+
+Issue #1055 is an Italian wallet implementation discussion thread — not a normative
+standard. The conclusion there is:
+> There is no dedicated PID Issuer CA profile — so the federation trust chain is
+> the authoritative source.
+
+This is an architectural *interpretation* from one national implementation, not a
+binding EU-wide mandate.
+
+### Accuracy assessment
+
+| Claim | Accuracy |
+|---|---|
+| `id-etsi-qct-pid` OID is required | Correct — ETSI TS 119 412-6 |
+| Federation Trust Anchor issues it | **Interpretation** — from Issue #1055 / ARF, not universal law |
+| No separate PID Issuer CA profile exists | Correct — no ETSI profile defines one |
+
+In practice, a Member State *could* still issue an X.509 certificate with the
+`id-etsi-qct-pid` OID via a national QTSP — nothing in the standards forbids it.
+The federation path is the EUDI ARF preferred model, but it is not the only
+compliant approach.
+
+### Recommendation for UC4 in ms-registry
+
+The UC4 note should be treated as a design preference (EUDI ARF / Italian model),
+not a hard requirement. The implementation should support both paths:
+- Federation Trust Anchor API client (ARF preferred)
+- National QTSP / CA fallback (X.509 with `id-etsi-qct-pid` OID)
+
+---
+
 ## References
 
 - **ETSI TS 119 412-6** — QCStatements in EU certificates (id-etsi-qct-pid, id-etsi-qct-wal)
