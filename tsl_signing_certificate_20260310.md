@@ -481,3 +481,52 @@ This is why two parallel credentials exist for the same PID Provider entity:
 Both are required. They are not alternatives — they serve different trust paths that run in parallel
 in the EUDI framework.
 
+
+
+## definition of the wallet relying parties
+https://eur-lex.europa.eu/eli/reg_impl/2025/848/oj
+
+
+12.
+
+The entitlement or entitlments of the wallet-relying party, that shall be expressed as follows:
+
+(a)
+
+‘Service_Provider’ to express the entitlement of the wallet-relying party as a provider of services;
+
+(b)
+
+‘QEAA_Provider’ to express the entitlement of the wallet-relying party as a qualified trust service provider issuing qualified electronic attestations of attributes;
+
+(c)
+
+‘Non_Q_EAA_Provider’ to express the entitlement of the wallet-relying party as a trust service provider issuing non-qualified electronic attestations of attributes;
+
+(d)
+
+‘PUB_EAA_Provider’ to express the entitlement of the wallet-relying party as a provider of electronic attestations of attributes issued by or on behalf of a public sector body responsible for an authentic source;
+
+(e)
+
+‘PID_Provider’ to express the entitlement of the wallet-relying party as a provider of person identification data;
+
+(f)
+
+‘QCert_for_ESeal_Provider’ to express the entitlement of the wallet-relying party as a qualified trust service provider issuing qualified certificates for electronic seals;
+
+(g)
+
+‘QCert_for_ESig_Provider’ to express the entitlement of the wallet-relying party as a qualified trust service provider issuing qualified certificates for electronic signatures;
+
+(h)
+
+‘rQSigCDs_Provider’ to express the entitlement of the wallet-relying party as a qualified trust service provider providing qualified trust services for the management of a remote qualified electronic signature creation device;
+
+(i)
+
+‘rQSealCDs_Provider’ to express the entitlement of the wallet-relying party as a qualified trust service provider providing qualified trust services for the management of a remote qualified electronic seal creation device;
+
+(j)
+
+‘ESig_ESeal_Creation_Provider’ to express the entitlement of the wallet-relying party as a non-qualified trust service provider providing a non-qualified trust service for remote creation of electronic signatures or electronic seals.
