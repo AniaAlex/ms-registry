@@ -20,6 +20,10 @@ EU Official Journal
 ```
 
 ---
+```
+In OpenID Federation terms specifically, if ms-registry signs JSON responses about entities, it starts to look like an Intermediate that issues Subordinate Entity Statements — signed JWTs asserting facts about registered entities. That is exactly what OpenID Federation intermediates do.
+```
+
 
 ## Level 1 — EU Trust Anchor: LOTL
 
@@ -32,6 +36,74 @@ EU Official Journal
 
 The LOTL is the root of trust for the entire European trust infrastructure.
 A Relying Party trusts a national TSL because the EC's LOTL says that TSL is legitimate.
+
+**Precision: the LOTL is not the trust anchor — the LOTL signing certificate is.**
+
+The trust anchor is the EC's LOTL signing certificate — a public key trusted implicitly via
+out-of-band publication in the EU Official Journal. The LOTL itself is the first *signed
+artifact* in the chain, but it is signed *by* the trust anchor, not identical to it.
+
+```
+EU Official Journal
+└── publishes: EC LOTL signing cert  ← trust anchor (trusted out-of-band)
+      └── EC uses this key to sign the LOTL document
+            └── LOTL lists: national TSL locations + national TSL signing certs
+```
+
+A Wallet or RP bootstraps trust by obtaining the EC LOTL signing cert from the Official
+Journal (or a trusted distribution). Everything else is verified cryptographically from there.
+
+**Concrete example — OJ C 233/01 (2016):**
+
+The actual trust anchor publication is at:
+https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2016.233.01.0001.01.ENG
+
+The LOTL is available at:
+`https://ec.europa.eu/information_society/policy/esignature/trusted-list/tl-mp.xml`
+
+It lists **4 trust anchor certificates** (not one), identified by their digest values:
+
+| Cert | SHA-256 (Base64) | Issued to |
+|---|---|---|
+| 1 | `WcgNzHQpzP2MKxWQ/ohftPbHf3ycu0uCpiyxwn/04kY=` | EC_CNECT (DG CONNECT) — issued by QuoVadis EU CA G2 |
+| 2 | `8bzdEXsVVBc4E6Qhg8VNuX46fhCdCvqY9LzTJnVKA1E=` | EC_DIGIT (DG DIGIT) — issued by QuoVadis EU CA G2 |
+| 3 | `/+p/DtKb6wdz6jsMRym7+ACmw5C2IZXLJw8SpKpi8oQ=` | Pierre Damas (EC official) — Belgian eID |
+| 4 | `97wNFk3sjzZwmr6F/FcCLzsWhHAKgEw2jTQykASQ38s=` | Maarten Ottoy (EC official) — Belgian eID |
+
+Key observations:
+- Certs 1 & 2 are **organisational** electronic seal certs for EC departments
+- Certs 3 & 4 are **personal** signing certs of named EC officials via Belgian eID
+- All 4 are issued by external CAs (QuoVadis, Belgian eID CA) but trusted **not** because
+  of those CA chains — trusted because their **fingerprints appear in the Official Journal**
+- QuoVadis could revoke cert 1 and it would remain a valid trust anchor until the OJ notice is superseded
+- Multiple certs allow signing by different EC signatories and enable rotation without service interruption
+
+**Rotation mechanism:**
+When a cert needs to change, the EC publishes a new OJ notice with new digest values,
+includes the new cert in the LOTL's "secure pointer", and provides a **15-day transition period**
+for relying parties to update. The old and new certs are both valid during this window.
+
+**The EC LOTL signing cert issuer is not a federation subordinate.**
+
+In OpenID Federation, a subordinate is vouched for by a superior. The EC, as the LOTL
+signing cert issuer, sits at the top of both hierarchies — there is no entity above it to
+issue a Subordinate Entity Statement about it. The two models are politically equivalent
+and run in parallel, neither subordinate to the other:
+
+```
+X.509 / TSL                           OpenID Federation
+────────────────────────────          ──────────────────────────────
+EC LOTL signing cert                  EU Federation Trust Anchor
+  (trusted via Official Journal)        (trusted via out-of-band bootstrap)
+        │                                         │
+        ▼                                         ▼
+  PTS (national TSL signing cert)      National Federation Trust Anchor
+        │                                         │
+        ▼                                         ▼
+  QTSPs / ServiceCerts                 Intermediates / issuers
+```
+
+Convergence is political (same governmental authority), not technical.
 
 ---
 
@@ -120,8 +192,107 @@ Relying Party receives PID (SD-JWT) from Citizen Wallet
 | Root anchor | EC LOTL | OpenID Federation Trust Anchor |
 | National anchor | PTS TSL signing cert | National federation operator |
 | Entity trust | ServiceCertificate in TSL | Subordinate Entity Statement |
-| Used for | PID signature verification | RP/Issuer metadata trust |
+| Used for | PID signature verification / RP authentication | RP/Issuer metadata trust |
 | Convergence | Same political authority (Member State + EC) | Same political authority |
+
+### WRPAC and WRPRC — Two Distinct RP Credentials
+
+Relying Parties (verifiers) hold two separate credentials serving different purposes:
+
+| | WRPAC | WRPRC |
+|---|---|---|
+| Full name | Wallet Relying Party Access Certificate | Wallet Relying Party Registration Certificate |
+| Format | X.509 | JWT or CWT (signed with AdES B-B) |
+| Purpose | **Authentication** — proves RP identity when connecting to Wallet | **Policy/transparency** — describes RP's entitlements and data access scope |
+| Shown to | Wallet (TLS/connection layer) | Wallet user (consent screen) |
+| Private key | Under RP's control | N/A — issued by WRPRC provider, no RP key |
+| Multiple per RP? | Yes — one per instance/deployment | One per RP (or per intermediary used) |
+| Issued by | TSP (electronic seal/signature cert issuer) authorized by MS | Provider of WRP registration certs (may be ms-registry) |
+| Content source | National register data | National register data |
+| Standard | ETSI TS 119 475 §4.3 / §5.1 | ETSI TS 119 475 §4.4 / §5.2 |
+
+If no WRPRC is issued, the Wallet retrieves the same information directly from the national
+register (ms-registry). The WRPRC is a signed, portable version of that same register data.
+
+### Trust Anchor for WRPAC Verification
+
+The EC LOTL is the trust anchor for all three verification paths. The Wallet verifies a
+WRPAC by following the same TSL chain it uses for PID verification:
+
+```
+EC LOTL  ← trust anchor (Wallet bootstraps from this)
+  └── Swedish TSL (signed by PTS)
+        └── WRPAC issuer TSP (listed in TSL)
+              └── WRPAC (X.509) issued to RP
+                    └── RP authenticates to Wallet with private key
+```
+
+The EC LOTL is the single root of trust for all three verification paths:
+
+| What is verified | By whom | Chain ends at |
+|---|---|---|
+| WRPAC (RP authentication) | Wallet | EC LOTL → TSL → WRPAC issuer TSP → WRPAC |
+| WRPRC (RP entitlements) | Wallet | EC LOTL → TSL → WRPRC issuer TSP → WRPRC JWT (x5c) |
+| PID signature | Relying Party | EC LOTL → TSL → PID Provider ServiceCert |
+
+### Trust Path Split by Role
+
+Verifiers are **not** OpenID Federation participants. Both WRPAC and WRPRC are anchored
+in the TSL/LOTL chain, not in the OpenID Federation. The federation path applies only to
+issuers (PID Providers, QEAA Providers).
+
+| Entity | Trust path | Credentials |
+|---|---|---|
+| PID Provider, QEAA Provider | OpenID Federation + TSL | Entity Statements (federation) + ServiceCertificate (TSL) |
+| Relying Party (verifier) | TSL only | WRPAC (X.509) + WRPRC (JWT/CWT) — both anchored in TSL |
+
+### Implication for ms-registry
+
+ms-registry is the **national register** — the authoritative source for WRPRC content.
+It can act as the WRPRC issuer directly (signing JWT responses about registered RPs), or
+another authorized TSP can issue WRPRCs based on ms-registry data.
+
+If ms-registry issues WRPRCs (signs JWT responses):
+- It operates on the **verifier/TSL path**, not the federation path
+- Its signing cert must be listed in the national TSL as a WRPRC provider TSP
+- The chain for a WRPRC signed by ms-registry:
+
+```
+EC LOTL
+  └── Swedish TSL (signed by PTS)
+        └── ms-registry listed as WRPRC provider TSP
+              └── ms-registry signs WRPRC (JWT, x5c contains ms-registry cert)
+                    └── Wallet verifies WRPRC → shows RP entitlements to user
+```
+
+If ms-registry also signs JSON for the **federation/issuer path** (Entity Statements about
+PID Providers, QEAA Providers), that is a separate signing key and a separate trust chain:
+
+```
+EU / National Federation Trust Anchor
+  └── Subordinate ES about ms-registry (as federation Intermediate)
+        └── ms-registry signs Entity Statements about issuers
+              └── PID Provider, QEAA Provider
+```
+
+These are two distinct roles, two distinct signing keys, two distinct trust chains — both
+ultimately representing the same governmental authority through different technical mechanisms.
+
+**Open question — who operates the national Federation Trust Anchor?**
+
+The parallel with X.509 would suggest PTS (it signs the TSL, so it would naturally also
+operate or delegate the national federation Trust Anchor). That would produce:
+
+```
+EU Federation Trust Anchor (EC-level)
+  └── PTS as National Federation Trust Anchor
+        └── ms-registry as Intermediate
+              └── Issuers (PID Providers, QEAA Providers)
+```
+
+This is architecturally consistent with the X.509/TSL hierarchy but is **not yet settled**
+in the EUDI ARF. Who operates the national Federation Trust Anchor is a Member State
+implementation decision and may or may not be the same body as the TSL Scheme Operator (PTS).
 
 Both paths are required in the EUDI framework. They operate in parallel and
 ultimately represent the same governmental authority through different technical
@@ -530,3 +701,93 @@ The entitlement or entitlments of the wallet-relying party, that shall be expres
 (j)
 
 ‘ESig_ESeal_Creation_Provider’ to express the entitlement of the wallet-relying party as a non-qualified trust service provider providing a non-qualified trust service for remote creation of electronic signatures or electronic seals.
+
+---
+
+## Intended Use — Examples
+
+**Intended Use** is the declared purpose for which an RP requests specific wallet data.
+Each intended use is a separate registration record with its own identifier, purpose
+statement (shown to the wallet user), data request scope, and privacy policy URL.
+
+An RP can have multiple intended uses — each enforcing GDPR data minimisation independently.
+The WRPRC presented to the wallet user is bound to a specific intended use identifier.
+
+### Key fields per Intended Use
+
+| Field | Description |
+|---|---|
+| `intendedUseIdentifier` | Unique identifier (e.g. `BANK-AB-IU-001`) |
+| `purpose` | Human-readable description shown to wallet user |
+| Credentials requested | Specific credential types and claims |
+| Privacy policy URL | Purpose-specific policy |
+| `validity_start` / `validity_end` | Independent validity per use |
+
+### Examples
+
+**Bank — multiple uses under one registration:**
+
+```
+Bank AB (RegisteredEntity, entitlement: Service_Provider)
+├── IntendedUse: "Account Opening" (KYC)
+│   └── Requests: PID → family_name, given_name, date_of_birth, address
+│
+├── IntendedUse: "Loan Application"
+│   └── Requests: PID → name, DOB + Income Attestation → annual_income, employer
+│
+└── IntendedUse: "ATM Age Check"
+    └── Requests: PID → age_over_18 only
+```
+
+**Hospital (public sector body):**
+
+```
+Regional Hospital (RegisteredEntity, isPSB: true, entitlement: Service_Provider)
+├── IntendedUse: "Patient Registration"
+│   └── Requests: PID (full) + Health Insurance Card
+│
+├── IntendedUse: "Emergency Treatment"
+│   └── Requests: PID → name, DOB + Medical Allergies Attestation
+│
+└── IntendedUse: "Prescription Collection"
+    └── Requests: PID → family_name, given_name, personal_id_number
+```
+
+**University (dual role — issuer + verifier):**
+
+```
+Stockholm University (entitlements: Service_Provider + PUB_EAA_Provider)
+├── providesAttestations: Diploma, Student ID, Enrollment Certificate
+│
+├── IntendedUse: "Student Enrollment" (as verifier)
+│   └── Requests: PID (full) + Secondary School Diploma
+│
+└── IntendedUse: "Library Access" (as verifier)
+    └── Requests: Student ID Attestation (from any university)
+```
+
+**Intermediary acting for multiple end-RPs:**
+
+```
+IDVerify AB (isIntermediary: true, entitlement: Service_Provider)
+├── IntendedUse: "General Age Verification"
+│   └── Requests: PID → age_over_18
+│
+└── IntendedUse: "Full KYC Service"
+    └── Requests: PID (full identity)
+
+End-RPs using this intermediary:
+└── WebShop A, Gaming Site B, Fintech C
+    └── Each gets a separate WRPRC identifying both the final RP and IDVerify AB
+```
+
+### GDPR principles enforced per Intended Use
+
+| Principle | How enforced |
+|---|---|
+| Data minimisation (Art. 5.1c) | Each use requests only the minimum claims needed |
+| Purpose limitation (Art. 5.1b) | Data collected under one use cannot be used for another |
+| Transparency | Wallet displays the specific `purpose` before consent |
+| Independent revocation | One intended use can be revoked without affecting others |
+
+See `use-cases-relying-parties.md` for full implementation details.
