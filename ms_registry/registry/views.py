@@ -530,12 +530,19 @@ class JWKSView(APIView):
     """
     /.well-known/jwks.json
 
-    Publishes the registrar's public signing key in JWK Set format (RFC 7517).
-    Consumers (WRPAC/WRPRC providers) use this to verify JWS-signed responses.
+    Publishes the registrar's public signing keys in JWK Set format (RFC 7517).
+    Aggregates keys from:
+    - Registry signing keys (for signed API responses)
+    - WRPRC signing keys (for Wallet Relying Party Registration Certificates)
 
-    TODO: Replace the placeholder key with the real registrar public key.
-          The corresponding private key should be stored in Hiera (eyaml-encrypted)
-          and injected via REGISTRY_SIGNING_KEY env var.
+    Primary consumers:
+    - **Wallets**: Verify WRPRC signatures before showing RP consent screen
+    - **Other registries**: Cross-border trust verification
+    - **Audit systems**: Validate signed artifacts
+    - **API consumers**: Verify signed registry responses (if enabled)
+
+    Note: Relying Parties (verifiers) typically don't fetch this — they receive
+    WRPRCs from ms-registry and present them to Wallets. The Wallet verifies.
     """
 
     permission_classes = []
@@ -543,20 +550,46 @@ class JWKSView(APIView):
 
     # Placeholder EC P-256 public key (fake - for development only).
     # Replace x, y, and kid before pilot go-live.
-    _PLACEHOLDER_JWKS = {
-        "keys": [
-            {
-                "kty": "EC",
-                "crv": "P-256",
-                "use": "sig",
-                "alg": "ES256",
-                "kid": "ms-registry-signing-key-v1",
-                # Coordinates from RFC 7517 Appendix A example — NOT a real key
-                "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-                "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
-            }
-        ]
+    _PLACEHOLDER_REGISTRY_KEY = {
+        "kty": "EC",
+        "crv": "P-256",
+        "use": "sig",
+        "alg": "ES256",
+        "kid": "ms-registry-signing-key-v1",
+        # Coordinates from RFC 7517 Appendix A example — NOT a real key
+        "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+        "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
     }
 
     def get(self, request, *args, **kwargs):
-        return Response(self._PLACEHOLDER_JWKS, status=status.HTTP_200_OK)
+        keys = []
+
+        # Add registry signing key
+        keys.append(self._PLACEHOLDER_REGISTRY_KEY)
+
+        # Add WRPRC signing keys
+        keys.extend(self._get_wrprc_keys())
+
+        return Response({"keys": keys}, status=status.HTTP_200_OK)
+
+    def _get_wrprc_keys(self):
+        """Get active WRPRC signing keys."""
+        try:
+            from wrprc.models import SigningKey
+
+            wrprc_keys = SigningKey.objects.filter(
+                status__in=[SigningKey.KeyStatus.ACTIVE, SigningKey.KeyStatus.ROTATED]
+            )
+
+            return [
+                {
+                    **key.public_key_jwk,
+                    "kid": key.kid,
+                    "use": "sig",
+                    "alg": key.algorithm,
+                }
+                for key in wrprc_keys
+            ]
+        except Exception:
+            # WRPRC app may not be migrated yet or have no keys
+            return []

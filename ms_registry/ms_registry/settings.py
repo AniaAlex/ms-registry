@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "credentials",
     "certificates",
     "tsl_generator",
+    "wrprc",
     # Legacy app (to be removed after migration)
     "rp_registration",
 ]

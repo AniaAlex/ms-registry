@@ -115,10 +115,7 @@ class IntendedUse(BaseModel):
     intended_use_identifier = models.CharField(
         max_length=500,
         unique=True,
-        help_text=(
-            "Registrar-provided unique identifier, may match "
-            "Registration Certificate ID"
-        ),
+        help_text="Registrar-assigned unique identifier for this intended use",
     )
 
     # createdAt: [1..1] Validity start date

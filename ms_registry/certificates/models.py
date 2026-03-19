@@ -2,9 +2,16 @@
 Certificates Models for EUDI Wallet Registration System
 
 Contains:
-- EntityAccessCertificate: Access certificate history with CT logs
-- EntityRegistrationCertificate: Optional registration certificates
+- EntityAccessCertificate: WRPAC (Access Certificate) - X.509 cert for RP authentication
+- EntityRegistrationCertificate: DEPRECATED - use wrprc.IssuedWRPRC instead
 - AuditLog: Change tracking
+
+WRPAC vs WRPRC (per ETSI TS 119 475):
+- WRPAC: X.509 certificate issued TO the RP by a TSP/QTSP. RP holds private key.
+         Used for RP to authenticate itself to Wallet.
+- WRPRC: JWT signed BY ms-registry ABOUT the RP. RP has NO private key.
+         Used for RP to prove its entitlements to Wallet user.
+         See wrprc/ app for WRPRC implementation.
 """
 
 import uuid
@@ -17,10 +24,15 @@ from registry.models import RegisteredEntity
 
 class EntityAccessCertificate(BaseModel):
     """
-    Access Certificate history with CT log info per RFC 9162.
-    Per Trust Infrastructure Schema Section 2.2:
-    Access CA issues certificates to all registered entities
-    (PID Providers, Attestation Providers, Relying Parties).
+    WRPAC (Wallet Relying Party Access Certificate) tracking.
+
+    Per ETSI TS 119 475 §4.3 / §5.1:
+    - X.509 certificate issued TO the RP by an external TSP/QTSP
+    - RP holds the private key
+    - Used for RP to authenticate itself to Wallet (TLS layer)
+
+    This model tracks certificates issued by EXTERNAL CAs, not issued by ms-registry.
+    The actual certificate issuance is done by a TSP (e.g., Telia CA, Nexus).
     """
 
     registered_entity = models.ForeignKey(
@@ -69,6 +81,18 @@ class EntityAccessCertificate(BaseModel):
 
 class EntityRegistrationCertificate(BaseModel):
     """
+    DEPRECATED: Use wrprc.IssuedWRPRC instead.
+
+    This model was intended for X.509 registration certificates, but per
+    ETSI TS 119 475, WRPRC (Registration Certificate) is a JWT, not X.509.
+
+    The correct implementation is in wrprc/models.py:IssuedWRPRC.
+
+    This model is kept for backward compatibility but should not be used for new code.
+
+    ---
+
+    Original description:
     Registration Certificate (optional per Member State).
     Per Trust Infrastructure Schema Section 2.3:
     - RPRC_09: Registrar MAY decide to issue registration certificates to

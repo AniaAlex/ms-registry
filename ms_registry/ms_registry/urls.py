@@ -25,6 +25,7 @@ urlpatterns = [
         include("legal_entities.urls", namespace="legal_entities"),
     ),
     path("api/tsl/", include("tsl_generator.urls", namespace="tsl_generator")),
+    path("api/wrprc/", include("wrprc.urls", namespace="wrprc")),
 ]
 
 # OpenAPI docs
