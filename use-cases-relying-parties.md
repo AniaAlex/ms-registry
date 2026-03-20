@@ -248,3 +248,6 @@ class IntendedUseCredential(BaseModel):
 - **TS5**: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
 - **CIR 2025/848**: Commission Implementing Regulation on Relying Party Registration
 - **GDPR**: Regulation (EU) 2016/679 - Data minimisation and purpose limitation principles
+
+
+the question of person validation 
