@@ -156,8 +156,8 @@ class TSLXMLView(generics.GenericAPIView):
     """
     Return the ETSI TS 119612 compliant XML for the default active TSL Scheme.
 
-    GET /api/tsl/xml/ - Returns XML for the first active scheme
-    GET /api/tsl/xml/?download=true - Returns XML as downloadable file
+    GET /tsl/xml/ - Returns XML for the first active scheme
+    GET /tsl/xml/?download=true - Returns XML as downloadable file
     """
 
     permission_classes = []

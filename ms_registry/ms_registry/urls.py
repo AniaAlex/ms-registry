@@ -19,12 +19,12 @@ urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     path(".well-known/jwks.json", JWKSView.as_view(), name="jwks"),
     path("admin/", admin.site.urls),
-    path("api/registry/", include("registry.urls", namespace="registry")),
+    path("registry/", include("registry.urls", namespace="registry")),
     path(
-        "api/legal-entities/",
+        "legal-entities/",
         include("legal_entities.urls", namespace="legal_entities"),
     ),
-    path("api/tsl/", include("tsl_generator.urls", namespace="tsl_generator")),
+    path("tsl/", include("tsl_generator.urls", namespace="tsl_generator")),
 ]
 
 # OpenAPI docs
