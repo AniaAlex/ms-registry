@@ -183,6 +183,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API for managing Registered Entities in the EUDI Wallet ecosystem",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    **({"SERVERS": [{"url": "/api"}]} if os.getenv("ENV") != "LOCAL" else {}),
 }
 
 # CORS settings
