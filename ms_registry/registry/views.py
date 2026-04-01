@@ -562,9 +562,9 @@ class JWKSView(APIView):
         return Response(self._PLACEHOLDER_JWKS, status=status.HTTP_200_OK)
 
 
-class LoteView(APIView):
+class LOTESEView(APIView):
     """
-    GET /registry/lote/
+    GET /registry/lote-se/
 
     Returns all active registered entities as a LoTE JSON document
     (ETSI TS 119 602 format). Consumed directly by tsl-tool load-lote step.

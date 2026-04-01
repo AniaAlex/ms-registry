@@ -6,7 +6,7 @@ app_name = "registry"
 
 urlpatterns = [
     # LoTE export
-    path("lote/", views.LoteView.as_view(), name="lote"),
+    path("lote-se/", views.LOTESEView.as_view(), name="lote-se"),
     # ==========================================================================
     # WalletRelyingParty API (TS5 Specification)
     # ==========================================================================
