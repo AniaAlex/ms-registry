@@ -587,7 +587,9 @@ class LoteView(APIView):
                 "legal_entity__legal_person", "legal_entity__natural_person"
             )
             .prefetch_related(
-                "entitlements", "service_descriptions", "access_certificates"
+                "service_descriptions",
+                "access_certificates",
+                "legal_entity__trust_service_providers__services__names",
             )
         )
 
@@ -621,17 +623,6 @@ class LoteView(APIView):
         "revoked": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/revoked",
     }
 
-    _SERVICE_TYPE_URI = {
-        "PID_Provider": "http://uri.etsi.org/TrstSvc/Svctype/EAA/PID",
-        "QEAA_Provider": "http://uri.etsi.org/TrstSvc/Svctype/EAA/QEAA",
-        "Non_Q_EAA_Provider": "http://uri.etsi.org/TrstSvc/Svctype/EAA/NonQEAA",
-        "PUB_EAA_Provider": "http://uri.etsi.org/TrstSvc/Svctype/EAA/PubEAA",
-        "Service_Provider": "http://uri.etsi.org/TrstSvc/Svctype/RelyingParty",
-        "QCert_for_ESig_Provider": "http://uri.etsi.org/TrstSvc/Svctype/CA/QC",
-        "QCert_for_ESeal_Provider": "http://uri.etsi.org/TrstSvc/Svctype/CA/QCSeal",
-        "Intermediary": "http://uri.etsi.org/TrstSvc/Svctype/Intermediary",
-    }
-
     _ENTITY_TYPE = {
         "relying_party": "relying-party",
         "pid_provider": "pid-provider",
@@ -639,8 +630,6 @@ class LoteView(APIView):
     }
 
     def _build_entity(self, entity):
-        from django.utils import timezone
-
         descriptions = list(entity.service_descriptions.all())
         names = (
             [{"language": d.lang, "value": d.content} for d in descriptions]
@@ -649,25 +638,18 @@ class LoteView(APIView):
         )
 
         services = []
-        for ent in entity.entitlements.all():
-            svc_type = self._SERVICE_TYPE_URI.get(ent.entitlement_type)
-            if not svc_type:
-                continue
-            expired = ent.expires_at and ent.expires_at < timezone.now()
-            svc_status = (
-                self._STATUS_URI["active"]
-                if ent.is_active and not expired
-                else self._STATUS_URI["revoked"]
-            )
-            services.append(
-                {
-                    "serviceType": svc_type,
-                    "serviceName": [
-                        {"language": "en", "value": ent.get_entitlement_type_display()}
-                    ],
-                    "serviceStatus": svc_status,
-                }
-            )
+        for tsp in entity.legal_entity.trust_service_providers.all():
+            for svc in tsp.services.filter(is_active=True):
+                names = [
+                    {"language": n.language, "value": n.value} for n in svc.names.all()
+                ]
+                services.append(
+                    {
+                        "serviceType": svc.service_type,
+                        "serviceName": names,
+                        "serviceStatus": svc.status,
+                    }
+                )
 
         digital_identities = []
         current_cert = entity.access_certificates.filter(
