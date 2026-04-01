@@ -5,6 +5,8 @@ from . import views
 app_name = "registry"
 
 urlpatterns = [
+    # LoTE export
+    path("lote/", views.LoteView.as_view(), name="lote"),
     # ==========================================================================
     # WalletRelyingParty API (TS5 Specification)
     # ==========================================================================
