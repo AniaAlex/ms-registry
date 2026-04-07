@@ -590,6 +590,7 @@ class LOTESEView(APIView):
                 "service_descriptions",
                 "access_certificates",
                 "legal_entity__trust_service_providers__services__names",
+                "legal_entity__trust_service_providers__services__certificates",
             )
         )
 
@@ -631,7 +632,7 @@ class LOTESEView(APIView):
 
     def _build_entity(self, entity):
         descriptions = list(entity.service_descriptions.all())
-        names = (
+        entity_names = (
             [{"language": d.lang, "value": d.content} for d in descriptions]
             if descriptions
             else [{"language": "en", "value": entity.display_name}]
@@ -640,29 +641,51 @@ class LOTESEView(APIView):
         services = []
         for tsp in entity.legal_entity.trust_service_providers.all():
             for svc in tsp.services.filter(is_active=True):
-                names = [
+                service_names = [
                     {"language": n.language, "value": n.value} for n in svc.names.all()
                 ]
                 services.append(
                     {
                         "serviceType": svc.service_type,
-                        "serviceName": names,
+                        "serviceName": service_names,
                         "serviceStatus": svc.status,
                     }
                 )
 
         digital_identities = []
-        current_cert = entity.access_certificates.filter(
-            is_current=True, certificate_pem__isnull=False
-        ).first()
+        current_cert = (
+            entity.access_certificates.filter(
+                is_current=True, certificate_pem__isnull=False
+            )
+            .exclude(certificate_pem="")
+            .first()
+        )
         if current_cert:
             pem = current_cert.certificate_pem
-            b64 = "".join(pem.strip().splitlines()[1:-1])
-            digital_identities.append({"type": "x509", "x509Certificate": b64})
+            lines = pem.strip().splitlines()
+            b64 = "".join(line.strip() for line in lines[1:-1])
+            if b64:
+                digital_identities.append({"type": "x509", "x509Certificate": b64})
+
+        if not digital_identities:
+            seen_pems = set()
+            for tsp in entity.legal_entity.trust_service_providers.all():
+                for svc in tsp.services.filter(is_active=True):
+                    for sc in svc.certificates.all():
+                        pem = sc.certificate_pem
+                        if not pem or not pem.strip():
+                            continue
+                        lines = pem.strip().splitlines()
+                        b64 = "".join(line.strip() for line in lines[1:-1])
+                        if b64 and b64 not in seen_pems:
+                            seen_pems.add(b64)
+                            digital_identities.append(
+                                {"type": "x509", "x509Certificate": b64}
+                            )
 
         result = {
             "entityId": entity.registry_uri,
-            "entityName": names,
+            "entityName": entity_names,
             "entityStatus": self._STATUS_URI.get(
                 entity.registration_status, self._STATUS_URI["active"]
             ),
