@@ -23,7 +23,6 @@ The codebase follows the **TS5/TS6 technical specifications** and **ETSI TS 1196
 | `credentials` | `Credential`, `Claim`, `IntendedUse` models for attestation formats (SD-JWT, mDL) |
 | `tsl_generator` | ETSI TS 119612 Trust Status List XML generation |
 | `certificates` | Certificate management |
-| `rp_registration` | **Legacy app** - being migrated to modular structure, do not add new code here |
 
 ### Key Model Relationships
 

@@ -1,1 +1,0 @@
-# rp_registration migrations
