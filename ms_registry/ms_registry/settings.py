@@ -42,8 +42,6 @@ INSTALLED_APPS = [
     "credentials",
     "certificates",
     "tsl_generator",
-    # Legacy app (to be removed after migration)
-    "rp_registration",
 ]
 
 MIDDLEWARE = [
