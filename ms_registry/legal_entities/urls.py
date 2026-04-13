@@ -10,7 +10,7 @@ app_name = "legal_entities"
 
 urlpatterns = [
     path(
-        "legal-entity-create/",
+        "add/",
         views.LegalEntityCreateView.as_view(),
         name="legal-entity-create",
     ),

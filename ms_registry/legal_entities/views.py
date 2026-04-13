@@ -3,6 +3,7 @@ Views for Legal Entity management
 """
 
 from core.models import EntityType, IdentifierType
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
@@ -43,6 +44,7 @@ class LegalEntityCreateView(generics.CreateAPIView):
             "identifier_types": IdentifierType.choices,
         }
 
+    @extend_schema(exclude=True)
     def get(self, request, *args, **kwargs):
         """Render empty legal entity form"""
         return Response(
