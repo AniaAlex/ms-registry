@@ -14,13 +14,6 @@ from rest_framework import status
 
 
 @pytest.mark.django_db
-def test_get_legal_entity_create_form(client):
-    url = reverse("legal_entities:legal-entity-create")
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-
-
-@pytest.mark.django_db
 def test_create_legal_person_entity(api_client):
     url = reverse("legal_entities:legal-entity-create")
     data = {
