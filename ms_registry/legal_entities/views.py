@@ -56,30 +56,35 @@ class LegalEntityCreateView(generics.CreateAPIView):
         """Handle form submission"""
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            if request.accepted_renderer.format == "html":
+                return Response(
+                    self.get_context_data(
+                        errors=serializer.errors, form_data=request.data
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                    template_name=self.template_name,
+                )
             return Response(
-                self.get_context_data(errors=serializer.errors, form_data=request.data),
+                {"errors": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
-                template_name=self.template_name,
             )
 
         legal_entity = serializer.save()
 
-        # Check if this is an AJAX/API request
-        if request.accepted_renderer.format == "json":
+        if request.accepted_renderer.format == "html":
             return Response(
                 {
                     "message": "Legal entity created successfully",
-                    "data": serializers.LegalEntitySerializer(legal_entity).data,
+                    "entity": legal_entity,
                 },
                 status=status.HTTP_201_CREATED,
+                template_name="add_legal_entity_success.html",
             )
 
-        # HTML response - redirect to success page
         return Response(
             {
                 "message": "Legal entity created successfully",
-                "entity": legal_entity,
+                "data": serializers.LegalEntitySerializer(legal_entity).data,
             },
             status=status.HTTP_201_CREATED,
-            template_name="add_legal_entity_success.html",
         )

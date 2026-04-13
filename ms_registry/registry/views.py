@@ -89,19 +89,24 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
         if create_new_legal_entity and request.accepted_renderer.format == "html":
             # Extract legal entity data from prefixed fields
             le_data = {
-                "entity_type": request.data.get("le_entity_type"),
-                "legal_name": request.data.get("le_legal_name"),
-                "legal_form": request.data.get("le_legal_form"),
-                "registration_date": request.data.get("le_registration_date") or None,
-                "given_name": request.data.get("le_given_name"),
-                "family_name": request.data.get("le_family_name"),
-                "nationality": request.data.get("le_nationality"),
-                "street_address": request.data.get("le_street_address"),
-                "locality": request.data.get("le_locality"),
-                "country_code": request.data.get("le_country_code"),
-                "identifier_type": request.data.get("le_identifier_type"),
-                "identifier_value": request.data.get("le_identifier_value"),
-                "email": request.data.get("le_email"),
+                k: v
+                for k, v in {
+                    "entity_type": request.data.get("le_entity_type"),
+                    "legal_name": request.data.get("le_legal_name"),
+                    "legal_form": request.data.get("le_legal_form"),
+                    "registration_date": request.data.get("le_registration_date")
+                    or None,
+                    "given_name": request.data.get("le_given_name"),
+                    "family_name": request.data.get("le_family_name"),
+                    "nationality": request.data.get("le_nationality"),
+                    "street_address": request.data.get("le_street_address"),
+                    "locality": request.data.get("le_locality"),
+                    "country_code": request.data.get("le_country_code"),
+                    "identifier_type": request.data.get("le_identifier_type"),
+                    "identifier_value": request.data.get("le_identifier_value"),
+                    "email": request.data.get("le_email"),
+                }.items()
+                if v is not None
             }
 
             le_serializer = LegalEntityCreateSerializer(data=le_data)
@@ -327,6 +332,7 @@ class SupervisoryAuthorityFormView(generics.CreateAPIView):
             "legal_entities": LegalEntity.objects.all(),
         }
 
+    @extend_schema(exclude=True)
     def get(self, request, *args, **kwargs):
         """Render empty supervisory authority form"""
         return Response(
