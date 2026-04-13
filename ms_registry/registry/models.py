@@ -119,11 +119,16 @@ class RegisteredEntity(BaseModel):
         ),
     )
 
-    # registryURI: URI for national registry API (provided by Registrar)
+    # registryURI: URI for national registry API (provided by Registrar).
+    # Auto-generated on creation as <host>/registry/wrp/<uuid>/
+    # (per Reg_03, Reg_04). Alternatively, can be set manually in a second
+    # step by the Registrar if a different URI is required.
     registry_uri = models.URLField(
         max_length=2048,
+        blank=True,
         help_text=(
-            "National registry API URI, provided by Registrar " "(per Reg_03, Reg_04)"
+            "National registry API URI, auto-generated on creation "
+            "(per Reg_03, Reg_04)"
         ),
     )
 

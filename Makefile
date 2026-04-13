@@ -71,3 +71,7 @@ addstatictoken: ## Get 2FA code for email
 .PHONY: test
 test: ## Run unit tests - args: [detach=no] [keepdb=no] [test-path=.]
 	docker-compose run --rm $(opts) django $(src)/manage.py test -t $(src) $(cargs) --settings=ms_registry.settings_test
+
+.PHONY: pytest
+pytest: ## Run pytest - args: [test-path=.] e.g. make pytest test-path=registry/tests/
+	docker-compose run --rm django python -m pytest $(if $(test-path),$(test-path),)

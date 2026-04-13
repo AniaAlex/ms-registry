@@ -32,6 +32,19 @@
         </ul>
     </div>
     {% endif %}
+
+    {% if sa_errors %}
+    <div class="alert alert-danger">
+        <h4>Supervisory Authority Errors:</h4>
+        <ul>
+            {% for field, field_errors in sa_errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     
     <form method="post" action="">
         {% csrf_token %}
@@ -191,11 +204,6 @@
                        value="{{ serializer.data.trade_name|default:'' }}">
             </div>
             
-            <div class="form-group">
-                <label for="registry_uri">Registry URI *</label>
-                <input type="url" name="registry_uri" id="registry_uri" class="form-control" required
-                       value="{{ serializer.data.registry_uri|default:'' }}">
-            </div>
         </fieldset>
         
         <fieldset>
@@ -216,7 +224,7 @@
         
         <fieldset>
             <legend>Supervisory Authority</legend>
-            
+
             <div class="form-group">
                 <label for="supervisory_authority">Supervisory Authority (DPA) *</label>
                 <div class="input-with-action">
@@ -224,14 +232,61 @@
                         <option value="">-- Select DPA --</option>
                         {% for authority in supervisory_authorities %}
                         <option value="{{ authority.id }}"
-                            {% if serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
+                            {% if new_sa_id == authority.id|stringformat:"s" or serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
                             {{ authority.authority_name }} ({{ authority.country_code }})
                         </option>
                         {% endfor %}
                     </select>
-                    <a href="{% url 'registry:supervisory-authority-add-form' %}" class="btn btn-sm btn-outline" title="Add new supervisory authority">+ Add New</a>
+                    <button type="button" class="btn btn-sm btn-outline" id="toggle-new-sa-btn" title="Add new supervisory authority">+ Add New</button>
                 </div>
-                <small class="form-help">Don't see your DPA? <a href="{% url 'registry:supervisory-authority-add-form' %}">Add a new supervisory authority</a> first.</small>
+                <small class="form-help">Select an existing DPA or create a new one below.</small>
+            </div>
+
+            <!-- Inline Supervisory Authority Creation Form -->
+            <div id="new-sa-section" class="nested-form" style="display: none;">
+                <div class="nested-form-header">
+                    <h3>Create New Supervisory Authority</h3>
+                    <button type="button" class="btn btn-sm btn-text" id="close-new-sa-btn">&times; Close</button>
+                </div>
+
+                <input type="hidden" name="create_new_sa" id="create_new_sa" value="">
+
+                <div class="form-group">
+                    <label for="sa_authority_name">Authority Name *</label>
+                    <input type="text" name="sa_authority_name" id="sa_authority_name" class="form-control"
+                           placeholder="e.g., Swedish Authority for Privacy Protection (IMY)"
+                           value="{{ sa_form_data.authority_name|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_country_code">Country Code *</label>
+                    <input type="text" name="sa_country_code" id="sa_country_code" class="form-control"
+                           maxlength="2" placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE)"
+                           value="{{ sa_form_data.country_code|default:'' }}">
+                </div>
+
+                <p class="form-help">At least one contact method is required.</p>
+
+                <div class="form-group">
+                    <label for="sa_email">Email</label>
+                    <input type="email" name="sa_email" id="sa_email" class="form-control"
+                           placeholder="contact@dpa.example.eu"
+                           value="{{ sa_form_data.email|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_phone">Phone</label>
+                    <input type="tel" name="sa_phone" id="sa_phone" class="form-control"
+                           placeholder="+46 8 123 4567"
+                           value="{{ sa_form_data.phone|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_info_uri">Information URI</label>
+                    <input type="url" name="sa_info_uri" id="sa_info_uri" class="form-control"
+                           placeholder="https://www.imy.se/"
+                           value="{{ sa_form_data.info_uri|default:'' }}">
+                </div>
             </div>
         </fieldset>
         
@@ -365,6 +420,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // If there were legal entity errors, show the form
     {% if legal_entity_errors or le_form_data %}
     showNewEntityForm();
+    {% endif %}
+
+    // Supervisory Authority inline form
+    const toggleSABtn = document.getElementById('toggle-new-sa-btn');
+    const closeSABtn = document.getElementById('close-new-sa-btn');
+    const newSASection = document.getElementById('new-sa-section');
+    const saSelect = document.getElementById('supervisory_authority');
+    const createNewSAField = document.getElementById('create_new_sa');
+
+    function showNewSAForm() {
+        newSASection.style.display = 'block';
+        createNewSAField.value = 'true';
+        saSelect.removeAttribute('required');
+        toggleSABtn.style.display = 'none';
+    }
+
+    function hideNewSAForm() {
+        newSASection.style.display = 'none';
+        createNewSAField.value = '';
+        saSelect.setAttribute('required', 'required');
+        toggleSABtn.style.display = 'inline-block';
+    }
+
+    toggleSABtn.addEventListener('click', showNewSAForm);
+    closeSABtn.addEventListener('click', hideNewSAForm);
+
+    // If there were SA errors, re-open the form
+    {% if sa_errors or sa_form_data %}
+    showNewSAForm();
     {% endif %}
 });
 </script>
