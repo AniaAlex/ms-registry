@@ -48,7 +48,7 @@
                         <option value="{{ entity.id }}" {% if form_data.legal_entity == entity.id|stringformat:"s" %}selected{% endif %}>{{ entity }}</option>
                         {% endfor %}
                     </select>
-                    <a href="{% url 'legal_entities:legal-entity-add-form' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
+                    <a href="{% url 'legal_entities:legal-entity-create' %}" class="btn btn-sm btn-outline" title="Add new legal entity">+ Add New</a>
                 </div>
                 <small class="form-help">Optionally link to an existing legal entity record.</small>
             </div>

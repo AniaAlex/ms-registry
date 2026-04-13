@@ -10,40 +10,6 @@ from rest_framework.response import Response
 from . import models, serializers
 
 
-class LegalEntityListCreateView(generics.ListCreateAPIView):
-    """
-    List all legal entities or create a new one via API.
-
-    GET: List all legal entities
-    POST: Create a new legal entity
-    """
-
-    permission_classes = []
-    queryset = models.LegalEntity.objects.all()
-
-    def get_serializer_class(self):
-        if self.request.method == "POST":
-            return serializers.LegalEntityCreateSerializer
-        return serializers.LegalEntitySerializer
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(
-                {"errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        legal_entity = serializer.save()
-        return Response(
-            {
-                "message": "Legal entity created successfully",
-                "data": serializers.LegalEntitySerializer(legal_entity).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
 class LegalEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     Retrieve, update or delete a legal entity.
@@ -54,7 +20,7 @@ class LegalEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = models.LegalEntity.objects.all()
 
 
-class LegalEntityFormView(generics.CreateAPIView):
+class LegalEntityCreateView(generics.CreateAPIView):
     """
     Render legal entity creation form on GET, create entity on POST.
 

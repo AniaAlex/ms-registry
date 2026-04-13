@@ -10,14 +10,9 @@ app_name = "legal_entities"
 
 urlpatterns = [
     path(
-        "add/",
-        views.LegalEntityFormView.as_view(),
-        name="legal-entity-add-form",
-    ),
-    path(
-        "",
-        views.LegalEntityListCreateView.as_view(),
-        name="legal-entity-list-create",
+        "legal-entity-create/",
+        views.LegalEntityCreateView.as_view(),
+        name="legal-entity-create",
     ),
     path(
         "<uuid:pk>/",
