@@ -3,9 +3,6 @@ Generate the ms-registry ECDSA P-256 signing key pair.
 
 Run once per deployment to create the key. Store the private key in
 REGISTRY_SIGNING_KEY_PEM (single-line escaped) and never commit it.
-
-Usage:
-    python manage.py generate_registry_signing_key
 """
 
 from cryptography.hazmat.primitives import serialization
