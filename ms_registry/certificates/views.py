@@ -129,6 +129,7 @@ class CnfView(APIView):
         return Response({"token": token}, status=status.HTTP_200_OK)
 
 
+# django views, excluded from swagger
 class CnfPageView(View):
     """
     GET /certificates/cnf/<entity_id>/view/
