@@ -50,6 +50,8 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
         sa_errors=None,
         sa_form_data=None,
         new_sa_id=None,
+        form_data=None,
+        selected_entitlements=None,
     ):
         """Common context for the registration form"""
         return {
@@ -61,6 +63,8 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
             "sa_errors": sa_errors,
             "sa_form_data": sa_form_data or {},
             "new_sa_id": new_sa_id,
+            "form_data": form_data or {},
+            "selected_entitlements": selected_entitlements or [],
             "legal_entities": LegalEntity.objects.all(),
             "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
             "entity_roles": models.RegisteredEntity._meta.get_field(
@@ -111,10 +115,23 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
 
             le_serializer = LegalEntityCreateSerializer(data=le_data)
             if not le_serializer.is_valid():
+                # If the SA inline form was also open, preserve its data
+                sa_form_data = None
+                if request.data.get("create_new_sa") == "true":
+                    sa_form_data = {
+                        "authority_name": request.data.get("sa_authority_name", ""),
+                        "country_code": request.data.get("sa_country_code", ""),
+                        "email": request.data.get("sa_email", ""),
+                        "phone": request.data.get("sa_phone", ""),
+                        "info_uri": request.data.get("sa_info_uri", ""),
+                    }
                 return Response(
                     self.get_form_context(
                         legal_entity_errors=le_serializer.errors,
                         le_form_data=le_data,
+                        sa_form_data=sa_form_data,
+                        form_data=request.data,
+                        selected_entitlements=request.data.getlist("entitlements"),
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
@@ -149,11 +166,11 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
             if not sa_serializer.is_valid():
                 return Response(
                     self.get_form_context(
-                        legal_entity_errors=None,
-                        le_form_data=request.data,
                         new_legal_entity_id=new_legal_entity_id,
                         sa_errors=sa_serializer.errors,
                         sa_form_data=sa_data,
+                        form_data=request_data,
+                        selected_entitlements=request_data.getlist("entitlements"),
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
@@ -175,6 +192,8 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                         errors=serializer.errors,
                         new_legal_entity_id=new_legal_entity_id,
                         new_sa_id=new_sa_id,
+                        form_data=request_data,
+                        selected_entitlements=request_data.getlist("entitlements"),
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",

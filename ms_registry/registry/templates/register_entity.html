@@ -58,7 +58,7 @@
                     <option value="">-- Select Role --</option>
                     {% for value, label in entity_roles %}
                     <option value="{{ value }}"
-                        {% if serializer.data.entity_role == value %}selected{% endif %}>
+                        {% if form_data.entity_role == value %}selected{% endif %}>
                         {{ label }}
                     </option>
                     {% endfor %}
@@ -72,7 +72,7 @@
                         <option value="">-- Select Legal Entity --</option>
                         {% for entity in legal_entities %}
                         <option value="{{ entity.id }}"
-                            {% if serializer.data.legal_entity == entity.id or new_legal_entity_id == entity.id|stringformat:"s" %}selected{% endif %}>
+                            {% if new_legal_entity_id == entity.id|stringformat:"s" or form_data.legal_entity == entity.id|stringformat:"s" %}selected{% endif %}>
                             {{ entity }}
                         </option>
                         {% endfor %}
@@ -201,7 +201,7 @@
             <div class="form-group">
                 <label for="trade_name">Trade Name</label>
                 <input type="text" name="trade_name" id="trade_name" class="form-control" 
-                       value="{{ serializer.data.trade_name|default:'' }}">
+                       value="{{ form_data.trade_name|default:'' }}">
             </div>
             
         </fieldset>
@@ -211,13 +211,13 @@
             
             <div class="form-check">
                 <input type="checkbox" name="is_psb" id="is_psb" class="form-check-input"
-                       {% if serializer.data.is_psb %}checked{% endif %}>
+                       {% if form_data.is_psb %}checked{% endif %}>
                 <label for="is_psb" class="form-check-label">Is Public Sector Body</label>
             </div>
             
             <div class="form-check">
                 <input type="checkbox" name="is_intermediary" id="is_intermediary" class="form-check-input"
-                       {% if serializer.data.is_intermediary %}checked{% endif %}>
+                       {% if form_data.is_intermediary %}checked{% endif %}>
                 <label for="is_intermediary" class="form-check-label">Is Intermediary (RPs only)</label>
             </div>
         </fieldset>
@@ -232,7 +232,7 @@
                         <option value="">-- Select DPA --</option>
                         {% for authority in supervisory_authorities %}
                         <option value="{{ authority.id }}"
-                            {% if new_sa_id == authority.id|stringformat:"s" or serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
+                            {% if new_sa_id == authority.id|stringformat:"s" or form_data.supervisory_authority == authority.id|stringformat:"s" %}selected{% endif %}>
                             {{ authority.authority_name }} ({{ authority.country_code }})
                         </option>
                         {% endfor %}
@@ -299,7 +299,7 @@
                 <div class="form-check">
                     <input type="checkbox" name="entitlements" id="entitlement_{{ value }}" 
                            class="form-check-input" value="{{ value }}"
-                           {% if value in serializer.data.entitlements %}checked{% endif %}>
+                           {% if value in selected_entitlements %}checked{% endif %}>
                     <label for="entitlement_{{ value }}" class="form-check-label">
                         {{ label }}
                         <small class="text-muted">(https://uri.etsi.org/19475/Entitlement/{{ value }})</small>
@@ -446,8 +446,11 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleSABtn.addEventListener('click', showNewSAForm);
     closeSABtn.addEventListener('click', hideNewSAForm);
 
-    // If there were SA errors, re-open the form
+    // If there were SA errors, or the inline form was open when the page was submitted
+    // (but the SA wasn't successfully created yet), re-open the form
     {% if sa_errors or sa_form_data %}
+    showNewSAForm();
+    {% elif form_data.create_new_sa and not new_sa_id %}
     showNewSAForm();
     {% endif %}
 });
