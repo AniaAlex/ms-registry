@@ -12,6 +12,8 @@ import uuid
 
 from core.models import RegistrationStatus
 from core.signing import sign_jwt
+from django.shortcuts import render
+from django.views import View
 from drf_spectacular.utils import extend_schema
 from registry.models import RegisteredEntity
 from rest_framework import status
@@ -125,3 +127,21 @@ class CnfView(APIView):
 
         token = sign_jwt(payload)
         return Response({"token": token}, status=status.HTTP_200_OK)
+
+
+class CnfPageView(View):
+    """
+    GET /certificates/cnf/<entity_id>/view/
+
+    Calls CnfView internally and renders the result (token or error) as HTML.
+    """
+
+    def get(self, request, entity_id):
+        api_response = CnfView.as_view()(request, entity_id=entity_id)
+        if api_response.status_code == 200:
+            context = {"token": api_response.data.get("token")}
+        else:
+            context = {"error": api_response.data.get("detail")}
+        return render(
+            request, "cnf_result.html", context, status=api_response.status_code
+        )

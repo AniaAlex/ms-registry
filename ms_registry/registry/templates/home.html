@@ -21,6 +21,7 @@
                 <th>Status</th>
                 <th>Supervisory Authority</th>
                 <th>Registered At</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -40,6 +41,9 @@
                 </td>
                 <td>{{ entity.supervisory_authority }}</td>
                 <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                <td>
+                    <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-xs btn-secondary">Get CNF</a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -130,6 +134,11 @@
     .empty-state p {
         font-size: 1.1rem;
         margin-bottom: 1.5rem;
+    }
+    .btn-xs {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 3px;
     }
 </style>
 {% endblock %}

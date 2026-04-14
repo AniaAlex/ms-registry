@@ -137,6 +137,57 @@ def test_cnf_payload_multiple_entitlements(api_client):
 
 
 # ---------------------------------------------------------------------------
+# CnfPageView – HTML page
+# ---------------------------------------------------------------------------
+
+
+def _get_cnf_page(client, entity_id):
+    url = reverse("certificates:cnf-page", args=[entity_id])
+    return client.get(url)
+
+
+@pytest.mark.django_db
+class TestCnfPageView:
+    def test_returns_200_and_renders_token_for_active_entity(self, api_client):
+        entity = _make_active_entity()
+        with patch("certificates.views.sign_jwt", return_value="signed.jwt.token"):
+            response = _get_cnf_page(api_client, entity.id)
+        assert response.status_code == status.HTTP_200_OK
+        assert b"signed.jwt.token" in response.content
+
+    def test_does_not_show_error_on_success(self, api_client):
+        entity = _make_active_entity()
+        with patch("certificates.views.sign_jwt", return_value="tok"):
+            response = _get_cnf_page(api_client, entity.id)
+        assert b"Could Not Issue" not in response.content
+
+    def test_returns_404_for_unknown_entity(self, api_client):
+        response = _get_cnf_page(api_client, uuid.uuid4())
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert b"Entity not found" in response.content
+
+    def test_returns_409_for_pending_entity(self, api_client):
+        entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
+        response = _get_cnf_page(api_client, entity.id)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert b"pending" in response.content
+
+    def test_returns_409_for_suspended_entity(self, api_client):
+        entity = RegisteredEntityFactory(
+            registration_status=RegistrationStatus.SUSPENDED
+        )
+        response = _get_cnf_page(api_client, entity.id)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert b"suspended" in response.content
+
+    def test_returns_409_for_revoked_entity(self, api_client):
+        entity = RegisteredEntityFactory(registration_status=RegistrationStatus.REVOKED)
+        response = _get_cnf_page(api_client, entity.id)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert b"revoked" in response.content
+
+
+# ---------------------------------------------------------------------------
 # Error cases
 # ---------------------------------------------------------------------------
 
