@@ -46,44 +46,4 @@ urlpatterns = [
         views.SupervisoryAuthorityDetailView.as_view(),
         name="supervisory-authority-detail",
     ),
-    # path(
-    #     "entities/<int:pk>/",
-    #     views.RegisteredEntityRetrieveUpdateDestroyView.as_view(),
-    #     name="entity-detail",
-    # ),
-    # path(
-    #     "entities/<int:pk>/entitlements/",
-    #     views.EntityEntitlementListCreateView.as_view(),
-    #     name="entity-entitlements",
-    # ),
-    # path(
-    #     "entities/<int:pk>/service-descriptions/",
-    #     views.EntityServiceDescriptionListCreateView.as_view(),
-    #     name="entity-service-descriptions",
-    # ),
-    # path(
-    #     "entities/<int:pk>/support-uris/",
-    #     views.EntitySupportURIListCreateView.as_view(),
-    #     name="entity-support-uris",
-    # ),
-    # path(
-    #     "entities/<int:pk>/uses-intermediaries/",
-    #     views.EntityUsesIntermediaryListCreateView.as_view(),
-    #     name="entity-uses-intermediaries",
-    # ),
-    # path(
-    #     "entities/<int:pk>/policies/",
-    #     views.RegisteredEntityPolicyListCreateView.as_view(),
-    #     name="entity-policies",
-    # ),
-    # path(
-    #     "supervisory-authorities/",
-    #     views.SupervisoryAuthorityListCreateView.as_view(),
-    #     name="supervisory-authority-list-create",
-    # ),
-    # path(
-    #     "supervisory-authorities/<int:pk>/",
-    #     views.SupervisoryAuthorityRetrieveUpdateDestroyView.as_view(),
-    #     name="supervisory-authority-detail",
-    # ),
 ]

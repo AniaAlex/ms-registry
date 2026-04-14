@@ -74,7 +74,7 @@ jobs:
             - name: Run tests
               working-directory: ./ms_registry
               run: |
-                  python manage.py test --settings=ms_registry.settings_test --verbosity=2
+                  pytest -v
 
     lint:
         runs-on: ubuntu-latest
@@ -168,9 +168,7 @@ jobs:
             - name: Run tests with coverage
               working-directory: ./ms_registry
               run: |
-                  coverage run --source='.' manage.py test --settings=ms_registry.settings_test
-                  coverage report -m
-                  coverage xml
+                  pytest --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
 
             - name: Upload coverage reports
               uses: codecov/codecov-action@v4

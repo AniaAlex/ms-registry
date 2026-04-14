@@ -32,6 +32,19 @@
         </ul>
     </div>
     {% endif %}
+
+    {% if sa_errors %}
+    <div class="alert alert-danger">
+        <h4>Supervisory Authority Errors:</h4>
+        <ul>
+            {% for field, field_errors in sa_errors.items %}
+                {% for error in field_errors %}
+                <li><strong>{{ field }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     
     <form method="post" action="">
         {% csrf_token %}
@@ -45,7 +58,7 @@
                     <option value="">-- Select Role --</option>
                     {% for value, label in entity_roles %}
                     <option value="{{ value }}"
-                        {% if serializer.data.entity_role == value %}selected{% endif %}>
+                        {% if form_data.entity_role == value %}selected{% endif %}>
                         {{ label }}
                     </option>
                     {% endfor %}
@@ -59,7 +72,7 @@
                         <option value="">-- Select Legal Entity --</option>
                         {% for entity in legal_entities %}
                         <option value="{{ entity.id }}"
-                            {% if serializer.data.legal_entity == entity.id or new_legal_entity_id == entity.id|stringformat:"s" %}selected{% endif %}>
+                            {% if new_legal_entity_id == entity.id|stringformat:"s" or form_data.legal_entity == entity.id|stringformat:"s" %}selected{% endif %}>
                             {{ entity }}
                         </option>
                         {% endfor %}
@@ -188,14 +201,9 @@
             <div class="form-group">
                 <label for="trade_name">Trade Name</label>
                 <input type="text" name="trade_name" id="trade_name" class="form-control" 
-                       value="{{ serializer.data.trade_name|default:'' }}">
+                       value="{{ form_data.trade_name|default:'' }}">
             </div>
             
-            <div class="form-group">
-                <label for="registry_uri">Registry URI *</label>
-                <input type="url" name="registry_uri" id="registry_uri" class="form-control" required
-                       value="{{ serializer.data.registry_uri|default:'' }}">
-            </div>
         </fieldset>
         
         <fieldset>
@@ -203,20 +211,20 @@
             
             <div class="form-check">
                 <input type="checkbox" name="is_psb" id="is_psb" class="form-check-input"
-                       {% if serializer.data.is_psb %}checked{% endif %}>
+                       {% if form_data.is_psb %}checked{% endif %}>
                 <label for="is_psb" class="form-check-label">Is Public Sector Body</label>
             </div>
             
             <div class="form-check">
                 <input type="checkbox" name="is_intermediary" id="is_intermediary" class="form-check-input"
-                       {% if serializer.data.is_intermediary %}checked{% endif %}>
+                       {% if form_data.is_intermediary %}checked{% endif %}>
                 <label for="is_intermediary" class="form-check-label">Is Intermediary (RPs only)</label>
             </div>
         </fieldset>
         
         <fieldset>
             <legend>Supervisory Authority</legend>
-            
+
             <div class="form-group">
                 <label for="supervisory_authority">Supervisory Authority (DPA) *</label>
                 <div class="input-with-action">
@@ -224,14 +232,61 @@
                         <option value="">-- Select DPA --</option>
                         {% for authority in supervisory_authorities %}
                         <option value="{{ authority.id }}"
-                            {% if serializer.data.supervisory_authority == authority.id %}selected{% endif %}>
+                            {% if new_sa_id == authority.id|stringformat:"s" or form_data.supervisory_authority == authority.id|stringformat:"s" %}selected{% endif %}>
                             {{ authority.authority_name }} ({{ authority.country_code }})
                         </option>
                         {% endfor %}
                     </select>
-                    <a href="{% url 'registry:supervisory-authority-add-form' %}" class="btn btn-sm btn-outline" title="Add new supervisory authority">+ Add New</a>
+                    <button type="button" class="btn btn-sm btn-outline" id="toggle-new-sa-btn" title="Add new supervisory authority">+ Add New</button>
                 </div>
-                <small class="form-help">Don't see your DPA? <a href="{% url 'registry:supervisory-authority-add-form' %}">Add a new supervisory authority</a> first.</small>
+                <small class="form-help">Select an existing DPA or create a new one below.</small>
+            </div>
+
+            <!-- Inline Supervisory Authority Creation Form -->
+            <div id="new-sa-section" class="nested-form" style="display: none;">
+                <div class="nested-form-header">
+                    <h3>Create New Supervisory Authority</h3>
+                    <button type="button" class="btn btn-sm btn-text" id="close-new-sa-btn">&times; Close</button>
+                </div>
+
+                <input type="hidden" name="create_new_sa" id="create_new_sa" value="">
+
+                <div class="form-group">
+                    <label for="sa_authority_name">Authority Name *</label>
+                    <input type="text" name="sa_authority_name" id="sa_authority_name" class="form-control"
+                           placeholder="e.g., Swedish Authority for Privacy Protection (IMY)"
+                           value="{{ sa_form_data.authority_name|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_country_code">Country Code *</label>
+                    <input type="text" name="sa_country_code" id="sa_country_code" class="form-control"
+                           maxlength="2" placeholder="ISO 3166-1 alpha-2 (e.g., SE, DE)"
+                           value="{{ sa_form_data.country_code|default:'' }}">
+                </div>
+
+                <p class="form-help">At least one contact method is required.</p>
+
+                <div class="form-group">
+                    <label for="sa_email">Email</label>
+                    <input type="email" name="sa_email" id="sa_email" class="form-control"
+                           placeholder="contact@dpa.example.eu"
+                           value="{{ sa_form_data.email|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_phone">Phone</label>
+                    <input type="tel" name="sa_phone" id="sa_phone" class="form-control"
+                           placeholder="+46 8 123 4567"
+                           value="{{ sa_form_data.phone|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="sa_info_uri">Information URI</label>
+                    <input type="url" name="sa_info_uri" id="sa_info_uri" class="form-control"
+                           placeholder="https://www.imy.se/"
+                           value="{{ sa_form_data.info_uri|default:'' }}">
+                </div>
             </div>
         </fieldset>
         
@@ -244,7 +299,7 @@
                 <div class="form-check">
                     <input type="checkbox" name="entitlements" id="entitlement_{{ value }}" 
                            class="form-check-input" value="{{ value }}"
-                           {% if value in serializer.data.entitlements %}checked{% endif %}>
+                           {% if value in selected_entitlements %}checked{% endif %}>
                     <label for="entitlement_{{ value }}" class="form-check-label">
                         {{ label }}
                         <small class="text-muted">(https://uri.etsi.org/19475/Entitlement/{{ value }})</small>
@@ -365,6 +420,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // If there were legal entity errors, show the form
     {% if legal_entity_errors or le_form_data %}
     showNewEntityForm();
+    {% endif %}
+
+    // Supervisory Authority inline form
+    const toggleSABtn = document.getElementById('toggle-new-sa-btn');
+    const closeSABtn = document.getElementById('close-new-sa-btn');
+    const newSASection = document.getElementById('new-sa-section');
+    const saSelect = document.getElementById('supervisory_authority');
+    const createNewSAField = document.getElementById('create_new_sa');
+
+    function showNewSAForm() {
+        newSASection.style.display = 'block';
+        createNewSAField.value = 'true';
+        saSelect.removeAttribute('required');
+        toggleSABtn.style.display = 'none';
+    }
+
+    function hideNewSAForm() {
+        newSASection.style.display = 'none';
+        createNewSAField.value = '';
+        saSelect.setAttribute('required', 'required');
+        toggleSABtn.style.display = 'inline-block';
+    }
+
+    toggleSABtn.addEventListener('click', showNewSAForm);
+    closeSABtn.addEventListener('click', hideNewSAForm);
+
+    // If there were SA errors, or the inline form was open when the page was submitted
+    // (but the SA wasn't successfully created yet), re-open the form
+    {% if sa_errors or sa_form_data %}
+    showNewSAForm();
+    {% elif form_data.create_new_sa and not new_sa_id %}
+    showNewSAForm();
     {% endif %}
 });
 </script>

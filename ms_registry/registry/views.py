@@ -1,4 +1,5 @@
 from core.models import EntitlementType, EntityType, IdentifierType
+from django.urls import reverse
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
@@ -46,6 +47,11 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
         legal_entity_errors=None,
         le_form_data=None,
         new_legal_entity_id=None,
+        sa_errors=None,
+        sa_form_data=None,
+        new_sa_id=None,
+        form_data=None,
+        selected_entitlements=None,
     ):
         """Common context for the registration form"""
         return {
@@ -54,6 +60,11 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
             "legal_entity_errors": legal_entity_errors,
             "le_form_data": le_form_data or {},
             "new_legal_entity_id": new_legal_entity_id,
+            "sa_errors": sa_errors,
+            "sa_form_data": sa_form_data or {},
+            "new_sa_id": new_sa_id,
+            "form_data": form_data or {},
+            "selected_entitlements": selected_entitlements or [],
             "legal_entities": LegalEntity.objects.all(),
             "supervisory_authorities": models.SupervisoryAuthority.objects.all(),
             "entity_roles": models.RegisteredEntity._meta.get_field(
@@ -82,27 +93,45 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
         if create_new_legal_entity and request.accepted_renderer.format == "html":
             # Extract legal entity data from prefixed fields
             le_data = {
-                "entity_type": request.data.get("le_entity_type"),
-                "legal_name": request.data.get("le_legal_name"),
-                "legal_form": request.data.get("le_legal_form"),
-                "registration_date": request.data.get("le_registration_date") or None,
-                "given_name": request.data.get("le_given_name"),
-                "family_name": request.data.get("le_family_name"),
-                "nationality": request.data.get("le_nationality"),
-                "street_address": request.data.get("le_street_address"),
-                "locality": request.data.get("le_locality"),
-                "country_code": request.data.get("le_country_code"),
-                "identifier_type": request.data.get("le_identifier_type"),
-                "identifier_value": request.data.get("le_identifier_value"),
-                "email": request.data.get("le_email"),
+                k: v
+                for k, v in {
+                    "entity_type": request.data.get("le_entity_type"),
+                    "legal_name": request.data.get("le_legal_name"),
+                    "legal_form": request.data.get("le_legal_form"),
+                    "registration_date": request.data.get("le_registration_date")
+                    or None,
+                    "given_name": request.data.get("le_given_name"),
+                    "family_name": request.data.get("le_family_name"),
+                    "nationality": request.data.get("le_nationality"),
+                    "street_address": request.data.get("le_street_address"),
+                    "locality": request.data.get("le_locality"),
+                    "country_code": request.data.get("le_country_code"),
+                    "identifier_type": request.data.get("le_identifier_type"),
+                    "identifier_value": request.data.get("le_identifier_value"),
+                    "email": request.data.get("le_email"),
+                }.items()
+                if v is not None
             }
 
             le_serializer = LegalEntityCreateSerializer(data=le_data)
             if not le_serializer.is_valid():
+                # If the SA inline form was also open, preserve its data
+                sa_form_data = None
+                if request.data.get("create_new_sa") == "true":
+                    sa_form_data = {
+                        "authority_name": request.data.get("sa_authority_name", ""),
+                        "country_code": request.data.get("sa_country_code", ""),
+                        "email": request.data.get("sa_email", ""),
+                        "phone": request.data.get("sa_phone", ""),
+                        "info_uri": request.data.get("sa_info_uri", ""),
+                    }
                 return Response(
                     self.get_form_context(
                         legal_entity_errors=le_serializer.errors,
                         le_form_data=le_data,
+                        sa_form_data=sa_form_data,
+                        form_data=request.data,
+                        selected_entitlements=request.data.getlist("entitlements"),
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
@@ -116,7 +145,40 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
             request_data = request.data.copy()
             request_data["legal_entity"] = new_legal_entity_id
         else:
-            request_data = request.data
+            request_data = request.data.copy()
+
+        # Check if we need to create a new supervisory authority inline
+        create_new_sa = request.data.get("create_new_sa") == "true"
+        new_sa_id = None
+
+        if create_new_sa and request.accepted_renderer.format == "html":
+            sa_data = {
+                "authority_name": request.data.get("sa_authority_name"),
+                "country_code": request.data.get("sa_country_code"),
+                "email": request.data.get("sa_email") or None,
+                "phone": request.data.get("sa_phone") or None,
+                "info_uri": request.data.get("sa_info_uri") or None,
+            }
+
+            sa_serializer = serializers.SupervisoryAuthorityCreateSerializer(
+                data=sa_data
+            )
+            if not sa_serializer.is_valid():
+                return Response(
+                    self.get_form_context(
+                        new_legal_entity_id=new_legal_entity_id,
+                        sa_errors=sa_serializer.errors,
+                        sa_form_data=sa_data,
+                        form_data=request_data,
+                        selected_entitlements=request_data.getlist("entitlements"),
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                    template_name="register_entity.html",
+                )
+
+            authority = sa_serializer.save()
+            new_sa_id = str(authority.id)
+            request_data["supervisory_authority"] = new_sa_id
 
         serializer = self.get_serializer(data=request_data)
         if not serializer.is_valid():
@@ -129,6 +191,9 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
                     self.get_form_context(
                         errors=serializer.errors,
                         new_legal_entity_id=new_legal_entity_id,
+                        new_sa_id=new_sa_id,
+                        form_data=request_data,
+                        selected_entitlements=request_data.getlist("entitlements"),
                     ),
                     status=status.HTTP_400_BAD_REQUEST,
                     template_name="register_entity.html",
@@ -163,6 +228,18 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
             status=status.HTTP_201_CREATED,
             headers=headers,
         )
+
+    def perform_create(self, serializer):
+        # Save first to get the UUID, then auto-generate the registry_uri
+        # pointing to this entity's record in the national registry API.
+        # Alternatively, the Registrar can update registry_uri in a second step
+        # via PATCH /registry/entities/<uuid>/ if a custom URI is required.
+        entity = serializer.save()
+        registry_uri = self.request.build_absolute_uri(
+            reverse("registry:wrp-detail", kwargs={"pk": entity.pk})
+        )
+        entity.registry_uri = registry_uri
+        entity.save(update_fields=["registry_uri"])
 
 
 class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -274,6 +351,7 @@ class SupervisoryAuthorityFormView(generics.CreateAPIView):
             "legal_entities": LegalEntity.objects.all(),
         }
 
+    @extend_schema(exclude=True)
     def get(self, request, *args, **kwargs):
         """Render empty supervisory authority form"""
         return Response(
@@ -618,6 +696,7 @@ class LOTESEView(APIView):
         }
         return Response(lote)
 
+    """TODO: checkup on mapping active to granted"""
     _STATUS_URI = {
         "active": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted",
         "suspended": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/suspended",

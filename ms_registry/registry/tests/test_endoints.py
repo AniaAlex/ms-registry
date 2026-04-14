@@ -1,778 +1,271 @@
 """
-Tests for Registry app endpoints and models.
+Tests for Registry app endpoints.
 """
 
-from core.models import EntitlementType, EntityRole, RegistrationStatus
-from django.test import TestCase
+import pytest
+from core.models import EntitlementType, EntityRole
 from django.urls import reverse
-from legal_entities.models import LegalEntity, LegalPerson, PhysicalAddress
-from registry.models import (
-    EntityEntitlement,
-    EntityServiceDescription,
-    EntitySupportURI,
-    EntityUsesIntermediary,
-    RegisteredEntity,
-    SupervisoryAuthority,
+from legal_entities.tests.factories import LegalEntityFactory
+from registry.models import RegisteredEntity, SupervisoryAuthority
+from registry.tests.factories import (
+    EntityEntitlementFactory,
+    EntitySupportURIFactory,
+    RegisteredEntityFactory,
+    SupervisoryAuthorityFactory,
 )
 from rest_framework import status
-from rest_framework.test import APITestCase
-
-
-class SupervisoryAuthorityModelTests(TestCase):
-    """Tests for SupervisoryAuthority model"""
-
-    def test_create_supervisory_authority_with_email(self):
-        """Test creating a supervisory authority with email contact"""
-        authority = SupervisoryAuthority.objects.create(
-            authority_name="Swedish Data Protection Authority",
-            country_code="SE",
-            email="datainspektionen@datainspektionen.se",
-        )
-        self.assertEqual(authority.authority_name, "Swedish Data Protection Authority")
-        self.assertEqual(authority.country_code, "SE")
-        self.assertIsNotNone(authority.id)
-
-    def test_create_supervisory_authority_with_phone(self):
-        """Test creating a supervisory authority with phone contact"""
-        authority = SupervisoryAuthority.objects.create(
-            authority_name="German DPA",
-            country_code="DE",
-            phone="+49123456789",
-        )
-        self.assertEqual(authority.phone, "+49123456789")
-
-    def test_create_supervisory_authority_with_info_uri(self):
-        """Test creating a supervisory authority with info URI"""
-        authority = SupervisoryAuthority.objects.create(
-            authority_name="French CNIL",
-            country_code="FR",
-            info_uri="https://www.cnil.fr/",
-        )
-        self.assertEqual(authority.info_uri, "https://www.cnil.fr/")
-
-    def test_supervisory_authority_str(self):
-        """Test string representation"""
-        authority = SupervisoryAuthority.objects.create(
-            authority_name="Test Authority",
-            country_code="SE",
-            email="test@test.se",
-        )
-        self.assertEqual(str(authority), "Test Authority (SE)")
-
-
-class RegisteredEntityModelTests(TestCase):
-    """Tests for RegisteredEntity model"""
-
-    def setUp(self):
-        """Set up test data"""
-        # Create physical address
-        self.address = PhysicalAddress.objects.create(
-            street_address="Test Street 1",
-            locality="Stockholm",
-            postal_code="12345",
-            country_code="SE",
-        )
-
-        # Create legal person
-        self.legal_person = LegalPerson.objects.create(
-            legal_name="Test Company AB",
-        )
-
-        # Create legal entity
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-            email="test@testcompany.se",
-        )
-
-        # Create supervisory authority
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="Swedish DPA",
-            country_code="SE",
-            email="dpa@sweden.se",
-        )
-
-    def test_create_relying_party(self):
-        """Test creating a Relying Party entity"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            trade_name="Test Service",
-            registry_uri="https://registry.example.com/entities/123",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.entity_role, EntityRole.RELYING_PARTY)
-        self.assertTrue(entity.is_verifier)
-        self.assertFalse(entity.is_issuer)
-
-    def test_create_pid_provider(self):
-        """Test creating a PID Provider entity"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.PID_PROVIDER,
-            registry_uri="https://registry.example.com/entities/456",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.entity_role, EntityRole.PID_PROVIDER)
-        self.assertTrue(entity.is_issuer)
-        self.assertFalse(entity.is_verifier)
-
-    def test_create_attestation_provider(self):
-        """Test creating an Attestation Provider entity"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.ATTESTATION_PROVIDER,
-            is_psb=True,  # Public sector body
-            registry_uri="https://registry.example.com/entities/789",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.entity_role, EntityRole.ATTESTATION_PROVIDER)
-        self.assertTrue(entity.is_psb)
-        self.assertTrue(entity.is_issuer)
-
-    def test_default_registration_status_is_pending(self):
-        """Test that default registration status is pending"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/entities/123",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.registration_status, RegistrationStatus.PENDING)
-
-    def test_display_name_uses_trade_name(self):
-        """Test display_name property prefers trade_name"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            trade_name="My Trade Name",
-            registry_uri="https://registry.example.com/entities/123",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.display_name, "My Trade Name")
-
-    def test_display_name_falls_back_to_legal_entity(self):
-        """Test display_name falls back to legal entity name"""
-        entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/entities/123",
-            supervisory_authority=self.authority,
-        )
-        self.assertEqual(entity.display_name, self.legal_entity.display_name)
-
-
-class EntitySupportURIModelTests(TestCase):
-    """Tests for EntitySupportURI model"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.address = PhysicalAddress.objects.create(
-            country_code="SE",
-        )
-        self.legal_person = LegalPerson.objects.create(legal_name="Test Co")
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-        )
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="DPA", country_code="SE", email="dpa@test.se"
-        )
-        self.entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-        )
-
-    def test_create_support_uri(self):
-        """Test creating a support URI"""
-        support = EntitySupportURI.objects.create(
-            registered_entity=self.entity,
-            support_uri="https://support.example.com",
-            support_type="website",
-            is_primary=True,
-        )
-        self.assertEqual(support.support_uri, "https://support.example.com")
-        self.assertTrue(support.is_primary)
-
-
-class EntityEntitlementModelTests(TestCase):
-    """Tests for EntityEntitlement model"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.address = PhysicalAddress.objects.create(country_code="SE")
-        self.legal_person = LegalPerson.objects.create(legal_name="Test Co")
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-        )
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="DPA", country_code="SE", email="dpa@test.se"
-        )
-        self.entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-        )
-
-    def test_create_entitlement(self):
-        """Test creating an entitlement"""
-        entitlement = EntityEntitlement.objects.create(
-            registered_entity=self.entity,
-            entitlement_uri=(
-                "http://uri.etsi.org/TrstSvc/Svctype/EudiWallet/RelyingParty"
-            ),
-            entitlement_type=EntitlementType.SERVICE_PROVIDER,
-        )
-        self.assertTrue(entitlement.is_active)
-        self.assertIsNotNone(entitlement.granted_at)
-
-
-class SupervisoryAuthorityAPITests(APITestCase):
-    """API tests for SupervisoryAuthority endpoints"""
-
-    def test_list_supervisory_authorities(self):
-        """Test listing supervisory authorities"""
-        SupervisoryAuthority.objects.create(
-            authority_name="Swedish DPA",
-            country_code="SE",
-            email="dpa@sweden.se",
-        )
-        SupervisoryAuthority.objects.create(
-            authority_name="German DPA",
-            country_code="DE",
-            email="dpa@germany.de",
-        )
-
-        url = reverse("registry:supervisory-authority-list-create")
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-
-    def test_create_supervisory_authority_api(self):
-        """Test creating a supervisory authority via API"""
-        url = reverse("registry:supervisory-authority-list-create")
-        data = {
-            "authority_name": "French CNIL",
-            "country_code": "FR",
-            "email": "contact@cnil.fr",
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(SupervisoryAuthority.objects.count(), 1)
-        self.assertEqual(
-            SupervisoryAuthority.objects.first().authority_name, "French CNIL"
-        )
-
-    def test_create_supervisory_authority_requires_contact(self):
-        """Test that at least one contact method is required"""
-        url = reverse("registry:supervisory-authority-list-create")
-        data = {
-            "authority_name": "Test Authority",
-            "country_code": "SE",
-            # No email, phone, or info_uri
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_get_supervisory_authority_detail(self):
-        """Test retrieving a supervisory authority detail"""
-        authority = SupervisoryAuthority.objects.create(
-            authority_name="Test DPA",
-            country_code="SE",
-            email="test@dpa.se",
-        )
-
-        url = reverse("registry:supervisory-authority-detail", args=[authority.id])
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["authority_name"], "Test DPA")
-
-
-class RegisteredEntityAPITests(APITestCase):
-    """API tests for RegisteredEntity endpoints"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.address = PhysicalAddress.objects.create(
-            street_address="Test Street 1",
-            locality="Stockholm",
-            postal_code="12345",
-            country_code="SE",
-        )
-        self.legal_person = LegalPerson.objects.create(
-            legal_name="Test Company AB",
-        )
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-            email="test@testcompany.se",
-        )
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="Swedish DPA",
-            country_code="SE",
-            email="dpa@sweden.se",
-        )
-
-    def test_list_registered_entities(self):
-        """Test listing registered entities"""
-        RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-        )
-
-        url = reverse("registry:entity-list-create")
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-
-    def test_create_registered_entity(self):
-        """Test creating a registered entity via API"""
-        url = reverse("registry:entity-list-create")
-        data = {
-            "legal_entity": str(self.legal_entity.id),
-            "entity_role": EntityRole.RELYING_PARTY,
-            "trade_name": "Test Service",
-            "registry_uri": "https://registry.example.com/new",
-            "supervisory_authority": str(self.authority.id),
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(RegisteredEntity.objects.count(), 1)
-
-    def test_create_registered_entity_missing_required_fields(self):
-        """Test that required fields are validated"""
-        url = reverse("registry:entity-list-create")
-        data = {
-            "trade_name": "Test Service",
-            # Missing required fields
-        }
-
-        response = self.client.post(url, data, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-
-class HomeViewTests(TestCase):
-    """Tests for the home page view"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.address = PhysicalAddress.objects.create(country_code="SE")
-        self.legal_person = LegalPerson.objects.create(legal_name="Test Co")
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-        )
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="DPA", country_code="SE", email="dpa@test.se"
-        )
-
-    def test_home_page_loads(self):
-        """Test that the home page loads successfully"""
-        url = reverse("home")
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "home.html")
-
-    def test_home_page_shows_entities(self):
-        """Test that registered entities are shown on home page"""
-        RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            trade_name="Visible Entity",
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-        )
-
-        url = reverse("home")
-        response = self.client.get(url)
-
-        self.assertContains(response, "Visible Entity")
-
-    def test_home_page_empty_state(self):
-        """Test home page shows empty state when no entities"""
-        url = reverse("home")
-        response = self.client.get(url)
-
-        self.assertContains(response, "No registered entities yet")
-
-
-class EntityIntermediaryTests(TestCase):
-    """Tests for intermediary relationships"""
-
-    def setUp(self):
-        """Set up test data for two entities"""
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="DPA", country_code="SE", email="dpa@test.se"
-        )
-
-        # Create first entity (RP that will use intermediary)
-        self.address1 = PhysicalAddress.objects.create(country_code="SE")
-        self.legal_person1 = LegalPerson.objects.create(legal_name="RP Company")
-        self.legal_entity1 = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person1,
-            physical_address=self.address1,
-        )
-        self.rp_entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity1,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/rp",
-            supervisory_authority=self.authority,
-        )
-
-        # Create second entity (Intermediary)
-        self.address2 = PhysicalAddress.objects.create(country_code="SE")
-        self.legal_person2 = LegalPerson.objects.create(legal_name="Intermediary Co")
-        self.legal_entity2 = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person2,
-            physical_address=self.address2,
-        )
-        self.intermediary_entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity2,
-            entity_role=EntityRole.RELYING_PARTY,
-            is_intermediary=True,
-            registry_uri="https://registry.example.com/intermediary",
-            supervisory_authority=self.authority,
-        )
-
-    def test_rp_can_use_intermediary(self):
-        """Test that a Relying Party can use an intermediary"""
-        EntityUsesIntermediary.objects.create(
-            registered_entity=self.rp_entity,
-            intermediary=self.intermediary_entity,
-            intermediary_identifier="INT-123",
-            intermediary_registry_uri="https://registry.example.com/intermediary",
-        )
-        self.assertEqual(self.rp_entity.used_intermediaries.count(), 1)
-        self.assertEqual(self.intermediary_entity.clients_using.count(), 1)
-
-
-class EntityServiceDescriptionTests(TestCase):
-    """Tests for multilingual service descriptions"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.address = PhysicalAddress.objects.create(country_code="SE")
-        self.legal_person = LegalPerson.objects.create(legal_name="Test Co")
-        self.legal_entity = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person,
-            physical_address=self.address,
-        )
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="DPA", country_code="SE", email="dpa@test.se"
-        )
-        self.entity = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-        )
-
-    def test_create_multilingual_descriptions(self):
-        """Test creating descriptions in multiple languages"""
-        EntityServiceDescription.objects.create(
-            registered_entity=self.entity,
-            lang="en",
-            content="English description of the service",
-        )
-        EntityServiceDescription.objects.create(
-            registered_entity=self.entity,
-            lang="sv",
-            content="Svensk beskrivning av tjänsten",
-        )
-
-        self.assertEqual(self.entity.service_descriptions.count(), 2)
-
-    def test_unique_language_per_entity(self):
-        """Test that each language can only be used once per entity"""
-        EntityServiceDescription.objects.create(
-            registered_entity=self.entity,
-            lang="en",
-            content="First English description",
-        )
-
-        with self.assertRaises(Exception):  # IntegrityError
-            EntityServiceDescription.objects.create(
-                registered_entity=self.entity,
-                lang="en",
-                content="Second English description",
-            )
-
-
-class WRPFilterAPITests(APITestCase):
-    """API tests for WalletRelyingParty filter endpoints"""
-
-    def setUp(self):
-        """Set up test data with various entities and entitlements"""
-        # Create addresses
-        self.address1 = PhysicalAddress.objects.create(country_code="SE")
-        self.address2 = PhysicalAddress.objects.create(country_code="DE")
-        self.address3 = PhysicalAddress.objects.create(country_code="FR")
-
-        # Create legal persons
-        self.legal_person1 = LegalPerson.objects.create(legal_name="Company A")
-        self.legal_person2 = LegalPerson.objects.create(legal_name="Company B")
-        self.legal_person3 = LegalPerson.objects.create(legal_name="Company C")
-
-        # Create legal entities
-        self.legal_entity1 = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person1,
-            physical_address=self.address1,
-        )
-        self.legal_entity2 = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person2,
-            physical_address=self.address2,
-        )
-        self.legal_entity3 = LegalEntity.objects.create(
-            entity_type="legal_person",
-            legal_person=self.legal_person3,
-            physical_address=self.address3,
-        )
-
-        # Create supervisory authority
-        self.authority = SupervisoryAuthority.objects.create(
-            authority_name="Test DPA",
-            country_code="SE",
-            email="dpa@test.se",
-        )
-
-        # Create registered entities with different intermediary status
-        self.entity_intermediary = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity1,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/1",
-            supervisory_authority=self.authority,
-            is_intermediary=True,
-        )
-        self.entity_not_intermediary = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity2,
-            entity_role=EntityRole.RELYING_PARTY,
-            registry_uri="https://registry.example.com/2",
-            supervisory_authority=self.authority,
-            is_intermediary=False,
-        )
-        self.entity_pub_eaa = RegisteredEntity.objects.create(
-            legal_entity=self.legal_entity3,
-            entity_role=EntityRole.ATTESTATION_PROVIDER,
-            registry_uri="https://registry.example.com/3",
-            supervisory_authority=self.authority,
-            is_intermediary=False,
-            is_psb=True,
-        )
-
-        # Create entitlements
-        EntityEntitlement.objects.create(
-            registered_entity=self.entity_intermediary,
-            entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
-            entitlement_type=EntitlementType.SERVICE_PROVIDER,
-        )
-        EntityEntitlement.objects.create(
-            registered_entity=self.entity_not_intermediary,
-            entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
-            entitlement_type=EntitlementType.SERVICE_PROVIDER,
-        )
-        EntityEntitlement.objects.create(
-            registered_entity=self.entity_pub_eaa,
-            entitlement_uri="http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",
-            entitlement_type=EntitlementType.PUB_EAA_PROVIDER,
-        )
-
-        # Create support URIs (required for WRP)
-        EntitySupportURI.objects.create(
-            registered_entity=self.entity_intermediary,
-            support_uri="https://support1.example.com",
-        )
-        EntitySupportURI.objects.create(
-            registered_entity=self.entity_not_intermediary,
-            support_uri="https://support2.example.com",
-        )
-        EntitySupportURI.objects.create(
-            registered_entity=self.entity_pub_eaa,
-            support_uri="https://support3.example.com",
-        )
-
-    # =========================================================================
-    # Entitlement Filter Tests - Success Cases
-    # =========================================================================
-
-    def test_filter_by_entitlement_success_service_provider(self):
-        """Test filtering WRP by Service_Provider entitlement returns matching entities"""  # noqa: E501
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {"entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider"},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-
-    def test_filter_by_entitlement_success_pub_eaa_provider(self):
-        """Test filtering WRP by PUB_EAA_Provider entitlement returns matching entity"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {"entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider"},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-
-    def test_filter_by_entitlement_no_filter_returns_all(self):
-        """Test that no entitlement filter returns all entities"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)
-
-    # =========================================================================
-    # Entitlement Filter Tests - Failure/Empty Cases
-    # =========================================================================
-
-    def test_filter_by_entitlement_no_match_returns_empty(self):
-        """Test filtering by non-existent entitlement returns empty list"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {"entitlement": "http://data.europa.eu/eudi/entitlement/NonExistent"},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 0)
-
-    def test_filter_by_entitlement_invalid_uri_returns_empty(self):
-        """Test filtering by invalid URI returns empty list"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {"entitlement": "invalid-uri"},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 0)
-
-    # =========================================================================
-    # isintermediary Filter Tests - Success Cases
-    # =========================================================================
-
-    def test_filter_by_isintermediary_true_success(self):
-        """Test filtering WRP by isintermediary=true returns only intermediaries"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url, {"isintermediary": "true"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertTrue(response.data[0]["isIntermediary"])
-
-    def test_filter_by_isintermediary_false_success(self):
-        """Test filtering WRP by isintermediary=false returns non-intermediaries"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url, {"isintermediary": "false"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-        for entity in response.data:
-            self.assertFalse(entity["isIntermediary"])
-
-    def test_filter_by_isintermediary_1_success(self):
-        """Test filtering WRP by isintermediary=1 returns intermediaries"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url, {"isintermediary": "1"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-
-    def test_filter_by_isintermediary_0_success(self):
-        """Test filtering WRP by isintermediary=0 returns non-intermediaries"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url, {"isintermediary": "0"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-
-    # =========================================================================
-    # isintermediary Filter Tests - Failure/Edge Cases
-    # =========================================================================
-
-    def test_filter_by_isintermediary_invalid_value_returns_non_intermediaries(self):
-        """Test filtering with invalid value treats it as false"""
-        url = reverse("registry:wrp")
-        response = self.client.get(url, {"isintermediary": "invalid"})
-
-        # Invalid values are treated as false (not in true/1/yes)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-
-    # =========================================================================
-    # Combined Filter Tests
-    # =========================================================================
-
-    def test_combined_filter_entitlement_and_isintermediary_true(self):
-        """Test combining entitlement and isintermediary=true filters"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {
-                "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",  # noqa: E501
-                "isintermediary": "true",
-            },
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertTrue(response.data[0]["isIntermediary"])
-
-    def test_combined_filter_entitlement_and_isintermediary_false(self):
-        """Test combining entitlement and isintermediary=false filters"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {
-                "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",  # noqa: E501
-                "isintermediary": "false",
-            },
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertFalse(response.data[0]["isIntermediary"])
-
-    def test_combined_filter_no_match(self):
-        """Test combined filters that match no entities"""
-        url = reverse("registry:wrp")
-        response = self.client.get(
-            url,
-            {
-                "entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",  # noqa: E501
-                "isintermediary": "true",
-            },
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 0)
+
+# =============================================================================
+# SupervisoryAuthority API
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_list_supervisory_authorities(api_client):
+    SupervisoryAuthorityFactory.create_batch(2)
+    url = reverse("registry:supervisory-authority-list-create")
+    response = api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 2
+
+
+@pytest.mark.django_db
+def test_create_supervisory_authority_api(api_client):
+    url = reverse("registry:supervisory-authority-list-create")
+    data = {
+        "authority_name": "French CNIL",
+        "country_code": "FR",
+        "email": "contact@cnil.fr",
+    }
+    response = api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+    assert SupervisoryAuthority.objects.count() == 1
+    assert SupervisoryAuthority.objects.first().authority_name == "French CNIL"
+
+
+@pytest.mark.django_db
+def test_create_supervisory_authority_requires_contact(api_client):
+    url = reverse("registry:supervisory-authority-list-create")
+    data = {"authority_name": "Test Authority", "country_code": "SE"}
+    response = api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_get_supervisory_authority_detail(api_client):
+    authority = SupervisoryAuthorityFactory(authority_name="Test DPA")
+    url = reverse("registry:supervisory-authority-detail", args=[authority.id])
+    response = api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["authority_name"] == "Test DPA"
+
+
+# =============================================================================
+# RegisteredEntity API
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_list_registered_entities(api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    RegisteredEntityFactory(legal_entity=legal_entity, supervisory_authority=authority)
+    url = reverse("registry:entity-list-create")
+    response = api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+
+
+@pytest.mark.django_db
+def test_registry_uri_is_set_after_create(api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "trade_name": "Test Service",
+        "supervisory_authority": str(authority.id),
+    }
+    response = api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.registry_uri != ""
+    assert str(entity.id) in entity.registry_uri
+    assert "/wrp/" in entity.registry_uri
+
+
+@pytest.mark.django_db
+def test_create_registered_entity_missing_required_fields(api_client):
+    url = reverse("registry:entity-list-create")
+    response = api_client.post(url, {"trade_name": "Test Service"}, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# =============================================================================
+# Home view
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_home_page_loads(client):
+    response = client.get(reverse("home"))
+    assert response.status_code == 200
+    assert "home.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db
+def test_home_page_shows_entities(client):
+    RegisteredEntityFactory(trade_name="Visible Entity")
+    response = client.get(reverse("home"))
+    assert b"Visible Entity" in response.content
+
+
+@pytest.mark.django_db
+def test_home_page_empty_state(client):
+    response = client.get(reverse("home"))
+    assert b"No registered entities yet" in response.content
+
+
+# =============================================================================
+# WRP filter API
+# =============================================================================
+
+
+@pytest.fixture
+def wrp_data(db):
+    entity_intermediary = RegisteredEntityFactory(is_intermediary=True)
+    entity_not_intermediary = RegisteredEntityFactory(is_intermediary=False)
+    entity_pub_eaa = RegisteredEntityFactory(
+        entity_role=EntityRole.ATTESTATION_PROVIDER, is_psb=True
+    )
+
+    EntityEntitlementFactory(
+        registered_entity=entity_intermediary,
+        entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
+        entitlement_type=EntitlementType.SERVICE_PROVIDER,
+    )
+    EntityEntitlementFactory(
+        registered_entity=entity_not_intermediary,
+        entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
+        entitlement_type=EntitlementType.SERVICE_PROVIDER,
+    )
+    EntityEntitlementFactory(
+        registered_entity=entity_pub_eaa,
+        entitlement_uri="http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",
+        entitlement_type=EntitlementType.PUB_EAA_PROVIDER,
+    )
+
+    EntitySupportURIFactory(registered_entity=entity_intermediary)
+    EntitySupportURIFactory(registered_entity=entity_not_intermediary)
+    EntitySupportURIFactory(registered_entity=entity_pub_eaa)
+
+    return entity_intermediary, entity_not_intermediary, entity_pub_eaa
+
+
+@pytest.mark.django_db
+def test_filter_by_entitlement_service_provider(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url, {"entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 2
+
+
+@pytest.mark.django_db
+def test_filter_by_entitlement_pub_eaa_provider(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url, {"entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+
+
+@pytest.mark.django_db
+def test_no_entitlement_filter_returns_all(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 3
+
+
+@pytest.mark.django_db
+def test_filter_by_entitlement_no_match_returns_empty(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url, {"entitlement": "http://data.europa.eu/eudi/entitlement/NonExistent"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 0
+
+
+@pytest.mark.django_db
+def test_filter_by_entitlement_invalid_uri_returns_empty(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(url, {"entitlement": "invalid-uri"})
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("true", 1),
+        ("1", 1),
+        ("false", 2),
+        ("0", 2),
+        ("invalid", 2),
+    ],
+)
+def test_filter_by_isintermediary(api_client, wrp_data, value, expected):
+    response = api_client.get(reverse("registry:wrp"), {"isintermediary": value})
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == expected
+
+
+@pytest.mark.django_db
+def test_combined_filter_entitlement_and_isintermediary_true(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url,
+        {
+            "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",
+            "isintermediary": "true",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+    assert response.data[0]["isIntermediary"] is True
+
+
+@pytest.mark.django_db
+def test_combined_filter_entitlement_and_isintermediary_false(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url,
+        {
+            "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",
+            "isintermediary": "false",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+    assert response.data[0]["isIntermediary"] is False
+
+
+@pytest.mark.django_db
+def test_combined_filter_no_match(api_client, wrp_data):
+    url = reverse("registry:wrp")
+    response = api_client.get(
+        url,
+        {
+            "entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",
+            "isintermediary": "true",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 0
