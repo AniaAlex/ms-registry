@@ -2,6 +2,8 @@
 Tests for Registry app endpoints.
 """
 
+from unittest.mock import patch
+
 import pytest
 from core.models import EntitlementType, EntityRole
 from django.urls import reverse
@@ -269,3 +271,35 @@ def test_combined_filter_no_match(api_client, wrp_data):
     )
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == 0
+
+
+# =============================================================================
+# JWKSView
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_jwks_returns_real_key_when_env_var_set(api_client):
+    fake_jwk = {"kty": "EC", "crv": "P-256", "x": "abc", "y": "def"}
+    with patch("core.signing.public_key_as_jwk", return_value=fake_jwk):
+        response = api_client.get(reverse("jwks"))
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["keys"][0] == fake_jwk
+
+
+@pytest.mark.django_db
+def test_jwks_falls_back_to_placeholder_when_key_not_configured(api_client):
+    from core.signing import KeyNotConfiguredError
+
+    with patch("core.signing.public_key_as_jwk", side_effect=KeyNotConfiguredError):
+        response = api_client.get(reverse("jwks"))
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["keys"][0]["kid"] == "ms-registry-signing-key-v1"
+
+
+@pytest.mark.django_db
+def test_jwks_returns_500_for_invalid_key_configuration(api_client):
+    with patch("core.signing.public_key_as_jwk", side_effect=ValueError("bad key")):
+        response = api_client.get(reverse("jwks"))
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert "detail" in response.data

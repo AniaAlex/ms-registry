@@ -21,6 +21,7 @@
                 <th>Status</th>
                 <th>Supervisory Authority</th>
                 <th>Registered At</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -40,6 +41,9 @@
                 </td>
                 <td>{{ entity.supervisory_authority }}</td>
                 <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                <td>
+                    <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get CNF</a>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
