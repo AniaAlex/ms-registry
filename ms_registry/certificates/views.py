@@ -8,7 +8,6 @@ GET /certificates/cnf/<entity_id>/
 """
 
 import time
-import uuid
 
 from core.models import RegistrationStatus
 from core.signing import sign_jwt
@@ -56,17 +55,11 @@ class CnfView(APIView):
             200: {"type": "object", "properties": {"token": {"type": "string"}}},
             404: {"description": "Entity not found"},
             409: {"description": "Entity is not active"},
+            500: {"description": "Failed to generate signed JWT"},
         },
     )
+    # TODO: reconsider the endpoint, probably serializer lookup
     def get(self, request, entity_id, *args, **kwargs):
-        try:
-            uuid.UUID(str(entity_id))
-        except ValueError:
-            return Response(
-                {"detail": "Invalid entity_id."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             entity = (
                 RegisteredEntity.objects.select_related(

@@ -18,6 +18,10 @@ from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 _private_key: EllipticCurvePrivateKey | None = None
 
 
+class KeyNotConfiguredError(RuntimeError):
+    """Raised when REGISTRY_SIGNING_KEY_PEM is not set in the environment."""
+
+
 def _load_private_key() -> EllipticCurvePrivateKey:
     """Load and cache the private key from the environment."""
     global _private_key
@@ -26,7 +30,7 @@ def _load_private_key() -> EllipticCurvePrivateKey:
 
     pem = os.environ.get("REGISTRY_SIGNING_KEY_PEM", "")
     if not pem:
-        raise RuntimeError(
+        raise KeyNotConfiguredError(
             "REGISTRY_SIGNING_KEY_PEM is not set. "
             "Run: python manage.py generate_registry_signing_key"
         )

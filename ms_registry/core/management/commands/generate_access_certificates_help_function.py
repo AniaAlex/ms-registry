@@ -152,7 +152,7 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
         )
     )
 
-    # Add entitlement OIDs as SubjectAlternativeName OtherName entries
+    # Add entitlement OIDs as SubjectAlternativeName RegisteredID entries
     san_entries = []
     for entitlement in entitlements:
         oid_str = _ENTITLEMENT_OID.get(entitlement)

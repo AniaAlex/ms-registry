@@ -632,11 +632,16 @@ class JWKSView(APIView):
 
     def get(self, request, *args, **kwargs):
         try:
-            from core.signing import public_key_as_jwk
+            from core.signing import KeyNotConfiguredError, public_key_as_jwk
 
             jwk = public_key_as_jwk()
-        except RuntimeError:
+        except KeyNotConfiguredError:
             jwk = self._PLACEHOLDER_JWK
+        except Exception:
+            return Response(
+                {"detail": "Signing key configuration error."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         return Response({"keys": [jwk]}, status=status.HTTP_200_OK)
 
 
