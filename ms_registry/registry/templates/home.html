@@ -42,7 +42,17 @@
                 <td>{{ entity.supervisory_authority }}</td>
                 <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
                 <td>
-                    <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get CNF</a>
+                    {% if entity.registration_status != 'pending' %}
+                    <div class="actions-cell">
+                        <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get CNF</a>
+                        {% if entity.has_valid_cert %}
+                            <span class="badge-cert-valid">Valid Cert</span>
+                            <a href="{% url 'certificates:detail-page' entity.id %}" class="btn btn-sm btn-secondary">Show Access Cert</a>
+                        {% else %}
+                            <a href="{% url 'certificates:upload-page' entity.id %}" class="btn btn-sm btn-primary">Upload Certificate</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -125,6 +135,31 @@
     .badge-role-attestation_provider {
         background-color: #e2d5f1;
         color: #563d7c;
+    }
+    .actions-cell {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+    }
+    .actions-cell .btn-sm {
+        padding: 0.2rem 0.55rem;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        border-radius: 4px;
+        white-space: nowrap;
+        text-decoration: none;
+    }
+    .badge-cert-valid {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.55rem;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        border-radius: 4px;
+        white-space: nowrap;
+        background-color: #d4edda;
+        color: #155724;
     }
     .empty-state {
         text-align: center;

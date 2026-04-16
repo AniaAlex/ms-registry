@@ -22,19 +22,27 @@ import jwt
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+from cryptography.x509.oid import NameOID
 from django.core.management.base import BaseCommand, CommandError
 
 # ---------------------------------------------------------------------------
 # OID mappings (ETSI TS 119 411-8 / TS 119 475)
 # ---------------------------------------------------------------------------
 
-# Certificate policy OIDs by entity role
-# NCP-l-eudiwrp for legal persons, NCP-n-eudiwrp for natural persons
+# Certificate policy OIDs by entity role (ETSI TS 119 411-8 §5.3)
+# All current roles are expected to be legal persons; kept for reference.
 _POLICY_OID_BY_ROLE = {
     "relying_party": "0.4.0.194118.1.2",  # NCP-l-eudiwrp
     "pid_provider": "0.4.0.194118.1.2",  # NCP-l-eudiwrp
     "attestation_provider": "0.4.0.194118.1.2",  # NCP-l-eudiwrp
+}
+
+# Entity-type override: natural persons must use NCP-n-eudiwrp, not NCP-l-eudiwrp.
+# Qualification level (NCP vs QCP) is a CA decision, not the registry's — we
+# default to NCP for both types in this dev helper.
+_POLICY_OID_BY_ENTITY_TYPE = {
+    "natural_person": "0.4.0.194118.1.1",  # NCP-n-eudiwrp
+    "legal_person": "0.4.0.194118.1.2",  # NCP-l-eudiwrp
 }
 
 # Entitlement OIDs (ETSI TS 119 475)
@@ -78,34 +86,76 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
 
     Returns (certificate_pem, private_key_pem).
     """
-    name = cnf.get("name", "Unknown")
+    entity_type = cnf.get("entity_type", "legal_person")
+    legal_name = cnf.get("name", "Unknown")
+    friendly_name = cnf.get("friendly_name") or legal_name
+    # given_name / family_name are only present for natural persons
+    given_name = cnf.get("given_name") or ""
+    family_name = cnf.get("family_name") or ""
     country = cnf.get("country") or "XX"
     org_identifier = cnf.get("org_identifier")
     org_identifier_type = cnf.get("org_identifier_type", "OTHER")
     role = cnf.get("role", "relying_party")
     entitlements = cnf.get("entitlements", [])
+    urls = cnf.get("urls", [])
+    contact = cnf.get("contact") or {}
+    contact_email = contact.get("email")
 
     # Generate entity key pair (EC P-256, per ARF recommendation)
     private_key = ec.generate_private_key(ec.SECP256R1())
 
-    # Build Subject DN
-    name_attributes = [
-        x509.NameAttribute(NameOID.COUNTRY_NAME, country),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, name),
-        x509.NameAttribute(NameOID.COMMON_NAME, name),
-    ]
-    if org_identifier:
-        formatted = _format_org_identifier(org_identifier, org_identifier_type, country)
-        name_attributes.append(
-            x509.NameAttribute(NameOID.ORGANIZATION_IDENTIFIER, formatted)
-        )
+    # Build Subject DN — structure differs by entity type:
+    # Legal person  (ETSI EN 319 412-3): C, O (legal name), CN (friendly name),
+    #                                     organizationIdentifier
+    # Natural person (ETSI EN 319 412-2): C, GN (given name), SN (family name),
+    #                                      CN (friendly name), serialNumber
+    if entity_type == "natural_person":
+        name_attributes = [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, country),
+            # GN and SN carry the official name for natural persons
+            x509.NameAttribute(NameOID.GIVEN_NAME, given_name),
+            x509.NameAttribute(NameOID.SURNAME, family_name),
+            # CN holds the user-friendly / display name (GEN-6.1.1-04)
+            x509.NameAttribute(NameOID.COMMON_NAME, friendly_name),
+        ]
+        if org_identifier:
+            # Natural persons use serialNumber, not organizationIdentifier
+            # (ETSI EN 319 412-1 §5.1.3)
+            formatted = _format_org_identifier(
+                org_identifier, org_identifier_type, country
+            )
+            name_attributes.append(x509.NameAttribute(NameOID.SERIAL_NUMBER, formatted))
+    else:
+        # Legal person
+        name_attributes = [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, country),
+            # O carries the official legal name from the register (CIR Annex I pt 1)
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, legal_name),
+            # CN holds the user-friendly / trade name (GEN-6.1.1-04)
+            x509.NameAttribute(NameOID.COMMON_NAME, friendly_name),
+        ]
+        if org_identifier:
+            # organizationIdentifier encodes the business identifier per
+            # ETSI EN 319 412-1 §5.1.4 (e.g. NTRSE-5568002755)
+            formatted = _format_org_identifier(
+                org_identifier, org_identifier_type, country
+            )
+            name_attributes.append(
+                x509.NameAttribute(NameOID.ORGANIZATION_IDENTIFIER, formatted)
+            )
 
     subject = x509.Name(name_attributes)
     # Self-signed: entity is both subject and issuer (dev only)
     issuer = subject
 
-    # Certificate policy
-    policy_oid_str = _POLICY_OID_BY_ROLE.get(role, "0.4.0.194118.1.2")
+    # Certificate policy: entity_type determines NCP-n vs NCP-l (GEN-6.6.1-03).
+    # Role is a secondary signal kept for reference but does not change the OID
+    # because all current roles (relying_party, pid/attestation provider) are legal
+    # persons; a natural person in any role still needs NCP-n-eudiwrp.
+    policy_oid_str = _POLICY_OID_BY_ENTITY_TYPE.get(
+        entity_type,
+        _POLICY_OID_BY_ROLE.get(role, "0.4.0.194118.1.2"),  # fallback: role-based
+    )
     policy_oid = x509.ObjectIdentifier(policy_oid_str)
 
     # Build certificate
@@ -137,10 +187,6 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
             critical=True,
         )
         .add_extension(
-            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]),
-            critical=False,
-        )
-        .add_extension(
             x509.CertificatePolicies(
                 [x509.PolicyInformation(policy_oid, policy_qualifiers=None)]
             ),
@@ -152,8 +198,13 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
         )
     )
 
-    # Add entitlement OIDs as SubjectAlternativeName RegisteredID entries
+    # Build SAN: contact info + entitlement OIDs (TS 119 475)
+    # At least one contact entry (URL, email, or phone) satisfies GEN-6.6.1-07 [CHOICE]
     san_entries = []
+    if urls:
+        san_entries.append(x509.UniformResourceIdentifier(urls[0]))
+    if contact_email:
+        san_entries.append(x509.RFC822Name(contact_email))
     for entitlement in entitlements:
         oid_str = _ENTITLEMENT_OID.get(entitlement)
         if oid_str:

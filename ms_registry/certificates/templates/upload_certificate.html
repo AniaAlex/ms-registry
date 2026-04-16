@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Access Certificate{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="upload-container">
+        <div class="upload-header">
+            <h2>Upload Access Certificate</h2>
+            {% if entity_name %}
+            <p>Entity: <strong>{{ entity_name }}</strong></p>
+            {% endif %}
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger">
+            <h4>Error</h4>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        {% if certificate %}
+        {# ── Success state ── #}
+        <div class="alert alert-success">
+            <h4>Certificate Accepted</h4>
+            <p>The certificate has been validated and stored.</p>
+        </div>
+        <div class="cert-details">
+            <h3>Certificate Details</h3>
+            <table class="detail-table">
+                <tr><th>Serial</th><td><code>{{ certificate.certificate_serial }}</code></td></tr>
+                <tr><th>SHA-256</th><td><code>{{ certificate.certificate_fingerprint_sha256 }}</code></td></tr>
+                <tr><th>Subject DN</th><td><code>{{ certificate.subject_dn }}</code></td></tr>
+                <tr><th>Issuer DN</th><td><code>{{ certificate.issuer_dn }}</code></td></tr>
+                <tr><th>Not Before</th><td>{{ certificate.not_before }}</td></tr>
+                <tr><th>Not After</th><td>{{ certificate.not_after }}</td></tr>
+            </table>
+        </div>
+        <div class="actions">
+            <a href="{% url 'home' %}" class="btn btn-primary">Back to Registry</a>
+        </div>
+
+        {% else %}
+        {# ── Form state (with optional errors) ── #}
+        {% if errors %}
+        <div class="alert alert-danger">
+            <h4>Validation Errors</h4>
+            <ul>
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="certificate_pem">
+                    Certificate PEM
+                    <span class="form-help">
+                        Paste the PEM-encoded X.509 access certificate
+                        (including <code>-----BEGIN CERTIFICATE-----</code> header/footer).
+                    </span>
+                </label>
+                <textarea
+                    id="certificate_pem"
+                    name="certificate_pem"
+                    class="form-control pem-textarea"
+                    rows="14"
+                    placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                >{{ pem_value }}</textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Upload Certificate</button>
+                <a href="{% url 'home' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-container {
+        max-width: 760px;
+        margin: 2rem auto;
+    }
+    .upload-header {
+        margin-bottom: 1.5rem;
+    }
+    .upload-header h2 {
+        margin: 0 0 0.25rem;
+        color: #003399;
+    }
+    .pem-textarea {
+        font-family: monospace;
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        resize: vertical;
+    }
+    .cert-details {
+        margin-top: 1.5rem;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 1.5rem;
+    }
+    .cert-details h3 {
+        margin-top: 0;
+        font-size: 1rem;
+        color: #003399;
+    }
+    .detail-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .detail-table th,
+    .detail-table td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #f0f0f0;
+        text-align: left;
+        vertical-align: top;
+    }
+    .detail-table th {
+        width: 160px;
+        color: #495057;
+        font-weight: 600;
+    }
+    .detail-table code {
+        word-break: break-all;
+        font-size: 0.78rem;
+    }
+    .actions {
+        margin-top: 1.5rem;
+    }
+</style>
+{% endblock %}

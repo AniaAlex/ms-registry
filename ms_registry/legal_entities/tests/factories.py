@@ -23,3 +23,4 @@ class LegalEntityFactory(factory.django.DjangoModelFactory):
     entity_type = "legal_person"
     legal_person = factory.SubFactory(LegalPersonFactory)
     physical_address = factory.SubFactory(PhysicalAddressFactory)
+    email = factory.Sequence(lambda n: f"contact{n}@example.com")

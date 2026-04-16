@@ -17,8 +17,7 @@ from registry.models import RegisteredEntity
 
 class EntityAccessCertificate(BaseModel):
     """
-    Access Certificate history with CT log info per RFC 9162.
-    Per Trust Infrastructure Schema Section 2.2:
+    Access Certificate history per Trust Infrastructure Schema Section 2.2.
     Access CA issues certificates to all registered entities
     (PID Providers, Attestation Providers, Relying Parties).
     """
@@ -37,12 +36,12 @@ class EntityAccessCertificate(BaseModel):
     not_before = models.DateTimeField()
     not_after = models.DateTimeField()
 
-    # Certificate Transparency Log info (RFC 9162)
-    ct_log_id = models.CharField(max_length=200, blank=True, null=True)
-    ct_log_timestamp = models.DateTimeField(blank=True, null=True)
-    ct_sct = models.BinaryField(
-        blank=True, null=True, help_text="Signed Certificate Timestamp"
-    )
+    # TODO: Add a proper CT log implementation, e.g. using the python-ct library
+    # ct_log_id = models.CharField(max_length=200, blank=True, null=True)
+    # ct_log_timestamp = models.DateTimeField(blank=True, null=True)
+    # ct_sct = models.BinaryField(
+    #     blank=True, null=True, help_text="Signed Certificate Timestamp"
+    # )
 
     # Certificate status
     is_current = models.BooleanField(default=True)
