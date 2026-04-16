@@ -1,23 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}CNF Token{% endblock %}
+{% block title %}Entity Information{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="result-container">
         {% if token %}
         <div class="result-header success">
-            <h2>CNF Token</h2>
+            <h2>Entity Information</h2>
             <p>Signed JWT containing the confirmed registry data for this entity.</p>
         </div>
         <div class="token-box">
             <label>Token</label>
             <textarea readonly rows="6">{{ token }}</textarea>
-            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText(document.querySelector('textarea').value)">Copy</button>
+            <div class="token-actions">
+                <button class="btn btn-secondary" onclick="navigator.clipboard.writeText(document.querySelector('textarea').value)">Copy</button>
+                <button class="btn btn-secondary" onclick="downloadCnf()">Download .cnf</button>
+            </div>
         </div>
         {% else %}
         <div class="result-header error">
-            <h2>Could Not Issue CNF Token</h2>
+            <h2>Could Not Issue Entity Information</h2>
             <p class="error-detail">{{ error }}</p>
         </div>
         {% endif %}
@@ -27,6 +30,100 @@
         </div>
     </div>
 </div>
+
+{{ cnf_data|json_script:"cnf-data" }}
+
+<script>
+function downloadCnf() {
+    const cnf = JSON.parse(document.getElementById('cnf-data').textContent);
+
+    const ORG_ID_PREFIX = {
+        'EUID': 'EUID', 'VAT_NUMBER': 'VAT', 'LEI': 'LEI',
+        'EORI': 'EORI', 'NATIONAL_BUSINESS_REG': 'NTR',
+        'NATIONAL_TAX_REG': 'TAX', 'SERIAL_NUMBER': 'PAS', 'OTHER': 'OTH',
+    };
+    const ENTITLEMENT_OID = {
+        'Service_Provider':    '0.4.0.19475.1.1',
+        'QEAA_Provider':       '0.4.0.19475.1.2',
+        'Non_Q_EAA_Provider':  '0.4.0.19475.1.3',
+        'PUB_EAA_Provider':    '0.4.0.19475.1.4',
+        'PID_Provider':        '0.4.0.19475.1.5',
+    };
+    const POLICY_OID = {
+        'natural_person': '0.4.0.194118.1.1',
+        'legal_person':   '0.4.0.194118.1.2',
+    };
+
+    const entityType = cnf.entity_type || 'legal_person';
+    const country    = cnf.country || 'XX';
+    const prefix     = ORG_ID_PREFIX[cnf.org_identifier_type] || 'OTH';
+    const orgId      = cnf.org_identifier ? `${prefix}${country}-${cnf.org_identifier}` : null;
+    const policyOid  = POLICY_OID[entityType] || '0.4.0.194118.1.2';
+
+    // Build Subject DN attributes
+    let dn = [];
+    if (entityType === 'natural_person') {
+        dn.push(`C            = ${country}`);
+        if (cnf.given_name)  dn.push(`GN           = ${cnf.given_name}`);
+        if (cnf.family_name) dn.push(`SN           = ${cnf.family_name}`);
+        dn.push(`CN           = ${cnf.friendly_name || cnf.name}`);
+        if (orgId) dn.push(`serialNumber = ${orgId}`);
+    } else {
+        dn.push(`C                      = ${country}`);
+        dn.push(`O                      = ${cnf.name}`);
+        dn.push(`CN                     = ${cnf.friendly_name || cnf.name}`);
+        if (orgId) dn.push(`organizationIdentifier = ${orgId}`);
+    }
+
+    // Build SAN entries
+    let altNames = [];
+    if (cnf.urls && cnf.urls.length > 0) altNames.push(`URI.1   = ${cnf.urls[0]}`);
+    if (cnf.contact && cnf.contact.email) altNames.push(`email.1 = ${cnf.contact.email}`);
+    (cnf.entitlements || []).forEach((e, i) => {
+        const oid = ENTITLEMENT_OID[e];
+        if (oid) altNames.push(`OID.${i + 1}   = ${oid}`);
+    });
+
+    let lines = [
+        `# OpenSSL configuration for access certificate CSR`,
+        `# Entity: ${cnf.friendly_name || cnf.name} (${country})`,
+        `# Role: ${cnf.role}`,
+        ``,
+        `[ req ]`,
+        `default_bits       = 256`,
+        `default_md         = sha256`,
+        `prompt             = no`,
+        `utf8               = yes`,
+        `distinguished_name = req_distinguished_name`,
+        `req_extensions     = v3_req`,
+        ``,
+        `[ req_distinguished_name ]`,
+        ...dn,
+        ``,
+        `[ v3_req ]`,
+        `basicConstraints    = critical, CA:FALSE`,
+        `keyUsage            = critical, digitalSignature`,
+        `certificatePolicies = ${policyOid}`,
+    ];
+
+    if (altNames.length > 0) {
+        lines.push(`subjectAltName      = @alt_names`);
+        lines.push(``);
+        lines.push(`[ alt_names ]`);
+        lines.push(...altNames);
+    }
+
+    const content  = lines.join('\n') + '\n';
+    const filename = `${(cnf.name || 'entity').replace(/\s+/g, '_').toLowerCase()}.cnf`;
+    const blob     = new Blob([content], { type: 'text/plain' });
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href         = url;
+    a.download     = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
 {% endblock %}
 
 {% block extra_css %}
@@ -71,8 +168,10 @@
         background: #f8f9fa;
         box-sizing: border-box;
     }
-    .token-box .btn {
+    .token-actions {
         margin-top: 0.5rem;
+        display: flex;
+        gap: 0.5rem;
     }
     .actions {
         margin-top: 2rem;

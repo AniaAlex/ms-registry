@@ -18,6 +18,7 @@ GET/POST /certificates/upload/<entity_id>/view/
 import hashlib
 import time
 
+import jwt as pyjwt
 from certificates.models import EntityAccessCertificate
 from certificates.serializers import AccessCertificateUploadSerializer
 from core.models import RegistrationStatus
@@ -193,7 +194,11 @@ class CnfPageView(View):
     def get(self, request, entity_id):
         api_response = CnfView.as_view()(request, entity_id=entity_id)
         if api_response.status_code == 200:
-            context = {"token": api_response.data.get("token")}
+            token = api_response.data.get("token")
+            payload = pyjwt.decode(
+                token, options={"verify_signature": False}, algorithms=["ES256"]
+            )
+            context = {"token": token, "cnf_data": payload.get("cnf", {})}
         else:
             context = {"error": api_response.data.get("detail")}
         return render(
