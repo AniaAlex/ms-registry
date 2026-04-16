@@ -1,5 +1,8 @@
+from certificates.models import EntityAccessCertificate
 from core.models import EntitlementType, EntityType, IdentifierType
+from django.db.models import Exists, OuterRef
 from django.urls import reverse
+from django.utils import timezone
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
@@ -21,9 +24,22 @@ class HomeView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["entities"] = models.RegisteredEntity.objects.select_related(
-            "legal_entity", "supervisory_authority"
-        ).order_by("-created_at")
+        context["entities"] = (
+            models.RegisteredEntity.objects.select_related(
+                "legal_entity", "supervisory_authority"
+            )
+            .annotate(
+                has_valid_cert=Exists(
+                    EntityAccessCertificate.objects.filter(
+                        registered_entity=OuterRef("pk"),
+                        is_current=True,
+                        revoked_at__isnull=True,
+                        not_after__gt=timezone.now(),
+                    )
+                )
+            )
+            .order_by("-created_at")
+        )
         return context
 
 
@@ -662,8 +678,6 @@ class LOTESEView(APIView):
         responses={200: {"type": "object"}},
     )
     def get(self, request, *args, **kwargs):
-        from django.utils import timezone
-
         entities = (
             models.RegisteredEntity.objects.filter(registration_status="active")
             .select_related(

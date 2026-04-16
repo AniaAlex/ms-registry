@@ -771,8 +771,6 @@ class TSPCertificate(models.Model):
     @property
     def is_valid(self):
         """Check if certificate is currently valid based on dates."""
-        from django.utils import timezone
-
         now = timezone.now()
         if self.not_before and self.not_after:
             return self.not_before <= now <= self.not_after
@@ -781,8 +779,6 @@ class TSPCertificate(models.Model):
     @property
     def days_until_expiry(self):
         """Return days until certificate expires."""
-        from django.utils import timezone
-
         if self.not_after:
             delta = self.not_after - timezone.now()
             return delta.days

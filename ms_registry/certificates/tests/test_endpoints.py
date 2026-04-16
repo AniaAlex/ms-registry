@@ -218,3 +218,24 @@ def test_cnf_returns_409_for_revoked_entity(api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.REVOKED)
     response = _get_cnf(api_client, entity.id)
     assert response.status_code == status.HTTP_409_CONFLICT
+
+
+@pytest.mark.django_db
+def test_cnf_returns_409_when_no_contact_info(api_client):
+    """
+    GEN-6.6.1-07 [CHOICE]: cnf must be rejected if none of the three contact
+    methods (support URL, email, phone) are present on the entity — the resulting
+    certificate would fail upload validation anyway.
+    """
+    from legal_entities.tests.factories import LegalEntityFactory
+
+    legal_entity = LegalEntityFactory(email=None, phone=None)
+    entity = RegisteredEntityFactory(
+        registration_status=RegistrationStatus.ACTIVE,
+        legal_entity=legal_entity,
+    )
+    # No support URIs, no email, no phone
+    assert not entity.support_uris.exists()
+    response = _get_cnf(api_client, entity.id)
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert "GEN-6.6.1-07" in response.data["detail"]

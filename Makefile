@@ -75,3 +75,7 @@ test: ## Run unit tests - args: [detach=no] [keepdb=no] [test-path=.]
 .PHONY: pytest
 pytest: ## Run pytest - args: [test-path=.] e.g. make pytest test-path=registry/tests/
 	docker-compose run --rm django python -m pytest $(if $(test-path),$(test-path),)
+
+.PHONY: gen-access-cert
+gen-access-cert: ## Generate a dev access certificate from a cnf JWT - args: token=<jwt>
+	@docker-compose run --rm --no-deps django ./manage.py generate_access_certificates_help_function --token $(token)

@@ -22,7 +22,7 @@ class KeyNotConfiguredError(RuntimeError):
     """Raised when REGISTRY_SIGNING_KEY_PEM is not set in the environment."""
 
 
-def _load_private_key() -> EllipticCurvePrivateKey:
+def load_private_key() -> EllipticCurvePrivateKey:
     """Load and cache the private key from the environment."""
     global _private_key
     if _private_key is not None:
@@ -50,7 +50,7 @@ def sign_jwt(payload: dict) -> str:
     The caller is responsible for setting standard claims
     ('iss', 'sub', 'iat', 'exp') and any domain-specific claims in the payload.
     """
-    private_key = _load_private_key()
+    private_key = load_private_key()
     return jwt.encode(
         payload,
         private_key,
@@ -64,7 +64,7 @@ def public_key_as_jwk() -> dict:
     Return the public key as a JWK dict for inclusion in the JWKS document.
     Coordinates are base64url-encoded per RFC 7517.
     """
-    private_key = _load_private_key()
+    private_key = load_private_key()
     pub = private_key.public_key()
     pub_numbers = pub.public_numbers()
     key_size = (pub_numbers.curve.key_size + 7) // 8
