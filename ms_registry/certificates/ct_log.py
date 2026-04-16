@@ -60,7 +60,7 @@ import os
 import struct
 import time
 
-from core.signing import _load_private_key
+from core.signing import load_private_key
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
 
@@ -205,7 +205,7 @@ def create_ct_log_entry(cert_der: bytes) -> tuple[str, int, bytes]:
         timestamp_ms (int)  milliseconds since epoch
         sct_bytes (bytes)   TLS-encoded TransItemList (RFC 9162 §4.5)
     """
-    private_key = _load_private_key()
+    private_key = load_private_key()
     oid_str = _log_id()
     log_id_bytes = _encode_log_id(oid_str)
     timestamp_ms = int(time.time() * 1000)

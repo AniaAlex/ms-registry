@@ -678,8 +678,6 @@ class LOTESEView(APIView):
         responses={200: {"type": "object"}},
     )
     def get(self, request, *args, **kwargs):
-        from django.utils import timezone
-
         entities = (
             models.RegisteredEntity.objects.filter(registration_status="active")
             .select_related(

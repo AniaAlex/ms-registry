@@ -25,6 +25,7 @@ from core.signing import sign_jwt
 from cryptography.hazmat.primitives import serialization
 from django.db import transaction
 from django.shortcuts import render
+from django.utils import timezone
 from django.views import View
 from drf_spectacular.utils import extend_schema
 from registry.models import RegisteredEntity
@@ -105,10 +106,9 @@ class CnfView(APIView):
         # GEN-6.6.1-07 [CHOICE]: the certificate SAN must contain at least one
         # contact method (URL, email, or phone). Reject the cnf request early if
         # none are registered — the resulting certificate would fail validation.
+        support_uris = list(entity.support_uris.all())
         has_contact = (
-            entity.support_uris.exists()
-            or entity.legal_entity.email
-            or entity.legal_entity.phone
+            bool(support_uris) or entity.legal_entity.email or entity.legal_entity.phone
         )
         if not has_contact:
             return Response(
@@ -169,7 +169,7 @@ class CnfView(APIView):
                 ),
                 "role": entity.entity_role,
                 "entitlements": [e.entitlement_type for e in entity.entitlements.all()],
-                "urls": [su.support_uri for su in entity.support_uris.all()],
+                "urls": [su.support_uri for su in support_uris],
                 "contact": {
                     "email": entity.legal_entity.email,
                     "phone": entity.legal_entity.phone,
@@ -383,9 +383,7 @@ class AccessCertificateDetailPageView(View):
                 status=404,
             )
 
-        from django.utils import timezone as tz
-
-        now = tz.now()
+        now = timezone.now()
         certificate = (
             EntityAccessCertificate.objects.filter(
                 registered_entity=entity,
