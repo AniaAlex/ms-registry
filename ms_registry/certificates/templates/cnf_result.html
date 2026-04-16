@@ -81,7 +81,8 @@ function downloadCnf() {
     if (cnf.contact && cnf.contact.email) altNames.push(`email.1 = ${cnf.contact.email}`);
     (cnf.entitlements || []).forEach((e, i) => {
         const oid = ENTITLEMENT_OID[e];
-        if (oid) altNames.push(`OID.${i + 1}   = ${oid}`);
+        // registeredID is the recognised label according to RFC 5280
+        if (oid) altNames.push(`RID.${i + 1}   = ${oid}`);
     });
 
     let lines = [
