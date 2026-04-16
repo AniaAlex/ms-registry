@@ -150,14 +150,18 @@ def _get_cnf_page(client, entity_id):
 class TestCnfPageView:
     def test_returns_200_and_renders_token_for_active_entity(self, api_client):
         entity = _make_active_entity()
-        with patch("certificates.views.sign_jwt", return_value="signed.jwt.token"):
+        with patch(
+            "certificates.views.sign_jwt", return_value="signed.jwt.token"
+        ), patch("certificates.views.pyjwt.decode", return_value={"cnf": {}}):
             response = _get_cnf_page(api_client, entity.id)
         assert response.status_code == status.HTTP_200_OK
         assert b"signed.jwt.token" in response.content
 
     def test_does_not_show_error_on_success(self, api_client):
         entity = _make_active_entity()
-        with patch("certificates.views.sign_jwt", return_value="tok"):
+        with patch("certificates.views.sign_jwt", return_value="tok"), patch(
+            "certificates.views.pyjwt.decode", return_value={"cnf": {}}
+        ):
             response = _get_cnf_page(api_client, entity.id)
         assert b"Could Not Issue" not in response.content
 
