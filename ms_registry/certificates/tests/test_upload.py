@@ -55,6 +55,16 @@ def _make_cert_pem(entity) -> str:
     """Generate a valid self-signed certificate matching the entity's registry data."""
     from registry.tests.factories import EntitySupportURIFactory
 
+    # GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons.
+    # Ensure a primary identifier exists before building the cert so that the
+    # generated certificate and the registry data are consistent.
+    if (
+        entity.legal_entity.entity_type == "legal_person"
+        and not entity.primary_identifier
+    ):
+        _add_identifier(entity)
+
+    entity.refresh_from_db()
     primary_id = entity.primary_identifier
 
     # Ensure entity has at least one support URI (required by GEN-6.6.1-07)
@@ -63,7 +73,8 @@ def _make_cert_pem(entity) -> str:
         support_uri = EntitySupportURIFactory(registered_entity=entity, is_primary=True)
 
     cnf = {
-        "name": entity.display_name,
+        "entity_type": entity.legal_entity.entity_type,
+        "name": entity.legal_entity.display_name,
         "country": (primary_id.country_code if primary_id else None)
         or (
             entity.legal_entity.physical_address.country_code
@@ -303,6 +314,38 @@ def test_upload_returns_400_for_missing_entitlement_oid(api_client):
     assert "entitlement" in str(response.data).lower()
 
 
+@pytest.mark.django_db
+def test_upload_returns_400_for_legal_person_without_primary_identifier(api_client):
+    """
+    GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons.
+    If the entity has no primary_identifier in the registry, the certificate
+    cannot carry a valid organizationIdentifier and must be rejected.
+    """
+    from core.management.commands.generate_access_certificates_help_function import (
+        generate_certificate_from_cnf,
+    )
+
+    entity = _make_active_entity()
+    # Confirm no primary identifier is set (factory default)
+    assert entity.primary_identifier is None
+
+    cnf = {
+        "entity_type": "legal_person",
+        "name": entity.display_name,
+        "country": entity.legal_entity.physical_address.country_code,
+        "org_identifier": None,  # no identifier → cert has no organizationIdentifier
+        "org_identifier_type": None,
+        "role": entity.entity_role,
+        "entitlements": [],
+        "urls": ["https://example.com"],
+        "contact": {"email": None, "phone": None},
+    }
+    pem, _ = generate_certificate_from_cnf(cnf)
+    response = _post_upload(api_client, entity.id, pem)
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "organizationidentifier" in str(response.data).lower()
+
+
 # ── upload HTML page ───────────────────────────────────────────────────────────
 
 
@@ -348,3 +391,89 @@ def test_upload_page_post_shows_validation_errors(api_client):
     )
     assert response.status_code == 400
     assert b"Validation Errors" in response.content
+
+
+# ── Certificate detail page ────────────────────────────────────────────────────
+
+
+def _detail_page_url(entity_id):
+    return reverse("certificates:detail-page", args=[entity_id])
+
+
+def _make_cert_record(entity, **kwargs):
+    """Create an EntityAccessCertificate row with sensible defaults."""
+    now = datetime.now(tz=timezone.utc)
+    defaults = dict(
+        registered_entity=entity,
+        certificate_serial="AABBCC",
+        not_before=now - timedelta(days=1),
+        not_after=now + timedelta(days=364),
+        is_current=True,
+    )
+    defaults.update(kwargs)
+    return EntityAccessCertificate.objects.create(**defaults)
+
+
+@pytest.mark.django_db
+def test_detail_page_returns_200_for_valid_cert(api_client):
+    entity = _make_active_entity()
+    _make_cert_record(entity)
+    response = api_client.get(_detail_page_url(entity.id))
+    assert response.status_code == 200
+    assert b"AABBCC" in response.content
+
+
+@pytest.mark.django_db
+def test_detail_page_returns_404_for_unknown_entity(api_client):
+    import uuid
+
+    response = api_client.get(_detail_page_url(uuid.uuid4()))
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_detail_page_shows_no_cert_message_when_none_stored(api_client):
+    entity = _make_active_entity()
+    response = api_client.get(_detail_page_url(entity.id))
+    assert response.status_code == 200
+    assert b"No active certificate found" in response.content
+
+
+@pytest.mark.django_db
+def test_detail_page_excludes_not_yet_valid_cert(api_client):
+    """
+    A certificate whose not_before is in the future must not be shown —
+    the query filters not_before__lte=now in addition to not_after__gt=now.
+    """
+    entity = _make_active_entity()
+    future = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    _make_cert_record(entity, not_before=future)
+    response = api_client.get(_detail_page_url(entity.id))
+    assert response.status_code == 200
+    assert b"No active certificate found" in response.content
+
+
+@pytest.mark.django_db
+def test_detail_page_excludes_expired_cert(api_client):
+    entity = _make_active_entity()
+    past = datetime.now(tz=timezone.utc) - timedelta(days=1)
+    _make_cert_record(
+        entity,
+        not_before=past - timedelta(days=365),
+        not_after=past,
+    )
+    response = api_client.get(_detail_page_url(entity.id))
+    assert response.status_code == 200
+    assert b"No active certificate found" in response.content
+
+
+@pytest.mark.django_db
+def test_detail_page_excludes_revoked_cert(api_client):
+    entity = _make_active_entity()
+    _make_cert_record(
+        entity,
+        revoked_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+    )
+    response = api_client.get(_detail_page_url(entity.id))
+    assert response.status_code == 200
+    assert b"No active certificate found" in response.content

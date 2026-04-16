@@ -9,10 +9,15 @@ a proper RFC 9162 TransItem-encoded SCT for each uploaded access certificate,
 signed with the registry's own ECDSA P-256 key.
 
 This is NOT a full RFC 9162 Merkle-tree log.  It records a signed timestamp
-that proves ms-registry saw the certificate at a given moment.  The record is
-stored in ``EntityAccessCertificate`` (ct_log_id, ct_log_timestamp, ct_sct).
+that proves ms-registry saw the certificate at a given moment.  This module
+only generates the CT log values; it does not persist them in
+``EntityAccessCertificate`` because the former CT-related model fields
+(``ct_log_id``, ``ct_log_timestamp``, ``ct_sct``) are not part of the current
+schema (removed by migration 0002_remove_ct_log_fields).  Callers may use the
+tuple returned by ``create_ct_log_entry()`` if they need to expose or persist
+CT data elsewhere.
 
-Wire format (stored in EntityAccessCertificate.ct_sct):
+Wire format of the SCT bytes returned by ``create_ct_log_entry()``:
 
     TransItemList (RFC 9162 §4.5)
     └── TransItem

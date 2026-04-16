@@ -385,12 +385,14 @@ class AccessCertificateDetailPageView(View):
 
         from django.utils import timezone as tz
 
+        now = tz.now()
         certificate = (
             EntityAccessCertificate.objects.filter(
                 registered_entity=entity,
                 is_current=True,
                 revoked_at__isnull=True,
-                not_after__gt=tz.now(),
+                not_before__lte=now,
+                not_after__gt=now,
             )
             .order_by("-created_at")
             .first()

@@ -34,8 +34,11 @@ The log ID is configured via the `CT_LOG_OID` environment variable.  If unset, t
 
 ## Wire Format
 
-Stored as raw TLS bytes in `EntityAccessCertificate.ct_sct`.  The encoding is
-a proper RFC 9162 §4.5 `TransItemList` containing a single `x509_sct_v2` `TransItem`.
+The `certificates/ct_log.py` module produces raw TLS bytes for an SCT-like value.
+The current model no longer stores this in `EntityAccessCertificate.ct_sct` because
+that field (along with `ct_log_id` and `ct_log_timestamp`) was removed in migration
+`0002_remove_ct_log_fields`.  The encoding itself is a proper RFC 9162 §4.5
+`TransItemList` containing a single `x509_sct_v2` `TransItem`.
 
 ```
 TransItemList                     uint16 total_len + payload

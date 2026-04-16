@@ -102,3 +102,6 @@ ENV/
 
 # VS Code
 .devcontainer
+
+# Claude Code
+.claude

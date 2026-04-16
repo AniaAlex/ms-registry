@@ -42,7 +42,7 @@
                 <td>{{ entity.supervisory_authority }}</td>
                 <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
                 <td>
-                    {% if entity.registration_status != 'pending' %}
+                    {% if entity.registration_status == 'active' %}
                     <div class="actions-cell">
                         <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get CNF</a>
                         {% if entity.has_valid_cert %}

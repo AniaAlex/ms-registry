@@ -197,8 +197,16 @@ class AccessCertificateUploadSerializer(serializers.Serializer):
                         f"Subject DN organization '{org_attrs[0].value}' "
                         f"does not match registry legal name '{legal_name}'."
                     )
-            # organizationIdentifier is mandatory for legal persons (GEN-6.6.1-05)
-            if primary_id:
+            # organizationIdentifier is mandatory for legal persons (GEN-6.6.1-05).
+            # The registry must have a primary identifier registered; without one
+            # there is no value to encode and the certificate cannot be valid.
+            if not primary_id:
+                errors.append(
+                    "Entity has no registered primary identifier; "
+                    "organizationIdentifier is mandatory for legal persons "
+                    "(GEN-6.6.1-05)."
+                )
+            else:
                 oi_attrs = subject.get_attributes_for_oid(
                     NameOID.ORGANIZATION_IDENTIFIER
                 )

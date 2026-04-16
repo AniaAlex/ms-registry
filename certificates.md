@@ -43,12 +43,18 @@ Returns an ES256-signed JWT with the confirmed registry data used to build the X
   "iat": 1713000000,
   "exp": 1713086400,
   "cnf": {
+    "entity_type": "legal_person",
     "name": "Example GmbH",
+    "friendly_name": "Example",
+    "given_name": null,
+    "family_name": null,
     "country": "DE",
-    "org_identifier": "NTRDEU-HRB12345",
+    "org_identifier": "HRB12345",
     "org_identifier_type": "NATIONAL_BUSINESS_REG",
     "role": "relying_party",
     "entitlements": ["Service_Provider"],
+    "urls": ["https://support.example.eu"],
+    "contact": { "email": "contact@example.eu", "phone": null },
     "registration_status": "active"
   }
 }
@@ -79,11 +85,11 @@ Returns an ES256-signed JWT with the confirmed registry data used to build the X
   "subject_dn": "CN=Example GmbH,O=Example GmbH,C=DE",
   "issuer_dn": "...",
   "not_before": "2025-01-15T00:00:00+00:00",
-  "not_after": "2027-01-15T00:00:00+00:00",
-  "ct_log_id": "1.3.6.1.4.1.<PEN>.1",
-  "ct_log_timestamp": "2025-01-15T10:00:00+00:00"
+  "not_after": "2027-01-15T00:00:00+00:00"
 }
 ```
+
+> **Note**: CT log fields (`ct_log_id`, `ct_log_timestamp`) are not included in the response. The CT-related model fields were removed in migration `0002_remove_ct_log_fields`. See [ct_log.md](ct_log.md) for the intended wire format if CT logging is restored.
 
 ### Error responses
 
@@ -106,12 +112,16 @@ Returns an ES256-signed JWT with the confirmed registry data used to build the X
 | 1 | Valid PEM-encoded X.509 certificate | RFC 5280 |
 | 2 | Validity period: `not_before ≤ now ≤ not_after` | RFC 5280 §4.1.2.5 |
 | 3 | Subject `C` matches entity's country | EN 319 412-1 |
-| 4 | Subject `O` matches entity's display name | EN 319 412-1 |
-| 5 | Subject `organizationIdentifier` matches formatted primary identifier | EN 319 412-1 §5.1.4 |
-| 6 | `KeyUsage`: `digitalSignature`, **critical** | TS 119 411-8 §6 |
-| 7 | `ExtendedKeyUsage`: `id-kp-clientAuth` | TS 119 411-8 §6 |
-| 8 | `CertificatePolicies`: at least one eudiwrp OID | TS 119 411-8 §5.1 |
-| 9 | SAN `RegisteredID` OIDs cover all registered entitlements | TS 119 475 |
+| 4 | Subject DN structure matches entity type: `O` + `organizationIdentifier` (legal person, EN 319 412-3) or `GN` + `SN` + `serialNumber` (natural person, EN 319 412-2) | EN 319 412-2/3 |
+| 5 | `organizationIdentifier` / `serialNumber` matches formatted primary identifier; error if legal person has no registered identifier | EN 319 412-1 §5.1.3–5.1.4, GEN-6.6.1-05 |
+| 6 | `KeyUsage`: `digitalSignature`, **critical** | TS 119 411-8 GEN-6.6.1-06 |
+| 7 | `CertificatePolicies`: at least one eudiwrp OID (§5.3) | TS 119 411-8 §5.3, GEN-6.6.1-03 |
+| 8 | SAN `RegisteredID` OIDs cover all registered entitlements | TS 119 475 |
+| 9 | SAN contact info: at least one of URI, email, or phone | TS 119 411-8 GEN-6.6.1-07 [CHOICE] |
+
+**Not checked** (explicitly excluded by TS 119 411-8):
+- `ExtendedKeyUsage id-kp-clientAuth`: GEN-6.6.1-01 NOTE states WRPACs are not website authentication certificates — no specific EKU is mandated.
+- `CN` value match: GEN-6.1.1-04 uses "may" — CN is optional.
 
 ### eudiwrp policy OIDs
 
@@ -151,30 +161,7 @@ Returns an ES256-signed JWT with the confirmed registry data used to build the X
 
 ## CT Log Entry  (`certificates/ct_log.py`)
 
-In the simplified flow ms-registry acts as the CT log, using its own ECDSA P-256 signing key.  See [ct_log.md](ct_log.md) for full details including how to obtain an IANA-allocated OID.
-
-### SCT wire format (stored in `EntityAccessCertificate.ct_sct`)
-
-TLS-encoded `TransItemList` (RFC 9162 §4.5) containing a single `x509_sct_v2` `TransItem`:
-
-```
-TransItemList
-└── TransItem
-    ├── type   uint16 = 1  (x509_sct_v2)
-    └── data   SignedCertificateTimestampDataV2
-        ├── log_id      1-byte len + OID DER value bytes  (RFC 9162 §4.4)
-        ├── timestamp   uint64 ms since epoch
-        ├── extensions  uint16 len = 0
-        └── signature   SignatureScheme(0x0403) + uint16 len + ECDSA-P256 bytes
-```
-
-| Field | RFC 9162 reference | Value |
-|-------|--------------------|-------|
-| `log_id` | §4.4 — OID from IANA CT Log Parameters registry | `CT_LOG_OID` env var (DER-encoded OID value) |
-| `timestamp` | §4.8 — milliseconds since epoch | time of upload |
-| `signature` | §4.8 — ecdsa_secp256r1_sha256 (0x0403) | ECDSA-P256 over signed content |
-
-> **Note**: This is a simplified local log — not a full RFC 9162 Merkle-tree log. CT log fields (`ct_log_id`, `ct_log_timestamp`, `ct_sct`) are `null` in the full flow, where an external Access CA handles CT logging.
+`certificates/ct_log.py` can generate a simplified RFC 9162 SCT signed with the registry's ECDSA P-256 key. The CT-related model fields (`ct_log_id`, `ct_log_timestamp`, `ct_sct`) were removed in migration `0002_remove_ct_log_fields` and the upload flow does not currently call `create_ct_log_entry()`. See [ct_log.md](ct_log.md) for the wire format and how to obtain an IANA-allocated OID if CT logging is restored.
 
 ---
 
@@ -188,9 +175,6 @@ TransItemList
 | `issuer_dn` | CharField | Issuer distinguished name |
 | `subject_dn` | CharField | Subject distinguished name |
 | `not_before` / `not_after` | DateTimeField | Validity window |
-| `ct_log_id` | CharField | RFC 9162 §4.4 log identifier |
-| `ct_log_timestamp` | DateTimeField | Time of CT log entry |
-| `ct_sct` | BinaryField | JSON-encoded SCT record |
 | `is_current` | BooleanField | Only one `True` per entity at a time |
 | `revoked_at` / `revocation_reason` | DateTimeField / CharField | Revocation info |
 | `certificate_pem` | TextField | Full PEM-encoded certificate |
