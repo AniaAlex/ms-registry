@@ -75,9 +75,13 @@ def _format_org_identifier(
     """
     Format the organizationIdentifier per ETSI EN 319 412-1.
     Example: VAT_NUMBER + SE + 123456 → "VATSE-123456"
+
+    Per LEG-5.1.4-03 item 4: LEI (ISO 17442) is a global scheme; its country
+    code shall be set to 'XG', not the entity's national country code.
     """
     prefix = _ORG_ID_PREFIX.get(identifier_type, "OTH")
-    return f"{prefix}{country}-{identifier_value}"
+    effective_country = "XG" if identifier_type == "LEI" else country
+    return f"{prefix}{effective_country}-{identifier_value}"
 
 
 def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:

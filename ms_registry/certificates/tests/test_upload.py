@@ -206,6 +206,30 @@ def test_upload_with_identifier_validates_org_identifier(api_client):
     assert response.status_code == status.HTTP_201_CREATED
 
 
+@pytest.mark.django_db
+def test_upload_lei_identifier_uses_xg_country_code(api_client):
+    """
+    ETSI EN 319 412-1 LEG-5.1.4-03 item 4: LEI is a global scheme; the country
+    code in the organizationIdentifier shall be 'XG', not the entity's national
+    country code.  e.g. LEIXG-<value>, never LEISE-<value>.
+    """
+    entity = _make_active_entity()
+    _add_identifier(
+        entity,
+        identifier_value="9695007586BDF3CACA97",
+        identifier_type=IdentifierType.LEI,
+        country="SE",
+    )
+    pem = _make_cert_pem(entity)
+    # Certificate must be accepted — organizationIdentifier should be LEIXG-…
+    response = _post_upload(api_client, entity.id, pem)
+    assert response.status_code == status.HTTP_201_CREATED
+    # Confirm the stored DN actually contains XG, not SE
+    cert = EntityAccessCertificate.objects.get(registered_entity=entity)
+    assert "LEIXG-" in cert.subject_dn
+    assert "LEISE-" not in cert.subject_dn
+
+
 # ── upload JSON API – error cases ─────────────────────────────────────────────
 
 
