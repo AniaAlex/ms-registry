@@ -65,9 +65,14 @@ _TELEPHONE_NUMBER_OID = x509.ObjectIdentifier("2.5.4.20")
 def _format_org_identifier(
     identifier_value: str, identifier_type: str, country: str
 ) -> str:
-    """Format per ETSI EN 319 412-1. Example: NTR+SE+5568002755 → NTRSE-5568002755"""
+    """Format per ETSI EN 319 412-1. Example: NTR+SE+5568002755 → NTRSE-5568002755
+
+    Per LEG-5.1.4-03 item 4: LEI (ISO 17442) is a global scheme; its country
+    code shall be set to 'XG', not the entity's national country code.
+    """
     prefix = _ORG_ID_PREFIX.get(identifier_type, "OTH")
-    return f"{prefix}{country}-{identifier_value}"
+    effective_country = "XG" if identifier_type == "LEI" else country
+    return f"{prefix}{effective_country}-{identifier_value}"
 
 
 class AccessCertificateUploadSerializer(serializers.Serializer):
