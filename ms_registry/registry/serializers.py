@@ -1,4 +1,5 @@
 from core.models import EntitlementType
+from credentials.serializers import IntendedUseInputSerializer, create_intended_use
 from rest_framework import serializers
 
 from .models import EntityEntitlement, RegisteredEntity, SupervisoryAuthority
@@ -332,6 +333,13 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         help_text="List of intermediary WRP IDs this entity uses",
     )
 
+    # Intended uses [0..*] — declared by the entity, verified by registrar
+    intended_use = IntendedUseInputSerializer(
+        many=True,
+        required=False,
+        help_text="Intended use declarations per Annex B WalletRelyingParty [0..*]",
+    )
+
     def validate(self, data):
         """Validate WalletRelyingParty data"""
         # Intermediary cannot use other intermediaries
@@ -347,7 +355,11 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         This creates the underlying LegalEntity and RegisteredEntity.
         """
         from core.models import EntityRole, IdentifierType
-        from legal_entities.models import Identifier, LegalEntity
+        from legal_entities.models import (
+            LegalEntity,
+            LegalEntityIdentifier,
+            LegalPerson,
+        )
 
         # Extract nested data
         entitlement_uris = validated_data.pop("entitlements", [])
@@ -355,6 +367,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         service_descriptions = validated_data.pop("service_descriptions", [])
         policy_uris = validated_data.pop("policies", [])
         intermediary_ids = validated_data.pop("uses_intermediaries", [])
+        intended_uses_data = validated_data.pop("intended_use", [])
 
         # Get or create supervisory authority
         from .models import SupervisoryAuthority
@@ -365,24 +378,38 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             defaults={"info_uri": "https://example.com"},  # Placeholder
         )
 
-        # Create or get legal entity
-        legal_entity, created = LegalEntity.objects.get_or_create(
-            display_name=validated_data["legal_name"],
-            defaults={
-                "country_code": validated_data["country_code"],
-            },
+        # Create or get legal person + legal entity
+        legal_name = validated_data["legal_name"]
+        identifier_value = validated_data["legal_entity_identifier"]
+        identifier_type = validated_data.get(
+            "legal_entity_identifier_type", IdentifierType.EUID
+        )
+        country_code = validated_data["country_code"]
+
+        legal_person, lp_created = LegalPerson.objects.get_or_create(
+            legal_name=legal_name,
+        )
+        legal_entity, le_created = LegalEntity.objects.get_or_create(
+            legal_person=legal_person,
+            defaults={"entity_type": "legal_person"},
         )
 
-        # Create identifier for legal entity
-        if created:
-            Identifier.objects.create(
-                legal_entity=legal_entity,
-                identifier_type=validated_data.get(
-                    "legal_entity_identifier_type", IdentifierType.EUID
-                ),
-                value=validated_data["legal_entity_identifier"],
-                is_primary=True,
+        # Create and link primary identifier when the entity is new
+        if le_created:
+            from core.models import Identifier
+
+            identifier, _ = Identifier.objects.get_or_create(
+                identifier_type=identifier_type,
+                identifier_value=identifier_value,
+                defaults={"country_code": country_code, "is_primary": True},
             )
+            LegalEntityIdentifier.objects.get_or_create(
+                legal_entity=legal_entity,
+                identifier=identifier,
+                defaults={"is_primary": True},
+            )
+            legal_entity.primary_identifier = identifier
+            legal_entity.save(update_fields=["primary_identifier"])
 
         # Create registered entity (WRP)
         from .models import (
@@ -434,7 +461,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         from core.models import Policy
 
         for uri in policy_uris:
-            policy, _ = Policy.objects.get_or_create(uri=uri)
+            policy, _ = Policy.objects.get_or_create(policy_uri=uri)
             RegisteredEntityPolicy.objects.create(
                 registered_entity=registered_entity,
                 policy=policy,
@@ -452,6 +479,10 @@ class WalletRelyingPartySerializer(serializers.Serializer):
                 )
             except RegisteredEntity.DoesNotExist:
                 pass  # Skip invalid intermediary references
+
+        # Create intended uses [0..*]
+        for iu_data in intended_uses_data:
+            create_intended_use(registered_entity, iu_data)
 
         return registered_entity
 

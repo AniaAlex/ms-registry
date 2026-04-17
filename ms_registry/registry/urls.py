@@ -1,6 +1,8 @@
+from credentials.views import IntendedUseDetailView, IntendedUseListCreateView
 from django.urls import path
 
 from . import views
+from .views import EntityDetailView
 
 app_name = "registry"
 
@@ -23,12 +25,32 @@ urlpatterns = [
         name="wrp-detail",
     ),
     # ==========================================================================
+    # Intended Use API (nested under WRP)
+    # ==========================================================================
+    # GET: list, POST: create
+    path(
+        "wrp/<uuid:entity_pk>/intended-use/",
+        IntendedUseListCreateView.as_view(),
+        name="intended-use-list-create",
+    ),
+    # GET: retrieve, DELETE: revoke
+    path(
+        "wrp/<uuid:entity_pk>/intended-use/<uuid:iu_id>/",
+        IntendedUseDetailView.as_view(),
+        name="intended-use-detail",
+    ),
+    # ==========================================================================
     # Registered Entity URLs (internal/admin)
     # ==========================================================================
     path(
         "entities/",
         views.RegisteredEntityListCreateView.as_view(),
         name="entity-list-create",
+    ),
+    path(
+        "entities/<uuid:pk>/",
+        EntityDetailView.as_view(),
+        name="entity-detail",
     ),
     # Supervisory Authority URLs
     path(

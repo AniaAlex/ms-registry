@@ -1,6 +1,7 @@
 from certificates.models import EntityAccessCertificate
-from core.models import EntitlementType, EntityType, IdentifierType
+from core.models import EntitlementType, EntityType, IdentifierType, CredentialFormat
 from django.db.models import Exists, OuterRef, Prefetch
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView
@@ -41,6 +42,49 @@ class HomeView(TemplateView):
             )
             .order_by("-created_at")
         )
+        return context
+
+
+class EntityDetailView(TemplateView):
+    """
+    HTML detail page for a single registered entity.
+    Shows entity info and provides a UI to manage intended uses.
+    All mutations (add/revoke intended uses) are performed via JS
+    calling the existing REST API endpoints.
+    """
+
+    template_name = "entity_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        entity = get_object_or_404(
+            models.RegisteredEntity.objects.select_related(
+                "legal_entity", "supervisory_authority"
+            ).prefetch_related(
+                "entitlements",
+                "support_uris",
+            ),
+            pk=self.kwargs["pk"],
+        )
+        has_valid_cert = EntityAccessCertificate.objects.filter(
+            registered_entity=entity,
+            is_current=True,
+            revoked_at__isnull=True,
+            not_after__gt=timezone.now(),
+        ).exists()
+
+        intended_uses = list(
+            entity.intended_uses.prefetch_related(
+                "purposes",
+                "privacy_policies__policy",
+                "credential_links__credential__claims",
+            ).order_by("validity_start")
+        )
+
+        context["entity"] = entity
+        context["has_valid_cert"] = has_valid_cert
+        context["intended_uses"] = intended_uses
+        context["credential_formats"] = CredentialFormat.choices
         return context
 
 
@@ -634,7 +678,7 @@ class JWKSView(APIView):
 
     permission_classes = []
     authentication_classes = []
-
+    # TODO: reconsider placeholder
     # Placeholder EC P-256 public key (fake - for development only).
     _PLACEHOLDER_JWK = {
         "kty": "EC",
