@@ -1,5 +1,5 @@
 from certificates.models import EntityAccessCertificate
-from core.models import EntitlementType, EntityType, IdentifierType, CredentialFormat
+from core.models import CredentialFormat, EntitlementType, EntityType, IdentifierType
 from django.db.models import Exists, OuterRef, Prefetch
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
