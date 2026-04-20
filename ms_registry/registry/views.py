@@ -760,11 +760,7 @@ class LOTESEView(APIView):
         for tsp in entity.legal_entity.trust_service_providers.all():
             for svc in tsp.services.all():
                 for sc in svc.certificates.all():
-                    pem = sc.certificate_pem
-                    if not pem or not pem.strip():
-                        continue
-                    lines = pem.strip().splitlines()
-                    b64 = "".join(line.strip() for line in lines[1:-1])
+                    b64 = sc.get_base64_der()
                     if b64 and b64 not in seen_pems:
                         seen_pems.add(b64)
                         digital_identities.append(
