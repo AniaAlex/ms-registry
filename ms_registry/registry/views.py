@@ -685,7 +685,6 @@ class LOTESEView(APIView):
             )
             .prefetch_related(
                 "service_descriptions",
-                "access_certificates",
                 "legal_entity__trust_service_providers__services__names",
                 "legal_entity__trust_service_providers__services__certificates",
             )
@@ -750,36 +749,21 @@ class LOTESEView(APIView):
                     }
                 )
 
+        seen_pems = set()
         digital_identities = []
-        current_cert = (
-            entity.access_certificates.filter(
-                is_current=True, certificate_pem__isnull=False
-            )
-            .exclude(certificate_pem="")
-            .first()
-        )
-        if current_cert:
-            pem = current_cert.certificate_pem
-            lines = pem.strip().splitlines()
-            b64 = "".join(line.strip() for line in lines[1:-1])
-            if b64:
-                digital_identities.append({"type": "x509", "x509Certificate": b64})
-
-        if not digital_identities:
-            seen_pems = set()
-            for tsp in entity.legal_entity.trust_service_providers.all():
-                for svc in tsp.services.filter(is_active=True):
-                    for sc in svc.certificates.all():
-                        pem = sc.certificate_pem
-                        if not pem or not pem.strip():
-                            continue
-                        lines = pem.strip().splitlines()
-                        b64 = "".join(line.strip() for line in lines[1:-1])
-                        if b64 and b64 not in seen_pems:
-                            seen_pems.add(b64)
-                            digital_identities.append(
-                                {"type": "x509", "x509Certificate": b64}
-                            )
+        for tsp in entity.legal_entity.trust_service_providers.all():
+            for svc in tsp.services.filter(is_active=True):
+                for sc in svc.certificates.all():
+                    pem = sc.certificate_pem
+                    if not pem or not pem.strip():
+                        continue
+                    lines = pem.strip().splitlines()
+                    b64 = "".join(line.strip() for line in lines[1:-1])
+                    if b64 and b64 not in seen_pems:
+                        seen_pems.add(b64)
+                        digital_identities.append(
+                            {"type": "x509", "x509Certificate": b64}
+                        )
 
         result = {
             "entityId": entity.registry_uri,
