@@ -1,6 +1,6 @@
 from certificates.models import EntityAccessCertificate
 from core.models import EntitlementType, EntityType, IdentifierType
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Prefetch
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView
@@ -11,6 +11,7 @@ from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from tsl_generator.models import TrustService
 
 from . import models, serializers
 
@@ -685,8 +686,13 @@ class LOTESEView(APIView):
             )
             .prefetch_related(
                 "service_descriptions",
-                "legal_entity__trust_service_providers__services__names",
-                "legal_entity__trust_service_providers__services__certificates",
+                "legal_entity__trust_service_providers",
+                Prefetch(
+                    "legal_entity__trust_service_providers__services",
+                    queryset=TrustService.objects.filter(
+                        is_active=True
+                    ).prefetch_related("names", "certificates"),
+                ),
             )
         )
 
@@ -737,7 +743,7 @@ class LOTESEView(APIView):
 
         services = []
         for tsp in entity.legal_entity.trust_service_providers.all():
-            for svc in tsp.services.filter(is_active=True):
+            for svc in tsp.services.all():
                 service_names = [
                     {"language": n.language, "value": n.value} for n in svc.names.all()
                 ]
@@ -752,7 +758,7 @@ class LOTESEView(APIView):
         seen_pems = set()
         digital_identities = []
         for tsp in entity.legal_entity.trust_service_providers.all():
-            for svc in tsp.services.filter(is_active=True):
+            for svc in tsp.services.all():
                 for sc in svc.certificates.all():
                     pem = sc.certificate_pem
                     if not pem or not pem.strip():
