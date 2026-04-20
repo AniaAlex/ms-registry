@@ -303,3 +303,148 @@ def test_jwks_returns_500_for_invalid_key_configuration(api_client):
         response = api_client.get(reverse("jwks"))
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert "detail" in response.data
+
+
+# =============================================================================
+# LOTESEView
+# =============================================================================
+
+_SAMPLE_PEM = (
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIBkTCB+wIJAMockCertificateDataForTestingOnlyAAAAAAAAAAAAAAAAAAAA\n"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
+    "-----END CERTIFICATE-----\n"
+)
+
+
+def _make_lote_setup(
+    registration_status="active", entity_role=EntityRole.PID_PROVIDER, with_cert=True
+):
+    from tsl_generator.models import (
+        ServiceCertificate,
+        TrustService,
+        TrustServiceProvider,
+        TSLScheme,
+    )
+
+    legal_entity = LegalEntityFactory()
+    entity = RegisteredEntityFactory(
+        legal_entity=legal_entity,
+        registration_status=registration_status,
+        entity_role=entity_role,
+    )
+    scheme = TSLScheme.objects.create(name="Test Scheme")
+    tsp = TrustServiceProvider.objects.create(legal_entity=legal_entity, scheme=scheme)
+    svc = TrustService.objects.create(provider=tsp, is_active=True)
+    if with_cert:
+        ServiceCertificate.objects.create(service=svc, certificate_pem=_SAMPLE_PEM)
+    return entity, svc
+
+
+@pytest.mark.django_db
+def test_lote_se_returns_200(api_client):
+    url = reverse("registry:lote-se")
+    response = api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_lote_se_structure(api_client):
+    url = reverse("registry:lote-se")
+    response = api_client.get(url)
+    data = response.data
+    assert data["version"] == "1.0"
+    assert "schemeInformation" in data
+    assert "trustedEntities" in data
+    assert data["schemeInformation"]["territory"] == "SE"
+
+
+@pytest.mark.django_db
+def test_lote_se_only_includes_active_entities(api_client):
+    _make_lote_setup(registration_status="active")
+    _make_lote_setup(registration_status="pending")
+    url = reverse("registry:lote-se")
+    response = api_client.get(url)
+    assert len(response.data["trustedEntities"]) == 1
+
+
+@pytest.mark.django_db
+def test_lote_se_entity_fields(api_client):
+    entity, _ = _make_lote_setup()
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert te["entityId"] == entity.registry_uri
+    assert "entityName" in te
+    assert "entityStatus" in te
+    assert "digitalIdentities" in te
+
+
+@pytest.mark.django_db
+def test_lote_se_digital_identity_from_service_certificate(api_client):
+    _make_lote_setup(with_cert=True)
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert len(te["digitalIdentities"]) == 1
+    identity = te["digitalIdentities"][0]
+    assert identity["type"] == "x509"
+    assert identity["x509Certificate"]
+
+
+@pytest.mark.django_db
+def test_lote_se_no_certificate_gives_empty_digital_identities(api_client):
+    _make_lote_setup(with_cert=False)
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert te["digitalIdentities"] == []
+
+
+@pytest.mark.django_db
+def test_lote_se_entity_type_mapped(api_client):
+    _make_lote_setup(entity_role=EntityRole.PID_PROVIDER)
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert te["entityType"] == "pid-provider"
+
+
+@pytest.mark.django_db
+def test_lote_se_deduplicates_certificates(api_client):
+    from tsl_generator.models import (
+        ServiceCertificate,
+        TrustService,
+        TrustServiceProvider,
+        TSLScheme,
+    )
+
+    legal_entity = LegalEntityFactory()
+    RegisteredEntityFactory(legal_entity=legal_entity, registration_status="active")
+    scheme = TSLScheme.objects.create(name="Dedup Scheme")
+    tsp = TrustServiceProvider.objects.create(legal_entity=legal_entity, scheme=scheme)
+    svc1 = TrustService.objects.create(provider=tsp, is_active=True)
+    svc2 = TrustService.objects.create(provider=tsp, is_active=True)
+    ServiceCertificate.objects.create(service=svc1, certificate_pem=_SAMPLE_PEM)
+    ServiceCertificate.objects.create(service=svc2, certificate_pem=_SAMPLE_PEM)
+
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert len(te["digitalIdentities"]) == 1
+
+
+@pytest.mark.django_db
+def test_lote_se_inactive_service_certificate_excluded(api_client):
+    from tsl_generator.models import (
+        ServiceCertificate,
+        TrustService,
+        TrustServiceProvider,
+        TSLScheme,
+    )
+
+    legal_entity = LegalEntityFactory()
+    RegisteredEntityFactory(legal_entity=legal_entity, registration_status="active")
+    scheme = TSLScheme.objects.create(name="Inactive Scheme")
+    tsp = TrustServiceProvider.objects.create(legal_entity=legal_entity, scheme=scheme)
+    svc = TrustService.objects.create(provider=tsp, is_active=False)
+    ServiceCertificate.objects.create(service=svc, certificate_pem=_SAMPLE_PEM)
+
+    response = api_client.get(reverse("registry:lote-se"))
+    te = response.data["trustedEntities"][0]
+    assert te["digitalIdentities"] == []
