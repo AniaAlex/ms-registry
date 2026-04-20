@@ -231,6 +231,17 @@ Or use the upload UI at `/certificates/upload/<entity_id>/view/`.
 > **Note:** The private key never leaves the entity. ms-registry stores only the
 > certificate PEM in `EntityAccessCertificate`.
 
+
+## Access Certificate Frontend Flow
+
+For activated entities, the access certificate can be uploaded from the frontend
+(simplified flow; will be replaced with the full flow involving an Access Certificate CA):
+
+1. Download the cnf / copy JWT
+2. Generate a certificate based on the cnf data
+3. Upload it back to the registry
+
+
 ---
 
 ## Deployed example
@@ -238,20 +249,8 @@ Or use the upload UI at `/certificates/upload/<entity_id>/view/`.
 | Resource | URL |
 |---|---|
 | API root | https://trust-dev-1.iam.sunet.se/api/ |
-| API docs (Swagger) | https://trust-dev-1.iam.sunet.se/api/docs/#/registry/registry_lote_se_retrieve |
+| API docs (Swagger) | https://trust-dev-1.iam.sunet.se/api/docs/
 | Admin panel | https://trust-dev-1.iam.sunet.se/api/admin/ |
 
----
 
-## Key API endpoints
 
-| Endpoint | Description |
-|---|---|
-| `GET /registry/wrp/` | List all registered Wallet Relying Parties |
-| `POST /registry/wrp/` | Register a new WRP |
-| `GET /registry/wrp/{id}/` | Retrieve a single WRP |
-| `GET /registry/wrp/check-intended-use/` | Check if a WRP has a registered intended use (JWS-signed) |
-| `GET /registry/lote-se/` | LoTE JSON document (ETSI TS 119 602) |
-| `GET /certificates/cnf/{id}/` | Download signed cnf JWT for an entity |
-| `POST /certificates/upload/{id}/` | Upload an Access Certificate PEM |
-| `GET /.well-known/jwks.json` | Registry public signing key (JWKS) |
