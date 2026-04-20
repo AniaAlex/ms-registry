@@ -1,7 +1,9 @@
+import time
 from datetime import date
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from django.urls import reverse
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from registry.models import RegisteredEntity
 from rest_framework import status
 from rest_framework.response import Response
@@ -118,3 +120,134 @@ class IntendedUseDetailView(APIView):
             iu.validity_end = date.today()
             iu.save(update_fields=["validity_end", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CheckIntendedUseView(APIView):
+    """
+    GET /registry/wrp/check-intended-use/
+
+    Checks whether a Wallet Relying Party has a registered intended use
+    matching the given criteria. Returns a JWS-signed result per TS5.
+    Falls back to plain JSON when REGISTRY_SIGNING_KEY_PEM is not set.
+    """
+
+    permission_classes = []
+
+    @extend_schema(
+        summary="Check intended use (TS5)",
+        description=(
+            "Returns a JWS-signed result indicating whether the specified "
+            "Wallet Relying Party has a registered active intended use "
+            "matching the given criteria."
+        ),
+        parameters=[
+            OpenApiParameter(
+                "rpidentifier",
+                str,
+                required=True,
+                description="Legal entity identifier of the WRP",
+            ),
+            OpenApiParameter(
+                "intendeduseidentifier",
+                str,
+                required=False,
+                description="Registrar-assigned intended use identifier",
+            ),
+            OpenApiParameter(
+                "credentialformat",
+                str,
+                required=False,
+                description="Credential format to check (e.g. dc+sd-jwt)",
+            ),
+            OpenApiParameter(
+                "claimpath",
+                str,
+                required=False,
+                description="Claim path element to check (e.g. given_name)",
+            ),
+            OpenApiParameter(
+                "credentialmeta",
+                str,
+                required=False,
+                description="Text to match within the credential meta JSON",
+            ),
+            OpenApiParameter(
+                "policyurl",
+                str,
+                required=False,
+                description="Privacy policy URL to check",
+            ),
+        ],
+        responses={
+            200: {
+                "type": "string",
+                "description": "JWS compact serialization (application/jwt)",
+            }
+        },
+    )
+    def get(self, request):
+        rpidentifier = request.query_params.get("rpidentifier")
+        if not rpidentifier:
+            return Response(
+                {"detail": "rpidentifier is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        entity = RegisteredEntity.objects.filter(
+            legal_entity__identifiers__identifier_value=rpidentifier
+        ).first()
+        if not entity:
+            return self._build_response(request, False, "Entity not found")
+
+        ius = IntendedUse.objects.filter(
+            registered_entity=entity,
+            validity_end__isnull=True,
+        )
+
+        intendeduseidentifier = request.query_params.get("intendeduseidentifier")
+        if intendeduseidentifier:
+            ius = ius.filter(intended_use_identifier=intendeduseidentifier)
+
+        credentialformat = request.query_params.get("credentialformat")
+        if credentialformat:
+            ius = ius.filter(credential_links__credential__format=credentialformat)
+
+        claimpath = request.query_params.get("claimpath")
+        if claimpath:
+            ius = ius.filter(
+                credential_links__credential__claims__path__contains=[claimpath]
+            )
+
+        credentialmeta = request.query_params.get("credentialmeta")
+        if credentialmeta:
+            ius = ius.filter(
+                credential_links__credential__meta__icontains=credentialmeta
+            )
+
+        policyurl = request.query_params.get("policyurl")
+        if policyurl:
+            ius = ius.filter(privacy_policies__policy__policy_uri=policyurl)
+
+        is_registered = ius.distinct().exists()
+        details = (
+            "Intended use is registered"
+            if is_registered
+            else "No matching intended use found"
+        )
+        return self._build_response(request, is_registered, details)
+
+    def _build_response(self, request, is_registered: bool, details: str):
+        payload = {
+            "iss": request.build_absolute_uri("/"),
+            "iat": int(time.time()),
+            "data": {"isRegistered": is_registered, "details": details},
+        }
+        try:
+            from core.signing import KeyNotConfiguredError, sign_jwt
+
+            token = sign_jwt(payload)
+            response = Response(token, content_type="application/jwt")
+            response["x-jku-url"] = request.build_absolute_uri(reverse("jwks"))
+            return response
+        except KeyNotConfiguredError:
+            return Response(payload)

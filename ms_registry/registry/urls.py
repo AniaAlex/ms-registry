@@ -1,4 +1,8 @@
-from credentials.views import IntendedUseDetailView, IntendedUseListCreateView
+from credentials.views import (
+    CheckIntendedUseView,
+    IntendedUseDetailView,
+    IntendedUseListCreateView,
+)
 from django.urls import path
 
 from . import views
@@ -17,6 +21,12 @@ urlpatterns = [
         "wrp/",
         views.WalletRelyingPartyView.as_view(),
         name="wrp",
+    ),
+    # GET: Check if a WRP has a registered intended use (TS5)
+    path(
+        "wrp/check-intended-use/",
+        CheckIntendedUseView.as_view(),
+        name="wrp-check-intended-use",
     ),
     # GET: Retrieve single WRP by ID
     path(
