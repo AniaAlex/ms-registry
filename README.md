@@ -254,10 +254,6 @@ For activated entities, the access certificate can be uploaded from the frontend
 
 
 
-## Potential ca integration 
 
-https://github.com/mathiasertl/django-ca
-
-https://github.com/mathiasertl/django-ca-cmc
 
 
