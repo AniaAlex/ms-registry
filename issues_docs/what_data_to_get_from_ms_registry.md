@@ -29,6 +29,32 @@ ms-registry today and what is missing.
 |---|---|
 | ⚠️ Partial | `TSPCertificate.certificate_pem` via `LegalEntity → trust_service_providers → certificates` (tsl_generator app). Present in the data model but populated manually — not part of the entity registration API flow. |
 
+### Proposed: separate digital identity module
+
+Rather than depending on tsl_generator (manually populated via Django admin), a
+dedicated `digital_identity` app should be created to store X.509 certificates as
+part of the registration flow. This keeps digital identity separate from
+`EntityAccessCertificate` (which is for API access control only).
+
+```python
+class DigitalIdentityCertificate(BaseModel):
+    registered_entity = models.ForeignKey(
+        RegisteredEntity, on_delete=models.CASCADE,
+        related_name="digital_identity_certificates"
+    )
+    certificate_pem = models.TextField()
+    is_current = models.BooleanField(default=True)
+    not_before = models.DateTimeField(null=True, blank=True)
+    not_after = models.DateTimeField(null=True, blank=True)
+```
+
+The export command would then use:
+```python
+entity.digital_identity_certificates.filter(is_current=True).first()
+```
+
+This removes the only remaining dependency on tsl_generator for the export.
+
 ## Public JWK
 
 | File | Available? | Notes |
