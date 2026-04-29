@@ -1,8 +1,17 @@
-from core.models import EntitlementType
+from core.models import EntitlementType, EntityRole, Identifier, IdentifierType, Policy
 from credentials.serializers import IntendedUseInputSerializer, create_intended_use
+from legal_entities.models import LegalEntity, LegalEntityIdentifier, LegalPerson
 from rest_framework import serializers
 
-from .models import EntityEntitlement, RegisteredEntity, SupervisoryAuthority
+from .models import (
+    EntityEntitlement,
+    EntityServiceDescription,
+    EntitySupportURI,
+    EntityUsesIntermediary,
+    RegisteredEntity,
+    RegisteredEntityPolicy,
+    SupervisoryAuthority,
+)
 
 
 class WRPQueryParameterSerializer(serializers.Serializer):
@@ -78,8 +87,6 @@ class SupervisoryAuthorityCreateSerializer(serializers.Serializer):
         return data
 
     def create(self, validated_data):
-        from legal_entities.models import LegalEntity
-
         legal_entity_id = validated_data.pop("legal_entity", None)
         legal_entity = None
 
@@ -354,13 +361,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         Create a new WalletRelyingParty.
         This creates the underlying LegalEntity and RegisteredEntity.
         """
-        from core.models import EntityRole, IdentifierType
-        from legal_entities.models import (
-            LegalEntity,
-            LegalEntityIdentifier,
-            LegalPerson,
-        )
-
         # Extract nested data
         entitlement_uris = validated_data.pop("entitlements", [])
         support_uri_list = validated_data.pop("support_uris", [])
@@ -370,8 +370,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         intended_uses_data = validated_data.pop("intended_use", [])
 
         # Get or create supervisory authority
-        from .models import SupervisoryAuthority
-
         supervisory_authority, _ = SupervisoryAuthority.objects.get_or_create(
             authority_name=validated_data.pop("supervisory_authority_name"),
             country_code=validated_data.pop("supervisory_authority_country"),
@@ -386,18 +384,27 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         )
         country_code = validated_data["country_code"]
 
-        legal_person, lp_created = LegalPerson.objects.get_or_create(
-            legal_name=legal_name,
-        )
-        legal_entity, le_created = LegalEntity.objects.get_or_create(
-            legal_person=legal_person,
-            defaults={"entity_type": "legal_person"},
-        )
+        legal_entity = LegalEntity.objects.filter(
+            primary_identifier__identifier_type=identifier_type,
+            primary_identifier__identifier_value=identifier_value,
+        ).first()
 
-        # Create and link primary identifier when the entity is new
-        if le_created:
-            from core.models import Identifier
-
+        if legal_entity is not None:
+            if RegisteredEntity.objects.filter(legal_entity=legal_entity).exists():
+                raise serializers.ValidationError(
+                    {
+                        "legal_entity_identifier": (
+                            "A registered entity already exists for the provided "
+                            "legal entity identifier."
+                        )
+                    }
+                )
+        else:
+            legal_person = LegalPerson.objects.create(legal_name=legal_name)
+            legal_entity = LegalEntity.objects.create(
+                legal_person=legal_person,
+                entity_type="legal_person",
+            )
             identifier, _ = Identifier.objects.get_or_create(
                 identifier_type=identifier_type,
                 identifier_value=identifier_value,
@@ -412,15 +419,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             legal_entity.save(update_fields=["primary_identifier"])
 
         # Create registered entity (WRP)
-        from .models import (
-            EntityEntitlement,
-            EntityServiceDescription,
-            EntitySupportURI,
-            EntityUsesIntermediary,
-            RegisteredEntity,
-            RegisteredEntityPolicy,
-        )
-
         registered_entity = RegisteredEntity.objects.create(
             legal_entity=legal_entity,
             entity_role=EntityRole.RELYING_PARTY,
@@ -458,8 +456,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             )
 
         # Create policy links
-        from core.models import Policy
-
         for uri in policy_uris:
             policy, _ = Policy.objects.get_or_create(policy_uri=uri)
             RegisteredEntityPolicy.objects.create(
@@ -488,12 +484,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
 
     def update(self, instance, validated_data):
         """Update an existing WalletRelyingParty"""
-        from .models import (
-            EntityEntitlement,
-            EntityServiceDescription,
-            EntitySupportURI,
-        )
-
         # Update basic fields
         if "trade_name" in validated_data:
             instance.trade_name = validated_data["trade_name"]

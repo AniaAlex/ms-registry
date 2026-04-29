@@ -33,7 +33,7 @@
       <dt>Supervisory Authority</dt>
       <dd>{{ entity.supervisory_authority }}</dd>
       <dt>Registry URI</dt>
-      <dd><a href="{{ entity.registry_uri }}" target="_blank">{{ entity.registry_uri }}</a></dd>
+      <dd><a href="{{ entity.registry_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.registry_uri }}</a></dd>
       <dt>Registered At</dt>
       <dd>{{ entity.registered_at|date:"Y-m-d H:i"|default:"—" }}</dd>
       <dt>Entitlements</dt>
@@ -104,13 +104,15 @@
               </ul>
               {% endif %}
               {% endwith %}
-              {% if link.credential.claims.exists %}
+              {% with claims=link.credential.claims.all %}
+              {% if claims|length %}
               <ul class="claims-list">
-                {% for claim in link.credential.claims.all %}
+                {% for claim in claims %}
                 <li><code>{{ claim.path|join:"." }}</code></li>
                 {% endfor %}
               </ul>
               {% endif %}
+              {% endwith %}
             </div>
             {% endfor %}
           </div>
@@ -120,7 +122,7 @@
           {% if pp %}
           <div class="iu-section">
             <strong>Privacy Policy</strong>
-            <a href="{{ pp.policy.policy_uri }}" target="_blank">{{ pp.policy.policy_uri }}</a>
+            <a href="{{ pp.policy.policy_uri }}" target="_blank" rel="noopener noreferrer">{{ pp.policy.policy_uri }}</a>
           </div>
           {% endif %}
           {% endwith %}
@@ -342,7 +344,7 @@
 {% block extra_js %}
 <script>
   const ENTITY_PK = "{{ entity.pk }}";
-  const IU_LIST_URL = "/registry/wrp/" + ENTITY_PK + "/intended-use/";
+  const IU_LIST_URL = "{% url 'registry:intended-use-list-create' entity.pk %}";
 
   function toggleAddForm() {
     const form = document.getElementById("add-iu-form");
@@ -544,7 +546,7 @@
     const list = document.getElementById("iu-list");
     const card = document.createElement("div");
     card.className = "iu-card";
-    card.id = "iu-card-" + iu.intendedUseIdentifier;
+    card.id = "iu-card-" + (iu.id || "");
 
     const purposes = (iu.purpose || []).map(p =>
       `<li><span class="lang-tag">${p.lang}</span> ${escHtml(p.content)}</li>`
@@ -566,7 +568,7 @@
 
     const ppHtml = iu.privacyPolicy
       ? `<div class="iu-section"><strong>Privacy Policy</strong>
-           <a href="${escHtml(iu.privacyPolicy.policyURI)}" target="_blank">${escHtml(iu.privacyPolicy.policyURI)}</a>
+           <a href="${escHtml(iu.privacyPolicy.policyURI)}" target="_blank" rel="noopener noreferrer">${escHtml(iu.privacyPolicy.policyURI)}</a>
          </div>`
       : "";
 
