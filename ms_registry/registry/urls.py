@@ -1,6 +1,12 @@
+from credentials.views import (
+    CheckIntendedUseView,
+    IntendedUseDetailView,
+    IntendedUseListCreateView,
+)
 from django.urls import path
 
 from . import views
+from .views import EntityDetailView
 
 app_name = "registry"
 
@@ -16,11 +22,32 @@ urlpatterns = [
         views.WalletRelyingPartyView.as_view(),
         name="wrp",
     ),
+    # GET: Check if a WRP has a registered intended use (TS5)
+    path(
+        "wrp/check-intended-use/",
+        CheckIntendedUseView.as_view(),
+        name="wrp-check-intended-use",
+    ),
     # GET: Retrieve single WRP by ID
     path(
         "wrp/<uuid:pk>/",
         views.WalletRelyingPartyDetailView.as_view(),
         name="wrp-detail",
+    ),
+    # ==========================================================================
+    # Intended Use API (nested under WRP)
+    # ==========================================================================
+    # GET: list, POST: create
+    path(
+        "wrp/<uuid:entity_pk>/intended-use/",
+        IntendedUseListCreateView.as_view(),
+        name="intended-use-list-create",
+    ),
+    # GET: retrieve, DELETE: revoke
+    path(
+        "wrp/<uuid:entity_pk>/intended-use/<uuid:iu_id>/",
+        IntendedUseDetailView.as_view(),
+        name="intended-use-detail",
     ),
     # ==========================================================================
     # Registered Entity URLs (internal/admin)
@@ -29,6 +56,11 @@ urlpatterns = [
         "entities/",
         views.RegisteredEntityListCreateView.as_view(),
         name="entity-list-create",
+    ),
+    path(
+        "entities/<uuid:pk>/",
+        EntityDetailView.as_view(),
+        name="entity-detail",
     ),
     # Supervisory Authority URLs
     path(

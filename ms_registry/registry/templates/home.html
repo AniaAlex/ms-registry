@@ -44,6 +44,7 @@
                 <td>
                     {% if entity.registration_status == 'active' %}
                     <div class="actions-cell">
+                        <a href="{% url 'registry:entity-detail' entity.id %}" class="btn btn-sm btn-secondary">Manage</a>
                         <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get Entity Info</a>
                         {% if entity.has_valid_cert %}
                             <span class="badge-cert-valid">Valid Cert</span>

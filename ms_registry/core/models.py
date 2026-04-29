@@ -112,13 +112,20 @@ class CredentialFormat(models.TextChoices):
 
 
 class PolicyType(models.TextChoices):
-    """Policy types"""
+    """
+    Policy type URI as defined in ETSI TS 119 475, B.2.8 Class Policy.
+    The value is a URI per IETF RFC 8820 (URI Design and Ownership) —
+    it is a stable machine-readable identifier, not a resolvable webpage.
 
-    PRIVACY_STATEMENT = "Privacy_Statement", "Privacy Statement"
-    TERMS_OF_SERVICE = "Terms_of_Service", "Terms of Service"
-    DATA_PROCESSING_AGREEMENT = "Data_Processing_Agreement", "Data Processing Agreement"
-    COOKIE_POLICY = "Cookie_Policy", "Cookie Policy"
-    OTHER = "Other", "Other"
+    NOTE from spec: "In Context of WRP attributes only Privacy policy is present."
+    Reference: ETSI TS 119 475 B.2.8, line:
+      http://data.europa.eu/eudi/policy/privacy-policy - is a Privacy Policy.
+    """
+
+    PRIVACY_STATEMENT = (
+        "http://data.europa.eu/eudi/policy/privacy-policy",
+        "Privacy Policy",
+    )
 
 
 class RegistrationStatus(models.TextChoices):
@@ -220,7 +227,7 @@ class Policy(BaseModel):
     """Policy (External class)"""
 
     policy_type = models.CharField(
-        max_length=50, choices=PolicyType.choices, default=PolicyType.PRIVACY_STATEMENT
+        max_length=200, choices=PolicyType.choices, default=PolicyType.PRIVACY_STATEMENT
     )
     policy_uri = models.URLField(max_length=2048)
     locale = models.CharField(
