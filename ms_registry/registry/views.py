@@ -1,6 +1,6 @@
 from certificates.models import EntityAccessCertificate
 from core.models import CredentialFormat, EntitlementType, EntityType, IdentifierType
-from django.db.models import Exists, OuterRef, Prefetch
+from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +12,6 @@ from rest_framework import generics, status
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from tsl_generator.models import TrustService
 
 from . import models, serializers
 
@@ -706,121 +705,124 @@ class JWKSView(APIView):
         return Response({"keys": [jwk]}, status=status.HTTP_200_OK)
 
 
-class LOTESEView(APIView):
-    """
-    GET /registry/lote-se/
-
-    Returns all active registered entities as a LoTE JSON document
-    (ETSI TS 119 602 format). Consumed directly by tsl-tool load-lote step.
-    """
-
-    @extend_schema(
-        summary="LoTE document (ETSI TS 119 602)",
-        description=(
-            "Returns all active registered entities as an unsigned LoTE JSON"
-            " document. Consumed by tsl-tool load-lote for signing and publishing."
-        ),
-        responses={200: {"type": "object"}},
-    )
-    def get(self, request, *args, **kwargs):
-        entities = (
-            models.RegisteredEntity.objects.filter(registration_status="active")
-            .select_related(
-                "legal_entity__legal_person", "legal_entity__natural_person"
-            )
-            .prefetch_related(
-                "service_descriptions",
-                "legal_entity__trust_service_providers",
-                Prefetch(
-                    "legal_entity__trust_service_providers__services",
-                    queryset=TrustService.objects.filter(
-                        is_active=True
-                    ).prefetch_related("names", "certificates"),
-                ),
-            )
-        )
-
-        trusted_entities = []
-        for entity in entities:
-            trusted_entities.append(self._build_entity(entity))
-
-        lote = {
-            "version": "1.0",
-            "schemeInformation": {
-                "territory": "SE",
-                "schemeOperator": [
-                    {"language": "en", "value": "WE BUILD WP4 Trust Group"}
-                ],
-                "schemeName": [
-                    {"language": "en", "value": "WP4 List of Trusted Entities"}
-                ],
-                "schemeType": (
-                    "http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric"
-                ),
-                "issueDate": timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "sequenceNumber": 1,
-            },
-            "trustedEntities": trusted_entities,
-        }
-        return Response(lote)
-
-    """TODO: checkup on mapping active to granted"""
-    _STATUS_URI = {
-        "active": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted",
-        "suspended": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/suspended",
-        "revoked": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/revoked",
-    }
-
-    _ENTITY_TYPE = {
-        "relying_party": "relying-party",
-        "pid_provider": "pid-provider",
-        "attestation_provider": "attestation-provider",
-    }
-
-    def _build_entity(self, entity):
-        descriptions = list(entity.service_descriptions.all())
-        entity_names = (
-            [{"language": d.lang, "value": d.content} for d in descriptions]
-            if descriptions
-            else [{"language": "en", "value": entity.display_name}]
-        )
-
-        services = []
-        for tsp in entity.legal_entity.trust_service_providers.all():
-            for svc in tsp.services.all():
-                service_names = [
-                    {"language": n.language, "value": n.value} for n in svc.names.all()
-                ]
-                services.append(
-                    {
-                        "serviceType": svc.service_type,
-                        "serviceName": service_names,
-                        "serviceStatus": svc.status,
-                    }
-                )
-
-        seen_pems = set()
-        digital_identities = []
-        for tsp in entity.legal_entity.trust_service_providers.all():
-            for svc in tsp.services.all():
-                for sc in svc.certificates.all():
-                    b64 = sc.get_base64_der()
-                    if b64 and b64 not in seen_pems:
-                        seen_pems.add(b64)
-                        digital_identities.append(
-                            {"type": "x509", "x509Certificate": b64}
-                        )
-
-        result = {
-            "entityId": entity.registry_uri,
-            "entityName": entity_names,
-            "entityStatus": self._STATUS_URI.get(
-                entity.registration_status, self._STATUS_URI["active"]
-            ),
-            "digitalIdentities": digital_identities,
-        }
-        if entity.entity_role in self._ENTITY_TYPE:
-            result["entityType"] = self._ENTITY_TYPE[entity.entity_role]
-        if services:
-            result["services"] = services
-        return result
+# TODO: remove — replaced by lote_source.views.LOTEPIDProvidersView and
+#               lote_source.views.LOTEPubEAAProvidersView. Wrong JSON format
+#               (version/schemeInformation/trustedEntities envelope, not LoTE spec).
+# class LOTESEView(APIView):
+#     """
+#     GET /registry/lote-se/
+#
+#     Returns all active registered entities as a LoTE JSON document
+#     (ETSI TS 119 602 format). Consumed directly by tsl-tool load-lote step.
+#     """
+#
+#     @extend_schema(
+#         summary="LoTE document (ETSI TS 119 602)",
+#         description=(
+#             "Returns all active registered entities as an unsigned LoTE JSON"
+#             " document. Consumed by tsl-tool load-lote for signing and publishing."
+#         ),
+#         responses={200: {"type": "object"}},
+#     )
+#     def get(self, request, *args, **kwargs):
+#         entities = (
+#             models.RegisteredEntity.objects.filter(registration_status="active")
+#             .select_related(
+#                 "legal_entity__legal_person", "legal_entity__natural_person"
+#             )
+#             .prefetch_related(
+#                 "service_descriptions",
+#                 "legal_entity__trust_service_providers",
+#                 Prefetch(
+#                     "legal_entity__trust_service_providers__services",
+#                     queryset=TrustService.objects.filter(
+#                         is_active=True
+#                     ).prefetch_related("names", "certificates"),
+#                 ),
+#             )
+#         )
+#
+#         trusted_entities = []
+#         for entity in entities:
+#             trusted_entities.append(self._build_entity(entity))
+#
+#         lote = {
+#             "version": "1.0",
+#             "schemeInformation": {
+#                 "territory": "SE",
+#                 "schemeOperator": [
+#                     {"language": "en", "value": "WE BUILD WP4 Trust Group"}
+#                 ],
+#                 "schemeName": [
+#                     {"language": "en", "value": "WP4 List of Trusted Entities"}
+#                 ],
+#                 "schemeType": (
+#                     "http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric"
+#                 ),
+#                 "issueDate": timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+#                 "sequenceNumber": 1,
+#             },
+#             "trustedEntities": trusted_entities,
+#         }
+#         return Response(lote)
+#
+#     _STATUS_URI = {
+#         "active": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted",
+#         "suspended": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/suspended",
+#         "revoked": "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/revoked",
+#     }
+#
+#     _ENTITY_TYPE = {
+#         "relying_party": "relying-party",
+#         "pid_provider": "pid-provider",
+#         "attestation_provider": "attestation-provider",
+#     }
+#
+#     def _build_entity(self, entity):
+#         descriptions = list(entity.service_descriptions.all())
+#         entity_names = (
+#             [{"language": d.lang, "value": d.content} for d in descriptions]
+#             if descriptions
+#             else [{"language": "en", "value": entity.display_name}]
+#         )
+#
+#         services = []
+#         for tsp in entity.legal_entity.trust_service_providers.all():
+#             for svc in tsp.services.all():
+#                 service_names = [
+#                     {"language": n.language, "value": n.value}
+#                     for n in svc.names.all()
+#                 ]
+#                 services.append(
+#                     {
+#                         "serviceType": svc.service_type,
+#                         "serviceName": service_names,
+#                         "serviceStatus": svc.status,
+#                     }
+#                 )
+#
+#         seen_pems = set()
+#         digital_identities = []
+#         for tsp in entity.legal_entity.trust_service_providers.all():
+#             for svc in tsp.services.all():
+#                 for sc in svc.certificates.all():
+#                     b64 = sc.get_base64_der()
+#                     if b64 and b64 not in seen_pems:
+#                         seen_pems.add(b64)
+#                         digital_identities.append(
+#                             {"type": "x509", "x509Certificate": b64}
+#                         )
+#
+#         result = {
+#             "entityId": entity.registry_uri,
+#             "entityName": entity_names,
+#             "entityStatus": self._STATUS_URI.get(
+#                 entity.registration_status, self._STATUS_URI["active"]
+#             ),
+#             "digitalIdentities": digital_identities,
+#         }
+#         if entity.entity_role in self._ENTITY_TYPE:
+#             result["entityType"] = self._ENTITY_TYPE[entity.entity_role]
+#         if services:
+#             result["services"] = services
+#         return result

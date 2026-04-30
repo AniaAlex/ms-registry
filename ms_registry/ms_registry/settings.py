@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "credentials",
     "certificates",
     "tsl_generator",
+    "lote_source",
 ]
 
 MIDDLEWARE = [
