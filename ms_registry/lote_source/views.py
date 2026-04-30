@@ -17,6 +17,11 @@ JSON, validates it, signs it with JAdES-B-B, and writes:
 
 nginx serves these files publicly.
 
+JSON format matches etsi119602.ListOfTrustedEntities Go struct (g119612):
+  - top level: version, schemeInformation, trustedEntities
+  - LangString fields use "language" (not "lang")
+  - digitalIdentities use {"type": "x509", "x509Certificate": "<base64-DER>"}
+
 IMPORTANT — Member State notification requirement
 -------------------------------------------------
 Both PID Providers and PuB-EAA Providers must be formally notified to the
@@ -27,20 +32,6 @@ Until a dedicated notification workflow is implemented, "active" registration
 status is used as the operational proxy for "notified". When the notification
 step is added (e.g. a Supervisory Authority explicitly marks an entity as
 notified), the queryset filter here should be updated accordingly.
-
-Data sources
-------------
-This app intentionally collects data from across ms-registry:
-  - registry.RegisteredEntity    — trade name, registry URI, status
-  - registry.EntityServiceDescription — multilingual service names
-  - legal_entities.LegalEntity   — postal address, info URI, e-mail
-  - tsl_generator.TSPCertificate — digital identity certificate (PEM/DER)
-    (populated manually via Django admin until a dedicated digital-identity
-     module is added to the registration flow)
-
-Missing data that will cause warnings in tsl-tool output:
-  - X.509 certificate: only present if TSPCertificate is loaded via admin
-  - Public JWK (pid_key.jwk / eaa_key.jwk): not stored in ms-registry yet
 
 Configure via Django settings (all optional):
   LOTE_OPERATOR_NAME    default "WP4Trust Registry"
@@ -70,11 +61,9 @@ _LOTE_TYPE_PUBEAA = "http://uri.etsi.org/19602/LoTEType/EUPubEAAProvidersList"
 _SVC_TYPE_PID = "http://uri.etsi.org/19602/SvcType/PIDProvider"
 _SVC_TYPE_PUBEAA = "http://uri.etsi.org/19602/SvcType/PubEAAProvider"
 
-# PuB-EAA ServiceStatus values (PID profile must NOT have ServiceStatus)
 _STATUS_GRANTED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted"
 _STATUS_WITHDRAWN = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn"
 
-_LOTE_VERSION = 1
 _NEXT_UPDATE_DAYS = 180
 
 
@@ -105,72 +94,17 @@ def _sequence_number():
 
 
 def _names(entity):
-    """Multilingual names from EntityServiceDescription, falling back to trade_name."""
+    """NameSet (list of {language, value}) from EntityServiceDescription."""
     descriptions = list(entity.service_descriptions.all())
     if descriptions:
-        return [{"lang": d.lang, "value": d.content} for d in descriptions]
-    return [{"lang": "en", "value": entity.trade_name or entity.display_name}]
+        return [{"language": d.lang, "value": d.content} for d in descriptions]
+    return [{"language": "en", "value": entity.trade_name or entity.display_name}]
 
 
-def _te_address(le):
-    """
-    TEAddress from LegalEntity postal address and contact details.
-    Always returns the dict (never None) — TEAddress null fails g119612 validation.
-    """
-    postal = []
-    try:
-        addr = le.physical_address
-        if addr:
-            postal.append(
-                {
-                    "lang": "",
-                    "StreetAddress": addr.street_address or "",
-                    "Locality": addr.locality or "",
-                    "PostalCode": addr.postal_code or "",
-                    "Country": addr.country_code or "",
-                }
-            )
-    except Exception:
-        pass
-
-    electronic = []
-    if getattr(le, "info_uri", None):
-        electronic.append({"lang": "", "uriValue": le.info_uri})
-    if getattr(le, "email", None):
-        electronic.append({"lang": "", "uriValue": f"mailto:{le.email}"})
-
-    return {
-        "TEPostalAddress": postal,
-        "TEElectronicAddress": electronic,
-    }
-
-
-def _te_info_uri(le, entity):
-    """
-    TEInformationURI — required non-empty by g119612 validation.
-    Prefers LegalEntity.info_uri; falls back to RegisteredEntity.registry_uri.
-    """
-    if getattr(le, "info_uri", None):
-        return [{"lang": "en", "uriValue": le.info_uri}]
-    if entity.registry_uri:
-        return [{"lang": "en", "uriValue": entity.registry_uri}]
-    return []
-
-
-def _service_digital_identity(entity):
+def _digital_identities(entity):
     """
     X.509 certificate from tsl_generator ServiceCertificate (base64 DER).
-
-    Path: LegalEntity → TrustServiceProvider → TrustService → ServiceCertificate.
-
-    Returns a non-empty ServiceDigitalIdentity dict, or None if no certificate
-    is found. Callers must exclude entities that return None — an empty
-    ServiceDigitalIdentity is invalid per ETSI TS 119 602: relying parties have
-    no way to verify the entity's identity without a certificate.
-
-    Certificates are currently populated manually via Django admin through the
-    tsl_generator app. A dedicated digital-identity module will replace this
-    once it is added to the registration flow.
+    Returns list of DigitalIdentity dicts, or empty list if none found.
     """
     import logging
 
@@ -187,55 +121,78 @@ def _service_digital_identity(entity):
                     b64 = cert.get_base64_der()
                     if not b64:
                         continue
-                    sdi = {"X509Certificates": [{"val": b64}]}
+                    di = {"type": "x509", "x509Certificate": b64}
                     if cert.x509_subject_name:
-                        sdi["X509SubjectNames"] = [cert.x509_subject_name]
-                    if cert.x509_ski:
-                        sdi["X509SKIs"] = [cert.x509_ski]
-                    return sdi
+                        di["x509SubjectName"] = cert.x509_subject_name
+                    return [di]
     except Exception:
         logger.exception(
-            "LoTE: error reading digital identity for %s (%s) — excluded from LoTE",
+            "LoTE: error reading digital identity for %s (%s)",
             entity.display_name,
             entity.pk,
         )
-        return None
 
     logger.warning(
         "LoTE: no ServiceCertificate found for %s (%s) — excluded from LoTE",
         entity.display_name,
         entity.pk,
     )
-    return None
+    return []
+
+
+def _info_uris(entity):
+    """informationURIs from LegalEntity.info_uri or registry_uri."""
+    le = entity.legal_entity
+    if getattr(le, "info_uri", None):
+        return [{"language": "en", "uri": le.info_uri}]
+    if entity.registry_uri:
+        return [{"language": "en", "uri": entity.registry_uri}]
+    return []
 
 
 def _build_entity(entity, service_type, service_status=None):
     """
-    Build a TrustedEntity dict for the LoTE, or return None if the entity
-    has no digital identity (excluded from output per ETSI TS 119 602).
+    Build a TrustedEntity dict matching etsi119602.TrustedEntity Go struct.
+    Returns None if the entity has no digital identity.
+
+    PID profile: service_status must be None (absent from output).
+    PuB-EAA profile: service_status is required.
     """
-    sdi = _service_digital_identity(entity)
-    if sdi is None:
+    digital_identities = _digital_identities(entity)
+    if not digital_identities:
         return None
 
-    le = entity.legal_entity
     names = _names(entity)
-    svc_info = {
-        "ServiceName": names,
-        "ServiceDigitalIdentity": sdi,
-        "ServiceTypeIdentifier": service_type,
+
+    service = {
+        "serviceType": service_type,
+        "serviceName": names,
+        "digitalIdentities": digital_identities,
     }
-    # ServiceStatus: required for PuB-EAA, must be absent for PID
     if service_status is not None:
-        svc_info["ServiceStatus"] = service_status
+        service["serviceStatus"] = service_status
 
     return {
-        "TrustedEntityInformation": {
-            "TEName": names,
-            "TEAddress": _te_address(le),
-            "TEInformationURI": _te_info_uri(le, entity),
-        },
-        "TrustedEntityServices": [{"ServiceInformation": svc_info}],
+        "entityId": entity.registry_uri,
+        "entityName": names,
+        "entityStatus": _STATUS_GRANTED,
+        "digitalIdentities": digital_identities,
+        "services": [service],
+        "informationURIs": _info_uris(entity),
+    }
+
+
+def _scheme_information(lote_type, dist_point, now):
+    """Build schemeInformation matching etsi119602.SchemeInformation Go struct."""
+    return {
+        "territory": _territory(),
+        "schemeOperator": [{"language": "en", "value": _operator_name()}],
+        "schemeName": [{"language": "en", "value": "EU Trusted Entities List"}],
+        "schemeType": lote_type,
+        "issueDate": _iso(now),
+        "nextUpdate": _iso(now + timedelta(days=_NEXT_UPDATE_DAYS)),
+        "sequenceNumber": _sequence_number(),
+        "distributionPoints": [_dist_url(dist_point)],
     }
 
 
@@ -249,14 +206,9 @@ class LOTEPIDProvidersView(APIView):
     GET /lote-source/pid-providers/
 
     Unsigned PID Providers LoTE (ETSI TS 119 602).
+    Format matches etsi119602.ListOfTrustedEntities (g119612).
 
-    NOTE: Entities here must be formally notified to the Member State Registry
-    as PID Providers. Until a notification workflow exists, active registration
-    status acts as the proxy for notification.
-
-    PID LoTE rule (g119612 validate.go): ServiceStatus MUST be absent.
-    Presence of ServiceStatus = trusted per the ETSI spec, so the field must
-    not appear at all in PID profile output.
+    PID LoTE rule: ServiceStatus MUST be absent per g119612 validate.go.
     """
 
     permission_classes = []
@@ -278,27 +230,20 @@ class LOTEPIDProvidersView(APIView):
             )
         )
 
+        trusted_entities = [
+            entry
+            for e in entities
+            if (entry := _build_entity(e, _SVC_TYPE_PID)) is not None
+        ]
+
         lote = {
-            "LoTE": {
-                "ListAndSchemeInformation": {
-                    "LoTEVersionIdentifier": _LOTE_VERSION,
-                    "LoTESequenceNumber": _sequence_number(),
-                    "LoTEType": _LOTE_TYPE_PID,
-                    "SchemeOperatorName": [{"lang": "en", "value": _operator_name()}],
-                    "SchemeName": [{"lang": "en", "value": "EU PID Providers List"}],
-                    "SchemeTerritory": _territory(),
-                    "ListIssueDateTime": _iso(now),
-                    "NextUpdate": _iso(now + timedelta(days=_NEXT_UPDATE_DAYS)),
-                    "DistributionPoints": [
-                        _dist_url("/lote/pid_providers/pid_providers.json")
-                    ],
-                },
-                "TrustedEntitiesList": [
-                    entry
-                    for e in entities
-                    if (entry := _build_entity(e, _SVC_TYPE_PID)) is not None
-                ],
-            }
+            "version": "1",
+            "schemeInformation": _scheme_information(
+                _LOTE_TYPE_PID,
+                "/lote/pid_providers/pid_providers.json",
+                now,
+            ),
+            "trustedEntities": trusted_entities,
         }
         return Response(lote)
 
@@ -308,15 +253,10 @@ class LOTEPubEAAProvidersView(APIView):
     GET /lote-source/pubeaa-providers/
 
     Unsigned PuB-EAA Providers LoTE (ETSI TS 119 602).
+    Format matches etsi119602.ListOfTrustedEntities (g119612).
 
-    NOTE: Entities here must be formally notified to the Member State Registry
-    as PuB-EAA Providers. Until a notification workflow exists, active
-    registration status acts as the proxy for notification. Revoked entities
-    remain permanently (as withdrawn) so relying parties can verify past
-    attestations.
-
-    PuB-EAA LoTE rule (g119612 validate.go): ServiceStatus REQUIRED.
-    active → granted, revoked → withdrawn.
+    PuB-EAA LoTE rule: ServiceStatus REQUIRED per g119612 validate.go.
+    Revoked entities remain permanently as withdrawn.
     """
 
     permission_classes = []
@@ -338,40 +278,31 @@ class LOTEPubEAAProvidersView(APIView):
             )
         )
 
-        def pubeaa_status(entity):
+        def svc_status(entity):
             return (
                 _STATUS_GRANTED
                 if entity.registration_status == "active"
                 else _STATUS_WITHDRAWN
             )
 
+        trusted_entities = [
+            entry
+            for e in entities
+            if (
+                entry := _build_entity(
+                    e, _SVC_TYPE_PUBEAA, service_status=svc_status(e)
+                )
+            )
+            is not None
+        ]
+
         lote = {
-            "LoTE": {
-                "ListAndSchemeInformation": {
-                    "LoTEVersionIdentifier": _LOTE_VERSION,
-                    "LoTESequenceNumber": _sequence_number(),
-                    "LoTEType": _LOTE_TYPE_PUBEAA,
-                    "SchemeOperatorName": [{"lang": "en", "value": _operator_name()}],
-                    "SchemeName": [
-                        {"lang": "en", "value": "EU Pub-EAA Providers List"}
-                    ],
-                    "SchemeTerritory": _territory(),
-                    "ListIssueDateTime": _iso(now),
-                    "NextUpdate": _iso(now + timedelta(days=_NEXT_UPDATE_DAYS)),
-                    "DistributionPoints": [
-                        _dist_url("/lote/pubeaa_providers/pubeaa_providers.json")
-                    ],
-                },
-                "TrustedEntitiesList": [
-                    entry
-                    for e in entities
-                    if (
-                        entry := _build_entity(
-                            e, _SVC_TYPE_PUBEAA, service_status=pubeaa_status(e)
-                        )
-                    )
-                    is not None
-                ],
-            }
+            "version": "1",
+            "schemeInformation": _scheme_information(
+                _LOTE_TYPE_PUBEAA,
+                "/lote/pubeaa_providers/pubeaa_providers.json",
+                now,
+            ),
+            "trustedEntities": trusted_entities,
         }
         return Response(lote)
