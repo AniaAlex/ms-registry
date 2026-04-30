@@ -1,7 +1,7 @@
 """
 LoTE source views — ETSI TS 119 602 unsigned JSON for g119612 (tsl-tool).
 
-These two endpoints serve unsigned LoTE documents that are consumed by the
+These two endpoints serve unsigned LoTE documents consumed by the
 docker-siros-lote container running tsl-tool (g119612). tsl-tool fetches the
 JSON, validates it, signs it with JAdES-B-B, and writes:
 
@@ -17,30 +17,28 @@ JSON, validates it, signs it with JAdES-B-B, and writes:
 
 nginx serves these files publicly.
 
-JSON format matches etsi119602.ListOfTrustedEntities Go struct (g119612):
-  - top level: version, schemeInformation, trustedEntities
-  - LangString fields use "language" (not "lang")
-  - digitalIdentities use {"type": "x509", "x509Certificate": "<base64-DER>"}
+JSON format matches etsi119602 Go struct (g119612 commit 28620f4a):
+  - root envelope: {"LoTE": {"ListAndSchemeInformation": {...},
+    "TrustedEntitiesList": [...]}}
+  - LangString/NameSet fields use "lang" (not "language")
+  - URI fields use "uriValue" (not "uri")
+  - ServiceDigitalIdentity: {"X509Certificates": [{"val": "<base64-DER>"}]}
+  - TEAddress required (non-null); TEInformationURI required (non-empty)
+  - PID profile: ServiceStatus must be absent
+  - PuB-EAA profile: ServiceStatus required (granted/withdrawn)
 
 IMPORTANT — Member State notification requirement
 -------------------------------------------------
 Both PID Providers and PuB-EAA Providers must be formally notified to the
-Member State Registry before they may appear in the respective LoTE. This is
-a legal/regulatory step separate from the technical registration workflow.
-
-Until a dedicated notification workflow is implemented, "active" registration
-status is used as the operational proxy for "notified". When the notification
-step is added (e.g. a Supervisory Authority explicitly marks an entity as
-notified), the queryset filter here should be updated accordingly.
+Member State Registry before they may appear in the respective LoTE. Until a
+dedicated notification workflow is implemented, "active" registration status
+is used as the operational proxy for "notified".
 
 Configure via Django settings (all optional):
   LOTE_OPERATOR_NAME    default "WP4Trust Registry"
   LOTE_TERRITORY        default "EU"
   LOTE_SEQUENCE_NUMBER  default 1
   LOTE_PUBLIC_BASE_URL  default "http://localhost"
-                        Set to the public HTTPS URL of your nginx server so
-                        DistributionPoints in the LoTE reflects the real URL
-                        where signed files are served.
 """
 
 from datetime import timedelta
@@ -93,18 +91,18 @@ def _sequence_number():
     return getattr(settings, "LOTE_SEQUENCE_NUMBER", 1)
 
 
-def _names(entity):
-    """NameSet (list of {language, value}) from EntityServiceDescription."""
+def _nameset(entity):
+    """NameSet as [{"lang": ..., "value": ...}] from EntityServiceDescription."""
     descriptions = list(entity.service_descriptions.all())
     if descriptions:
-        return [{"language": d.lang, "value": d.content} for d in descriptions]
-    return [{"language": "en", "value": entity.trade_name or entity.display_name}]
+        return [{"lang": d.lang, "value": d.content} for d in descriptions]
+    return [{"lang": "en", "value": entity.trade_name or entity.display_name}]
 
 
-def _digital_identities(entity):
+def _service_digital_identity(entity):
     """
-    X.509 certificate from tsl_generator ServiceCertificate (base64 DER).
-    Returns list of DigitalIdentity dicts, or empty list if none found.
+    ServiceDigitalIdentity from tsl_generator ServiceCertificate.
+    Returns {"X509Certificates": [{"val": "<base64-DER>"}]} or None if not found.
     """
     import logging
 
@@ -121,10 +119,10 @@ def _digital_identities(entity):
                     b64 = cert.get_base64_der()
                     if not b64:
                         continue
-                    di = {"type": "x509", "x509Certificate": b64}
+                    sdi = {"X509Certificates": [{"val": b64}]}
                     if cert.x509_subject_name:
-                        di["x509SubjectName"] = cert.x509_subject_name
-                    return [di]
+                        sdi["X509SubjectNames"] = [cert.x509_subject_name]
+                    return sdi
     except Exception:
         logger.exception(
             "LoTE: error reading digital identity for %s (%s)",
@@ -137,62 +135,67 @@ def _digital_identities(entity):
         entity.display_name,
         entity.pk,
     )
-    return []
+    return None
 
 
-def _info_uris(entity):
-    """informationURIs from LegalEntity.info_uri or registry_uri."""
+def _te_information_uri(entity):
+    """TEInformationURI as [{"lang": "en", "uriValue": "..."}]."""
     le = entity.legal_entity
     if getattr(le, "info_uri", None):
-        return [{"language": "en", "uri": le.info_uri}]
+        return [{"lang": "en", "uriValue": le.info_uri}]
     if entity.registry_uri:
-        return [{"language": "en", "uri": entity.registry_uri}]
+        return [{"lang": "en", "uriValue": entity.registry_uri}]
     return []
 
 
 def _build_entity(entity, service_type, service_status=None):
     """
     Build a TrustedEntity dict matching etsi119602.TrustedEntity Go struct.
-    Returns None if the entity has no digital identity.
+    Returns None if the entity has no digital identity or no information URI.
 
     PID profile: service_status must be None (absent from output).
     PuB-EAA profile: service_status is required.
     """
-    digital_identities = _digital_identities(entity)
-    if not digital_identities:
+    sdi = _service_digital_identity(entity)
+    if not sdi:
         return None
 
-    names = _names(entity)
+    info_uri = _te_information_uri(entity)
+    if not info_uri:
+        return None
 
-    service = {
-        "serviceType": service_type,
-        "serviceName": names,
-        "digitalIdentities": digital_identities,
+    names = _nameset(entity)
+
+    service_info = {
+        "ServiceName": names,
+        "ServiceDigitalIdentity": sdi,
+        "ServiceTypeIdentifier": service_type,
     }
     if service_status is not None:
-        service["serviceStatus"] = service_status
+        service_info["ServiceStatus"] = service_status
 
     return {
-        "entityId": entity.registry_uri,
-        "entityName": names,
-        "entityStatus": _STATUS_GRANTED,
-        "digitalIdentities": digital_identities,
-        "services": [service],
-        "informationURIs": _info_uris(entity),
+        "TrustedEntityInformation": {
+            "TEName": names,
+            "TEAddress": {"TEPostalAddress": [], "TEElectronicAddress": []},
+            "TEInformationURI": info_uri,
+        },
+        "TrustedEntityServices": [{"ServiceInformation": service_info}],
     }
 
 
 def _scheme_information(lote_type, dist_point, now):
-    """Build schemeInformation matching etsi119602.SchemeInformation Go struct."""
+    """Build ListAndSchemeInformation matching etsi119602 Go struct."""
     return {
-        "territory": _territory(),
-        "schemeOperator": [{"language": "en", "value": _operator_name()}],
-        "schemeName": [{"language": "en", "value": "EU Trusted Entities List"}],
-        "schemeType": lote_type,
-        "issueDate": _iso(now),
-        "nextUpdate": _iso(now + timedelta(days=_NEXT_UPDATE_DAYS)),
-        "sequenceNumber": _sequence_number(),
-        "distributionPoints": [_dist_url(dist_point)],
+        "LoTEVersionIdentifier": 1,
+        "LoTESequenceNumber": _sequence_number(),
+        "LoTEType": lote_type,
+        "SchemeOperatorName": [{"lang": "en", "value": _operator_name()}],
+        "SchemeName": [{"lang": "en", "value": "EU Trusted Entities List"}],
+        "SchemeTerritory": _territory(),
+        "ListIssueDateTime": _iso(now),
+        "NextUpdate": _iso(now + timedelta(days=_NEXT_UPDATE_DAYS)),
+        "DistributionPoints": [_dist_url(dist_point)],
     }
 
 
@@ -206,7 +209,7 @@ class LOTEPIDProvidersView(APIView):
     GET /lote-source/pid-providers/
 
     Unsigned PID Providers LoTE (ETSI TS 119 602).
-    Format matches etsi119602.ListOfTrustedEntities (g119612).
+    Format matches etsi119602.LoTEDocument (g119612 commit 28620f4a).
 
     PID LoTE rule: ServiceStatus MUST be absent per g119612 validate.go.
     """
@@ -237,13 +240,14 @@ class LOTEPIDProvidersView(APIView):
         ]
 
         lote = {
-            "version": "1",
-            "schemeInformation": _scheme_information(
-                _LOTE_TYPE_PID,
-                "/lote/pid_providers/pid_providers.json",
-                now,
-            ),
-            "trustedEntities": trusted_entities,
+            "LoTE": {
+                "ListAndSchemeInformation": _scheme_information(
+                    _LOTE_TYPE_PID,
+                    "/lote/pid_providers/pid_providers.json",
+                    now,
+                ),
+                "TrustedEntitiesList": trusted_entities,
+            }
         }
         return Response(lote)
 
@@ -253,7 +257,7 @@ class LOTEPubEAAProvidersView(APIView):
     GET /lote-source/pubeaa-providers/
 
     Unsigned PuB-EAA Providers LoTE (ETSI TS 119 602).
-    Format matches etsi119602.ListOfTrustedEntities (g119612).
+    Format matches etsi119602.LoTEDocument (g119612 commit 28620f4a).
 
     PuB-EAA LoTE rule: ServiceStatus REQUIRED per g119612 validate.go.
     Revoked entities remain permanently as withdrawn.
@@ -297,12 +301,13 @@ class LOTEPubEAAProvidersView(APIView):
         ]
 
         lote = {
-            "version": "1",
-            "schemeInformation": _scheme_information(
-                _LOTE_TYPE_PUBEAA,
-                "/lote/pubeaa_providers/pubeaa_providers.json",
-                now,
-            ),
-            "trustedEntities": trusted_entities,
+            "LoTE": {
+                "ListAndSchemeInformation": _scheme_information(
+                    _LOTE_TYPE_PUBEAA,
+                    "/lote/pubeaa_providers/pubeaa_providers.json",
+                    now,
+                ),
+                "TrustedEntitiesList": trusted_entities,
+            }
         }
         return Response(lote)

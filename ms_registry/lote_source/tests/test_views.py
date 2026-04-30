@@ -2,18 +2,19 @@
 Tests for lote_source views.
 
 Coverage:
-  - HTTP 200 and correct root keys: version, schemeInformation, trustedEntities
-  - schemeInformation fields: schemeType, territory, sequenceNumber,
-    issueDate, nextUpdate, distributionPoints
+  - HTTP 200 and correct root keys: LoTE → ListAndSchemeInformation, TrustedEntitiesList
+  - ListAndSchemeInformation fields: LoTEType, SchemeTerritory, LoTESequenceNumber,
+    ListIssueDateTime, NextUpdate, DistributionPoints, SchemeOperatorName
   - Filtering: only matching entitlement_type and registration_status appear
   - Entities without a digital identity certificate are excluded from the LoTE
-  - entityName, entityId, entityStatus, digitalIdentities, services present
-  - digitalIdentities: x509Certificate non-empty base64
-  - informationURIs: fallback to registry_uri when info_uri is blank
-  - Multilingual entityName from EntityServiceDescription
-  - PID profile: serviceStatus absent from service
-  - PuB-EAA profile: serviceStatus present, active→granted, revoked→withdrawn
-  - serviceType correct for each list
+  - Entities without an information URI are excluded from the LoTE
+  - TEName, TEAddress, TEInformationURI, TrustedEntityServices present
+  - ServiceDigitalIdentity: X509Certificates non-empty
+  - TEInformationURI: fallback to registry_uri when info_uri is blank
+  - Multilingual TEName from EntityServiceDescription
+  - PID profile: ServiceStatus absent from ServiceInformation
+  - PuB-EAA profile: ServiceStatus present, active→granted, revoked→withdrawn
+  - ServiceTypeIdentifier correct for each list
   - Empty list is valid (no entities registered yet)
 """
 
@@ -48,12 +49,16 @@ def client():
     return APIClient()
 
 
+def _lote(response):
+    return response.data["LoTE"]
+
+
 def _scheme(response):
-    return response.data["schemeInformation"]
+    return _lote(response)["ListAndSchemeInformation"]
 
 
 def _entities(response):
-    return response.data["trustedEntities"]
+    return _lote(response)["TrustedEntitiesList"]
 
 
 def _make_pid(registration_status="active", **kwargs):
@@ -84,28 +89,37 @@ def test_pid_returns_200(client):
 @pytest.mark.django_db
 def test_pid_root_keys(client):
     response = client.get(reverse(PID_URL))
-    assert "version" in response.data
-    assert "schemeInformation" in response.data
-    assert "trustedEntities" in response.data
+    assert "LoTE" in response.data
+    assert "ListAndSchemeInformation" in _lote(response)
+    assert "TrustedEntitiesList" in _lote(response)
 
 
 @pytest.mark.django_db
 def test_pid_scheme_information(client):
     response = client.get(reverse(PID_URL))
     scheme = _scheme(response)
-    assert scheme["schemeType"] == LOTE_TYPE_PID
-    assert response.data["version"] == "1"
-    assert scheme["territory"] == "EU"
-    assert scheme["issueDate"]
-    assert scheme["nextUpdate"]
-    assert scheme["issueDate"] < scheme["nextUpdate"]
-    assert scheme["sequenceNumber"] >= 1
+    assert scheme["LoTEType"] == LOTE_TYPE_PID
+    assert scheme["SchemeTerritory"] == "EU"
+    assert scheme["ListIssueDateTime"]
+    assert scheme["NextUpdate"]
+    assert scheme["ListIssueDateTime"] < scheme["NextUpdate"]
+    assert scheme["LoTESequenceNumber"] >= 1
+    assert scheme["LoTEVersionIdentifier"] == 1
+
+
+@pytest.mark.django_db
+def test_pid_scheme_operator_name(client):
+    response = client.get(reverse(PID_URL))
+    names = _scheme(response)["SchemeOperatorName"]
+    assert len(names) >= 1
+    assert names[0]["lang"] == "en"
+    assert names[0]["value"]
 
 
 @pytest.mark.django_db
 def test_pid_distribution_points_contain_filename(client):
     response = client.get(reverse(PID_URL))
-    dps = _scheme(response)["distributionPoints"]
+    dps = _scheme(response)["DistributionPoints"]
     assert len(dps) == 1
     assert "pid_providers.json" in dps[0]
 
@@ -168,41 +182,42 @@ def test_pid_entity_has_required_fields(client):
     response = client.get(reverse(PID_URL))
     te = _entities(response)[0]
 
-    assert te["entityId"]
-    assert te["entityName"]
-    assert te["entityStatus"]
-    assert "digitalIdentities" in te
-    assert "services" in te
+    assert "TrustedEntityInformation" in te
+    assert "TrustedEntityServices" in te
+    info = te["TrustedEntityInformation"]
+    assert info["TEName"]
+    assert "TEAddress" in info
+    assert info["TEInformationURI"]
 
 
 @pytest.mark.django_db
-def test_pid_digital_identity_present_and_non_empty(client):
+def test_pid_service_digital_identity_present(client):
     _make_pid()
 
     response = client.get(reverse(PID_URL))
-    di = _entities(response)[0]["digitalIdentities"]
-    assert len(di) >= 1
-    assert di[0]["type"] == "x509"
-    assert di[0]["x509Certificate"]
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    sdi = svc_info["ServiceDigitalIdentity"]
+    assert len(sdi["X509Certificates"]) >= 1
+    assert sdi["X509Certificates"][0]["val"]
 
 
 @pytest.mark.django_db
 def test_pid_service_status_absent(client):
-    """PID profile rule: serviceStatus must not appear in the service."""
+    """PID profile rule: ServiceStatus must not appear in ServiceInformation."""
     _make_pid()
 
     response = client.get(reverse(PID_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert "serviceStatus" not in svc
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert "ServiceStatus" not in svc_info
 
 
 @pytest.mark.django_db
-def test_pid_service_type(client):
+def test_pid_service_type_identifier(client):
     _make_pid()
 
     response = client.get(reverse(PID_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert svc["serviceType"] == SVC_TYPE_PID
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert svc_info["ServiceTypeIdentifier"] == SVC_TYPE_PID
 
 
 @pytest.mark.django_db
@@ -212,8 +227,8 @@ def test_pid_info_uri_from_legal_entity(client):
     )
 
     response = client.get(reverse(PID_URL))
-    uris = _entities(response)[0]["informationURIs"]
-    assert any("pid-provider.example.com" in u["uri"] for u in uris)
+    uris = _entities(response)[0]["TrustedEntityInformation"]["TEInformationURI"]
+    assert any("pid-provider.example.com" in u["uriValue"] for u in uris)
 
 
 @pytest.mark.django_db
@@ -225,9 +240,9 @@ def test_pid_info_uri_falls_back_to_registry_uri(client):
     )
 
     response = client.get(reverse(PID_URL))
-    uris = _entities(response)[0]["informationURIs"]
+    uris = _entities(response)[0]["TrustedEntityInformation"]["TEInformationURI"]
     assert len(uris) >= 1
-    assert any("registry.example.com" in u["uri"] for u in uris)
+    assert any("registry.example.com" in u["uriValue"] for u in uris)
 
 
 @pytest.mark.django_db
@@ -243,9 +258,9 @@ def test_pid_name_from_service_description(client):
     )
 
     response = client.get(reverse(PID_URL))
-    names = _entities(response)[0]["entityName"]
-    assert {"language": "en", "value": "English PID Service"} in names
-    assert {"language": "de", "value": "Deutsches PID Service"} in names
+    names = _entities(response)[0]["TrustedEntityInformation"]["TEName"]
+    assert {"lang": "en", "value": "English PID Service"} in names
+    assert {"lang": "de", "value": "Deutsches PID Service"} in names
     assert not any(n["value"] == "Fallback Name" for n in names)
 
 
@@ -254,7 +269,7 @@ def test_pid_name_fallback_to_trade_name(client):
     _make_pid(trade_name="My PID Corp")
 
     response = client.get(reverse(PID_URL))
-    names = _entities(response)[0]["entityName"]
+    names = _entities(response)[0]["TrustedEntityInformation"]["TEName"]
     assert names[0]["value"] == "My PID Corp"
 
 
@@ -273,15 +288,15 @@ def test_pubeaa_returns_200(client):
 def test_pubeaa_scheme_information(client):
     response = client.get(reverse(PUBEAA_URL))
     scheme = _scheme(response)
-    assert scheme["schemeType"] == LOTE_TYPE_PUBEAA
-    assert scheme["territory"] == "EU"
-    assert scheme["issueDate"] < scheme["nextUpdate"]
+    assert scheme["LoTEType"] == LOTE_TYPE_PUBEAA
+    assert scheme["SchemeTerritory"] == "EU"
+    assert scheme["ListIssueDateTime"] < scheme["NextUpdate"]
 
 
 @pytest.mark.django_db
 def test_pubeaa_distribution_points_contain_filename(client):
     response = client.get(reverse(PUBEAA_URL))
-    dps = _scheme(response)["distributionPoints"]
+    dps = _scheme(response)["DistributionPoints"]
     assert len(dps) == 1
     assert "pubeaa_providers.json" in dps[0]
 
@@ -335,8 +350,8 @@ def test_pubeaa_active_maps_to_granted(client):
     _make_pubeaa(registration_status="active")
 
     response = client.get(reverse(PUBEAA_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert svc["serviceStatus"] == STATUS_GRANTED
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert svc_info["ServiceStatus"] == STATUS_GRANTED
 
 
 @pytest.mark.django_db
@@ -344,38 +359,38 @@ def test_pubeaa_revoked_maps_to_withdrawn(client):
     _make_pubeaa(registration_status="revoked")
 
     response = client.get(reverse(PUBEAA_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert svc["serviceStatus"] == STATUS_WITHDRAWN
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert svc_info["ServiceStatus"] == STATUS_WITHDRAWN
 
 
 @pytest.mark.django_db
 def test_pubeaa_service_status_always_present(client):
-    """PuB-EAA profile rule: serviceStatus must always be present."""
+    """PuB-EAA profile rule: ServiceStatus must always be present."""
     _make_pubeaa()
 
     response = client.get(reverse(PUBEAA_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert "serviceStatus" in svc
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert "ServiceStatus" in svc_info
 
 
 @pytest.mark.django_db
-def test_pubeaa_service_type(client):
+def test_pubeaa_service_type_identifier(client):
     _make_pubeaa()
 
     response = client.get(reverse(PUBEAA_URL))
-    svc = _entities(response)[0]["services"][0]
-    assert svc["serviceType"] == SVC_TYPE_PUBEAA
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    assert svc_info["ServiceTypeIdentifier"] == SVC_TYPE_PUBEAA
 
 
 @pytest.mark.django_db
-def test_pubeaa_digital_identity_present_and_non_empty(client):
+def test_pubeaa_service_digital_identity_present(client):
     _make_pubeaa()
 
     response = client.get(reverse(PUBEAA_URL))
-    di = _entities(response)[0]["digitalIdentities"]
-    assert len(di) >= 1
-    assert di[0]["type"] == "x509"
-    assert di[0]["x509Certificate"]
+    svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
+    sdi = svc_info["ServiceDigitalIdentity"]
+    assert len(sdi["X509Certificates"]) >= 1
+    assert sdi["X509Certificates"][0]["val"]
 
 
 # =============================================================================
