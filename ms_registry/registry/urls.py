@@ -11,8 +11,8 @@ from .views import EntityDetailView
 app_name = "registry"
 
 urlpatterns = [
-    # LoTE export
-    path("lote-se/", views.LOTESEView.as_view(), name="lote-se"),
+    # TODO: remove — LOTESEView is commented out; replaced by lote_source app
+    # path("lote-se/", views.LOTESEView.as_view(), name="lote-se"),
     # ==========================================================================
     # WalletRelyingParty API (TS5 Specification)
     # ==========================================================================
