@@ -167,6 +167,85 @@ def build_subject_from_entity(entity: RegisteredEntity) -> dict:
     return subject
 
 
+# X.500 OID to short name mapping for CSR subject validation
+X500_OID_MAP = {
+    "2.5.4.6": "C",  # countryName
+    "2.5.4.10": "O",  # organizationName
+    "2.5.4.3": "CN",  # commonName
+    "2.5.4.42": "GN",  # givenName
+    "2.5.4.4": "SN",  # surname
+    "2.5.4.5": "serialNumber",
+    "2.5.4.97": "2.5.4.97",  # organizationIdentifier (keep as OID)
+}
+
+
+def validate_csr_subject(
+    csr: x509.CertificateSigningRequest, entity: RegisteredEntity
+) -> list[str]:
+    """
+    Validate that the CSR subject matches registry data.
+
+    Checks critical fields:
+    - Country (C) must match
+    - Organization (O) must match legal name (for legal persons)
+    - organizationIdentifier must match primary identifier
+
+    Returns:
+        List of validation errors (empty if valid)
+    """
+    errors = []
+    expected = build_subject_from_entity(entity)
+
+    # Parse CSR subject into a dict
+    csr_subject = {}
+    for attr in csr.subject:
+        oid = attr.oid.dotted_string
+        name = X500_OID_MAP.get(oid, oid)
+        csr_subject[name] = attr.value
+
+    # Validate Country
+    if "C" in expected:
+        csr_country = csr_subject.get("C", "").upper()
+        expected_country = expected["C"].upper()
+        if csr_country != expected_country:
+            errors.append(
+                f"Country mismatch: CSR has '{csr_country}', "
+                f"registry expects '{expected_country}'"
+            )
+
+    # Validate Organization (for legal persons)
+    if "O" in expected:
+        csr_org = csr_subject.get("O", "")
+        expected_org = expected["O"]
+        if csr_org.lower() != expected_org.lower():
+            errors.append(
+                f"Organization mismatch: CSR has '{csr_org}', "
+                f"registry expects '{expected_org}'"
+            )
+
+    # Validate organizationIdentifier (critical for entity identification)
+    if "2.5.4.97" in expected:
+        csr_org_id = csr_subject.get("2.5.4.97", "")
+        expected_org_id = expected["2.5.4.97"]
+        if csr_org_id.upper() != expected_org_id.upper():
+            errors.append(
+                f"organizationIdentifier mismatch: CSR has '{csr_org_id}', "
+                f"registry expects '{expected_org_id}'"
+            )
+
+    # Validate serialNumber (for natural persons)
+    if "serialNumber" in expected:
+        csr_serial = csr_subject.get("serialNumber", "")
+        expected_serial = expected["serialNumber"]
+        if csr_serial.upper() != expected_serial.upper():
+            errors.append(
+                f"serialNumber mismatch: CSR has '{csr_serial}', "
+                f"registry expects '{expected_serial}'"
+            )
+
+    return errors
+
+
 def build_san_from_entity(entity: RegisteredEntity) -> list[str]:
     """
     Build Subject Alternative Name entries from registry data.
@@ -253,12 +332,19 @@ def issue_access_certificate(
     except Exception as e:
         raise CertificateIssuanceError(f"Invalid CSR: {e}")
 
-    # 4. Build certificate parameters from registry
-    subject = build_subject_from_entity(entity)
+    # 4. Validate CSR subject matches registry data
+    validation_errors = validate_csr_subject(csr, entity)
+    if validation_errors:
+        raise CertificateIssuanceError(
+            f"CSR subject validation failed: {'; '.join(validation_errors)}"
+        )
+
+    # 5. Build certificate extensions from registry data
+    # Note: Subject DN comes from the CSR - we only add authoritative extensions
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
 
-    # 5. Build extensions
+    # 6. Build extensions
     extensions = {
         "subject_alternative_name": {
             "critical": False,
@@ -278,7 +364,8 @@ def issue_access_certificate(
         },
     }
 
-    # 6. Issue certificate via django-ca
+    # 7. Issue certificate via django-ca
+    # Subject DN is taken from the CSR, CA only adds extensions
     expires = timezone.now() + timedelta(
         days=getattr(settings, "CA_DEFAULT_EXPIRES", 365)
     )
@@ -287,7 +374,6 @@ def issue_access_certificate(
         cert = Certificate.objects.create_cert(
             ca=ca,
             csr=csr,
-            subject=subject,
             expires=expires,
             extensions=extensions,
             profile=getattr(settings, "CA_DEFAULT_PROFILE", "eudiwrp"),
