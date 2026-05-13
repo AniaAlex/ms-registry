@@ -35,6 +35,8 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     "debug_toolbar",
+    "django_object_actions",  # Required by django-ca admin
+    "django_ca",  # Access CA functionality
     # Local apps - new modular structure
     "core",
     "legal_entities",
@@ -194,3 +196,86 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# django-ca settings (Access CA)
+# https://django-ca.readthedocs.io/en/latest/settings.html
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Directory for CA-related files (keys, CRLs)
+CA_DIR = BASE_DIR / "ca"
+
+# Default CA serial (hex string, set after creating the CA with init_ca command)
+# Leave unset initially - the integration code will find the first usable CA
+# After init_ca, you can set this to the CA's serial number (hex)
+_ca_default = os.environ.get("CA_DEFAULT_CA", "")
+if _ca_default and _ca_default.replace(" ", "").isalnum():
+    # Only set if it looks like a hex serial (not a name)
+    import re
+
+    if re.match(r"^[A-Fa-f0-9]+$", _ca_default):
+        CA_DEFAULT_CA = _ca_default.upper()
+
+# Key storage backend - file system for dev, HSM for production
+CA_KEY_BACKENDS = {
+    "default": {
+        "BACKEND": "django_ca.key_backends.storages.StoragesBackend",
+        "OPTIONS": {
+            "storage_alias": "django-ca",
+        },
+    },
+}
+
+# Storage for CA private keys
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+    "django-ca": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {
+            "location": str(CA_DIR / "keys"),
+            "file_permissions_mode": 0o600,
+            "directory_permissions_mode": 0o700,
+        },
+    },
+}
+
+# Default subject for certificates (django-ca format: list of dicts)
+CA_DEFAULT_SUBJECT = [
+    {"oid": "C", "value": os.environ.get("CA_COUNTRY", "SE")},
+    {"oid": "O", "value": os.environ.get("CA_ORGANIZATION", "EUDI Wallet Registry")},
+]
+
+# Certificate validity (days)
+CA_DEFAULT_EXPIRES = 365  # 1 year for entity certificates
+
+# OCSP and CRL URLs (set based on deployment URL)
+CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", "localhost:8000")
+
+# Certificate profiles for EUDI Wallet Access Certificates
+# Note: basic_constraints is not configurable in profiles (set automatically)
+CA_PROFILES = {
+    "eudiwrp": {
+        "description": "EUDI Wallet Relying Party Access Certificate (WRPAC)",
+        "extensions": {
+            "key_usage": {
+                "critical": True,
+                "value": ["digital_signature"],
+            },
+        },
+        "subject": False,  # Use subject from CSR or issuance call
+    },
+}
+
+# Default profile for certificate issuance
+CA_DEFAULT_PROFILE = "eudiwrp"
+
+# Enable OCSP responder
+CA_ENABLE_OCSP = True
+
+# Disable ACME (not used for EUDI Wallet - we use CSR-based issuance)
+CA_ENABLE_ACME = False

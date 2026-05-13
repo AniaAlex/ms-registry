@@ -4,6 +4,24 @@ from django.contrib import admin
 
 from .models import AuditLog, EntityAccessCertificate, EntityRegistrationCertificate
 
+# Unregister ACME models from admin (not used for EUDI Wallet)
+try:
+    from django_ca.models import (
+        AcmeAccount,
+        AcmeAuthorization,
+        AcmeCertificate,
+        AcmeChallenge,
+        AcmeOrder,
+    )
+
+    admin.site.unregister(AcmeAccount)
+    admin.site.unregister(AcmeAuthorization)
+    admin.site.unregister(AcmeCertificate)
+    admin.site.unregister(AcmeChallenge)
+    admin.site.unregister(AcmeOrder)
+except (ImportError, admin.sites.NotRegistered):
+    pass
+
 
 class EntityAccessCertificateInline(admin.TabularInline):
     model = EntityAccessCertificate

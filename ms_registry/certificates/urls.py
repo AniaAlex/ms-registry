@@ -4,6 +4,7 @@ from certificates.views import (
     AccessCertificateUploadView,
     CnfPageView,
     CnfView,
+    IssueCertificateView,
 )
 from django.urls import path
 
@@ -19,6 +20,11 @@ urlpatterns = [
         "upload/<uuid:entity_id>/view/",
         AccessCertificateUploadPageView.as_view(),
         name="upload-page",
+    ),
+    path(
+        "issue/<uuid:entity_id>/",
+        IssueCertificateView.as_view(),
+        name="issue",
     ),
     path(
         "detail/<uuid:entity_id>/view/",

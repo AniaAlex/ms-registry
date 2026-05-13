@@ -20,13 +20,28 @@ class EntityAccessCertificate(BaseModel):
     Access Certificate history per Trust Infrastructure Schema Section 2.2.
     Access CA issues certificates to all registered entities
     (PID Providers, Attestation Providers, Relying Parties).
+
+    Links to django-ca's Certificate model for lifecycle management (OCSP, CRL).
+    Duplicate certificate data stored locally for future-proofing if django-ca
+    becomes a separate service.
     """
 
     registered_entity = models.ForeignKey(
         RegisteredEntity, on_delete=models.CASCADE, related_name="access_certificates"
     )
 
-    # Certificate details
+    # Link to django-ca Certificate (for OCSP/CRL integration)
+    # SET_NULL allows local record to survive if django-ca cert is removed
+    django_ca_certificate = models.OneToOneField(
+        "django_ca.Certificate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="registry_access_certificate",
+        help_text="Link to django-ca Certificate for lifecycle management",
+    )
+
+    # Certificate details (duplicate storage for future-proofing)
     certificate_serial = models.CharField(max_length=100)
     certificate_fingerprint_sha256 = models.CharField(
         max_length=64, blank=True, null=True

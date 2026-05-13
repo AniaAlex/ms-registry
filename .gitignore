@@ -8,6 +8,10 @@ local/
 db.sqlite3
 .docker-extra-vars.yml
 
+# CA private keys (NEVER commit these!)
+ms_registry/ca/keys/
+*.key
+
 # Backups
 sql/
 

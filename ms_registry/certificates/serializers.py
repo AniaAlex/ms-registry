@@ -1,27 +1,11 @@
 """
-Access certificate upload serializer.
+Access certificate serializers.
 
-Validates an X.509 PEM certificate against registered entity data per
-ETSI TS 119 411-8 and the simplified flow requirements.
+Contains:
+- AccessCertificateUploadSerializer: Validates uploaded X.509 certificates
+- CSRSubmissionSerializer: Validates CSRs for certificate issuance
 
-Checks performed:
-  1. Valid PEM-encoded X.509 certificate
-  2. Validity period (not expired, not yet valid)
-  3. Subject DN matches registry data (C, O, organizationIdentifier)
-     — organizationIdentifier mandatory per GEN-6.6.1-05
-     — CN is optional (GEN-6.1.1-04 uses "may")
-  4. KeyUsage: digitalSignature, critical
-     — deferred to ETSI EN 319 411-1 §6.6.1; digitalSignature is standard
-       for both electronic signatures (NCP/QCP-n) and seals (NCP/QCP-l)
-  5. CertificatePolicies: at least one eudiwrp policy OID (§5.3)
-  6. SAN RegisteredID OIDs cover all registered entitlements (TS 119 475)
-  7. SAN contact info: at least one of uniformResourceIdentifier, rfc822Name,
-     or otherName/id-at-telephoneNumber (GEN-6.6.1-07 [CHOICE])
-
-Not checked (not required by TS 119 411-8):
-  — ExtendedKeyUsage id-kp-clientAuth: spec explicitly excludes website auth
-    certificates (GEN-6.6.1-01 NOTE)
-  — CN value match: CN is optional ("may") per GEN-6.1.1-04
+Validates against registered entity data per ETSI TS 119 411-8.
 """
 
 from cryptography import x509
@@ -313,3 +297,81 @@ class AccessCertificateUploadSerializer(serializers.Serializer):
                 f"Certificate SAN missing entitlement OIDs: "
                 f"{', '.join(sorted(missing))}."
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CSR Submission Serializer (for certificate issuance)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CSRSubmissionSerializer(serializers.Serializer):
+    """
+    Validates a CSR submitted for access certificate issuance.
+
+    The CA will override most CSR fields with registry data, so validation
+    is minimal — we mainly check:
+    1. Valid PEM-encoded CSR
+    2. CSR signature is valid (proves possession of private key)
+
+    Required context:
+        entity (RegisteredEntity): The registered entity requesting a certificate.
+
+    After successful validation, ``validated_data["csr"]`` contains
+    the parsed ``cryptography.x509.CertificateSigningRequest`` object.
+    """
+
+    csr_pem = serializers.CharField(
+        help_text="PEM-encoded Certificate Signing Request (CSR).",
+    )
+
+    def validate_csr_pem(self, value: str) -> x509.CertificateSigningRequest:
+        """Parse and validate CSR."""
+        # Parse CSR
+        try:
+            csr = x509.load_pem_x509_csr(value.encode())
+        except Exception as exc:
+            raise serializers.ValidationError(f"Invalid PEM CSR: {exc}")
+
+        # Verify CSR signature (proves private key possession)
+        if not csr.is_signature_valid:
+            raise serializers.ValidationError(
+                "CSR signature is invalid. The CSR must be signed with the "
+                "private key corresponding to the public key in the request."
+            )
+
+        return csr
+
+    def validate(self, data: dict) -> dict:
+        """
+        Additional validation against registry data.
+
+        Note: The CA will override Subject DN and extensions with registry data,
+        so we don't strictly validate CSR subject matching. We just ensure the
+        entity is eligible for certificate issuance.
+        """
+        entity = self.context.get("entity")
+        if not entity:
+            raise serializers.ValidationError(
+                "Internal error: entity context required."
+            )
+
+        # Entity must be active
+        from core.models import RegistrationStatus
+
+        if entity.registration_status != RegistrationStatus.ACTIVE:
+            raise serializers.ValidationError(
+                f"Entity registration status is '{entity.registration_status}', "
+                f"not 'active'. Certificates can only be issued for active entities."
+            )
+
+        # Entity must have at least one entitlement
+        if not entity.entitlements.exists():
+            raise serializers.ValidationError(
+                "Entity has no entitlements registered. "
+                "At least one entitlement is required for certificate issuance."
+            )
+
+        # Store parsed CSR
+        data["csr"] = data["csr_pem"]
+
+        return data
