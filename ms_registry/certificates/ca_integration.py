@@ -66,6 +66,24 @@ ORG_ID_PREFIXES = {
     "OTHER": "OTH",
 }
 
+# X.500 OID constants (ETSI EN 319 412-1)
+OID_COUNTRY_NAME = "2.5.4.6"
+OID_ORGANIZATION_NAME = "2.5.4.10"
+OID_COMMON_NAME = "2.5.4.3"
+OID_GIVEN_NAME = "2.5.4.42"
+OID_SURNAME = "2.5.4.4"
+OID_SERIAL_NUMBER = "2.5.4.5"
+OID_ORGANIZATION_IDENTIFIER = "2.5.4.97"  # ETSI EN 319 412-1 §5.1.4
+
+# Readable attribute names (used in subject dicts and validation)
+ATTR_COUNTRY = "C"
+ATTR_ORGANIZATION = "O"
+ATTR_COMMON_NAME = "CN"
+ATTR_GIVEN_NAME = "GN"
+ATTR_SURNAME = "SN"
+ATTR_SERIAL_NUMBER = "serialNumber"
+ATTR_ORGANIZATION_IDENTIFIER = "organizationIdentifier"
+
 
 def format_org_identifier(
     identifier_value: str, identifier_type: str, country: str
@@ -138,29 +156,30 @@ def build_subject_from_entity(entity: RegisteredEntity) -> dict:
         or "XX"
     )
 
-    subject = {"C": country}
+    subject = {ATTR_COUNTRY: country}
 
     if legal_entity.entity_type == "natural_person" and legal_entity.natural_person:
         # Natural person Subject DN
         np = legal_entity.natural_person
-        subject["GN"] = np.given_name
-        subject["SN"] = np.family_name
-        subject["CN"] = entity.trade_name or f"{np.given_name} {np.family_name}"
+        subject[ATTR_GIVEN_NAME] = np.given_name
+        subject[ATTR_SURNAME] = np.family_name
+        subject[ATTR_COMMON_NAME] = (
+            entity.trade_name or f"{np.given_name} {np.family_name}"
+        )
 
         if primary_id:
             # serialNumber for natural persons
-            subject["serialNumber"] = format_org_identifier(
+            subject[ATTR_SERIAL_NUMBER] = format_org_identifier(
                 primary_id.identifier_value, primary_id.identifier_type, country
             )
     else:
         # Legal person Subject DN
         if legal_entity.legal_person:
-            subject["O"] = legal_entity.legal_person.legal_name
-        subject["CN"] = entity.trade_name or legal_entity.display_name
+            subject[ATTR_ORGANIZATION] = legal_entity.legal_person.legal_name
+        subject[ATTR_COMMON_NAME] = entity.trade_name or legal_entity.display_name
 
         if primary_id:
-            # organizationIdentifier OID: 2.5.4.97
-            subject["2.5.4.97"] = format_org_identifier(
+            subject[ATTR_ORGANIZATION_IDENTIFIER] = format_org_identifier(
                 primary_id.identifier_value, primary_id.identifier_type, country
             )
 
@@ -169,13 +188,13 @@ def build_subject_from_entity(entity: RegisteredEntity) -> dict:
 
 # X.500 OID to short name mapping for CSR subject validation
 X500_OID_MAP = {
-    "2.5.4.6": "C",  # countryName
-    "2.5.4.10": "O",  # organizationName
-    "2.5.4.3": "CN",  # commonName
-    "2.5.4.42": "GN",  # givenName
-    "2.5.4.4": "SN",  # surname
-    "2.5.4.5": "serialNumber",
-    "2.5.4.97": "2.5.4.97",  # organizationIdentifier (keep as OID)
+    OID_COUNTRY_NAME: ATTR_COUNTRY,
+    OID_ORGANIZATION_NAME: ATTR_ORGANIZATION,
+    OID_COMMON_NAME: ATTR_COMMON_NAME,
+    OID_GIVEN_NAME: ATTR_GIVEN_NAME,
+    OID_SURNAME: ATTR_SURNAME,
+    OID_SERIAL_NUMBER: ATTR_SERIAL_NUMBER,
+    OID_ORGANIZATION_IDENTIFIER: ATTR_ORGANIZATION_IDENTIFIER,
 }
 
 
@@ -205,8 +224,8 @@ def validate_csr_subject(
 
     # Validate Country
     if "C" in expected:
-        csr_country = csr_subject.get("C", "").upper()
-        expected_country = expected["C"].upper()
+        csr_country = csr_subject.get(ATTR_COUNTRY, "").upper()
+        expected_country = expected[ATTR_COUNTRY].upper()
         if csr_country != expected_country:
             errors.append(
                 f"Country mismatch: CSR has '{csr_country}', "
@@ -214,9 +233,9 @@ def validate_csr_subject(
             )
 
     # Validate Organization (for legal persons)
-    if "O" in expected:
-        csr_org = csr_subject.get("O", "")
-        expected_org = expected["O"]
+    if ATTR_ORGANIZATION in expected:
+        csr_org = csr_subject.get(ATTR_ORGANIZATION, "")
+        expected_org = expected[ATTR_ORGANIZATION]
         if csr_org.lower() != expected_org.lower():
             errors.append(
                 f"Organization mismatch: CSR has '{csr_org}', "
@@ -224,9 +243,9 @@ def validate_csr_subject(
             )
 
     # Validate organizationIdentifier (critical for entity identification)
-    if "2.5.4.97" in expected:
-        csr_org_id = csr_subject.get("2.5.4.97", "")
-        expected_org_id = expected["2.5.4.97"]
+    if ATTR_ORGANIZATION_IDENTIFIER in expected:
+        csr_org_id = csr_subject.get(ATTR_ORGANIZATION_IDENTIFIER, "")
+        expected_org_id = expected[ATTR_ORGANIZATION_IDENTIFIER]
         if csr_org_id.upper() != expected_org_id.upper():
             errors.append(
                 f"organizationIdentifier mismatch: CSR has '{csr_org_id}', "
@@ -234,9 +253,9 @@ def validate_csr_subject(
             )
 
     # Validate serialNumber (for natural persons)
-    if "serialNumber" in expected:
-        csr_serial = csr_subject.get("serialNumber", "")
-        expected_serial = expected["serialNumber"]
+    if ATTR_SERIAL_NUMBER in expected:
+        csr_serial = csr_subject.get(ATTR_SERIAL_NUMBER, "")
+        expected_serial = expected[ATTR_SERIAL_NUMBER]
         if csr_serial.upper() != expected_serial.upper():
             errors.append(
                 f"serialNumber mismatch: CSR has '{csr_serial}', "
