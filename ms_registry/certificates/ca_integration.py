@@ -131,7 +131,7 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             "legal_entity__primary_identifier",
             "legal_entity__physical_address",
         )
-        .prefetch_related("entitlements")
+        .prefetch_related("entitlements", "support_uris")
         .get(id=entity_id)
     )
 
@@ -140,6 +140,20 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             f"Entity registration status is '{entity.registration_status}', "
             f"not 'active'. Certificates can only be issued for active entities.",
             http_status=409,
+        )
+
+    # GEN-6.6.1-07: SAN must contain at least one contact method.
+    # Use the prefetch cache — avoid .exists() which bypasses it.
+    has_contact = (
+        entity.legal_entity.email
+        or entity.legal_entity.phone
+        or list(entity.support_uris.all())
+    )
+    if not has_contact:
+        raise CertificateIssuanceError(
+            "Entity has no contact information (email, phone, or support URI). "
+            "At least one is required for the certificate SAN (GEN-6.6.1-07).",
+            http_status=400,
         )
 
     return entity
@@ -280,15 +294,24 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[str]:
     Build Subject Alternative Name entries from registry data.
 
     Includes:
-    - URI: registry_uri (entity identifier)
+    - URI: registry_uri (entity identifier in the registry)
+    - URI: support_uris (all registered support/contact URLs)
     - email: contact email (if present)
     - RegisteredID: entitlement OIDs (ETSI TS 119 475)
+
+    Phone numbers have no standard X.509 SAN type and are omitted from
+    the SAN, but count toward the GEN-6.6.1-07 contact method check in
+    get_entity_for_issuance().
     """
     san_entries = []
 
-    # Entity URI (primary identifier)
+    # Entity URI (primary identifier in the registry)
     if entity.registry_uri:
         san_entries.append(f"URI:{entity.registry_uri}")
+
+    # Support/contact URIs (GEN-6.6.1-07 contact method)
+    for support_uri in entity.support_uris.all():
+        san_entries.append(f"URI:{support_uri.support_uri}")
 
     # Contact email
     if entity.legal_entity.email:
@@ -399,31 +422,31 @@ def issue_access_certificate(
         days=getattr(settings, "CA_DEFAULT_EXPIRES", 365)
     )
 
-    try:
-        cert = Certificate.objects.create_cert(
-            ca=ca,
-            csr=csr,
-            expires=expires,
-            extensions=extensions,
-            profile=getattr(settings, "CA_DEFAULT_PROFILE", "eudiwrp"),
-        )
-    except Exception as e:
-        raise CertificateIssuanceError(f"Certificate signing failed: {e}")
-
-    # 7. Extract certificate data
-    cert_obj = cert.pub.loaded
-    cert_pem = cert.pub.pem
-    cert_der = cert_obj.public_bytes(serialization.Encoding.DER)
-    fingerprint = hashlib.sha256(cert_der).hexdigest()
-
-    # 8. Store in EntityAccessCertificate
+    # 7. Sign and persist atomically — both writes go to the same DB so one
+    # transaction covers both. A failed local write rolls back the django-ca
+    # Certificate too, preventing orphan CA records.
     with transaction.atomic():
+        try:
+            cert = Certificate.objects.create_cert(
+                ca=ca,
+                csr=csr,
+                expires=expires,
+                extensions=extensions,
+                profile=getattr(settings, "CA_DEFAULT_PROFILE", "eudiwrp"),
+            )
+        except Exception as e:
+            raise CertificateIssuanceError(f"Certificate signing failed: {e}")
+
+        cert_obj = cert.pub.loaded
+        cert_pem = cert.pub.pem
+        cert_der = cert_obj.public_bytes(serialization.Encoding.DER)
+        fingerprint = hashlib.sha256(cert_der).hexdigest()
+
         # Mark any existing current certificates as non-current
         EntityAccessCertificate.objects.filter(
             registered_entity=entity, is_current=True
         ).update(is_current=False)
 
-        # Create new certificate record
         access_cert = EntityAccessCertificate.objects.create(
             registered_entity=entity,
             django_ca_certificate=cert,
