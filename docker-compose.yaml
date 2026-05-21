@@ -22,8 +22,9 @@ services:
     image: postgres:14
     container_name: postgres-ms-registry
     environment:
-      POSTGRES_DB: ms_registry
-      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: ${POSTGRES_DB:-ms_registry}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supersecret}
     volumes:
       - "ms_registry_dbdata:/var/lib/postgresql/data"
     # Expose port to localhost for debugging

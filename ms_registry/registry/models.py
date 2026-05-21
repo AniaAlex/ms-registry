@@ -22,6 +22,7 @@ from core.models import (
 )
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from legal_entities.models import LegalEntity
 
@@ -171,6 +172,13 @@ class RegisteredEntity(BaseModel):
             models.Index(fields=["is_psb"]),
             models.Index(fields=["is_intermediary"]),
             models.Index(fields=["registration_status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["legal_entity", "registry_uri"],
+                condition=~Q(registry_uri=""),
+                name="unique_legal_entity_registry_uri",
+            ),
         ]
 
     def clean(self):
