@@ -5,7 +5,7 @@ run: env ## Build and start project
 	@docker-compose build
 	@docker-compose up -d
 	@echo "Waiting for postgres to be ready..."
-	@until docker-compose exec -T postgres pg_isready -U postgres -q; do sleep 1; done
+	@until docker-compose exec -T postgres sh -c 'pg_isready -U "$${POSTGRES_USER:-postgres}" -q'; do sleep 1; done
 	@echo "Postgres is ready."
 	@$(MAKE) migrate
 	@$(MAKE) init-ca

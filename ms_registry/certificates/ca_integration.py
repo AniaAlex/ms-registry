@@ -143,17 +143,18 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             http_status=409,
         )
 
-    # GEN-6.6.1-07: SAN must contain at least one contact method.
-    # Use the prefetch cache — avoid .exists() which bypasses it.
-    has_contact = (
-        entity.legal_entity.email
-        or entity.legal_entity.phone
+    # GEN-6.6.1-07: SAN must contain at least one contact method that is
+    # actually encoded in the SAN. Phone has no standard SAN type and is
+    # omitted; registry_uri and support_uris are added as URI entries.
+    has_san_contact = (
+        entity.registry_uri
+        or entity.legal_entity.email
         or list(entity.support_uris.all())
     )
-    if not has_contact:
+    if not has_san_contact:
         raise CertificateIssuanceError(
-            "Entity has no contact information (email, phone, or support URI). "
-            "At least one is required for the certificate SAN (GEN-6.6.1-07).",
+            "Entity has no contact information that can be encoded in the SAN "
+            "(registry_uri, email, or support URI required — GEN-6.6.1-07).",
             http_status=400,
         )
 

@@ -175,9 +175,9 @@ class RegisteredEntity(BaseModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["legal_entity", "registry_uri"],
+                fields=["registry_uri"],
                 condition=~Q(registry_uri=""),
-                name="unique_legal_entity_registry_uri",
+                name="unique_registered_entity_registry_uri",
             ),
         ]
 
