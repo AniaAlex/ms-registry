@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django_ca.profiles import get_profile
 from registry.models import RegisteredEntity
 
 logger = logging.getLogger(__name__)
@@ -289,7 +290,7 @@ def validate_csr_subject(
     return errors
 
 
-def build_san_from_entity(entity: RegisteredEntity) -> list[str]:
+def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     Build Subject Alternative Name entries from registry data.
 
@@ -303,25 +304,25 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[str]:
     the SAN, but count toward the GEN-6.6.1-07 contact method check in
     get_entity_for_issuance().
     """
-    san_entries = []
+    san_entries: list[x509.GeneralName] = []
 
     # Entity URI (primary identifier in the registry)
     if entity.registry_uri:
-        san_entries.append(f"URI:{entity.registry_uri}")
+        san_entries.append(x509.UniformResourceIdentifier(entity.registry_uri))
 
     # Support/contact URIs (GEN-6.6.1-07 contact method)
     for support_uri in entity.support_uris.all():
-        san_entries.append(f"URI:{support_uri.support_uri}")
+        san_entries.append(x509.UniformResourceIdentifier(support_uri.support_uri))
 
     # Contact email
     if entity.legal_entity.email:
-        san_entries.append(f"email:{entity.legal_entity.email}")
+        san_entries.append(x509.RFC822Name(entity.legal_entity.email))
 
     # Entitlement OIDs
     for entitlement in entity.entitlements.all():
         oid = ENTITLEMENT_OIDS.get(entitlement.entitlement_type)
         if oid:
-            san_entries.append(f"rid:{oid}")
+            san_entries.append(x509.RegisteredID(x509.ObjectIdentifier(oid)))
 
     return san_entries
 
@@ -396,29 +397,29 @@ def issue_access_certificate(
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
 
-    # 6. Build extensions
-    extensions = {
-        "subject_alternative_name": {
-            "critical": False,
-            "value": san_entries,
-        },
-        "certificate_policies": {
-            "critical": False,
-            "value": [{"policy_identifier": policy_oid}],
-        },
-        "key_usage": {
-            "critical": True,
-            "value": ["digital_signature"],
-        },
-        "basic_constraints": {
-            "critical": True,
-            "value": {"ca": False},
-        },
-    }
+    # 6. Build extensions as cryptography x509.Extension objects.
+    # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only
+    # pass extensions that carry per-entity data.
+    extensions = [
+        x509.Extension(
+            oid=x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME,
+            critical=False,
+            value=x509.SubjectAlternativeName(san_entries),
+        ),
+        x509.Extension(
+            oid=x509.ExtensionOID.CERTIFICATE_POLICIES,
+            critical=False,
+            value=x509.CertificatePolicies(
+                [
+                    x509.PolicyInformation(x509.ObjectIdentifier(policy_oid), None),
+                ]
+            ),
+        ),
+    ]
 
     # 7. Issue certificate via django-ca
     # Subject DN is taken from the CSR, CA only adds extensions
-    expires = timezone.now() + timedelta(
+    not_after = timezone.now() + timedelta(
         days=getattr(settings, "CA_DEFAULT_EXPIRES", 365)
     )
 
@@ -427,12 +428,16 @@ def issue_access_certificate(
     # Certificate too, preventing orphan CA records.
     with transaction.atomic():
         try:
+            key_backend_options = ca.key_backend.get_use_private_key_options(ca, {})
+            profile_name = getattr(settings, "CA_DEFAULT_PROFILE", "eudiwrp")
             cert = Certificate.objects.create_cert(
                 ca=ca,
+                key_backend_options=key_backend_options,
                 csr=csr,
-                expires=expires,
+                subject=csr.subject,
+                not_after=not_after,
                 extensions=extensions,
-                profile=getattr(settings, "CA_DEFAULT_PROFILE", "eudiwrp"),
+                profile=get_profile(profile_name),
             )
         except Exception as e:
             raise CertificateIssuanceError(f"Certificate signing failed: {e}")

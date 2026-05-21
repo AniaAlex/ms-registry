@@ -162,6 +162,10 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        # registry_uri is auto-generated after creation; the DB constraint
+        # enforces uniqueness once it's set. Suppress the DRF-generated
+        # UniqueTogetherValidator which would wrongly require the field.
+        validators = []
 
     def validate_entitlements(self, value):
         """Validate that at least one entitlement is provided"""
