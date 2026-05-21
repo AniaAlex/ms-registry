@@ -452,6 +452,17 @@ class IssueCertificateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if entity.registration_status != RegistrationStatus.ACTIVE:
+            return Response(
+                {
+                    "detail": (
+                        f"Entity registration status is "
+                        f"'{entity.registration_status}', not 'active'."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # 2. Validate CSR
         serializer = CSRSubmissionSerializer(
             data=request.data,

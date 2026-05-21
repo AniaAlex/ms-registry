@@ -6,6 +6,8 @@ EntityAccessCertificates without a django_ca_certificate link exercise the
 local-record-only path in revoke_entity_certificates (no CA call needed).
 """
 
+from datetime import timedelta
+
 import pytest
 from certificates.models import EntityAccessCertificate
 from core.models import RegistrationStatus
@@ -24,7 +26,7 @@ def _make_cert(entity, *, is_current=True, revoked=False):
         registered_entity=entity,
         certificate_serial="DEADBEEF",
         not_before=now,
-        not_after=now.replace(year=now.year + 1),
+        not_after=now + timedelta(days=365),
         is_current=is_current,
         revoked_at=now if revoked else None,
         revocation_reason="superseded" if revoked else None,

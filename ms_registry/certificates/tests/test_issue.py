@@ -6,6 +6,7 @@ Auto-revocation tests use transaction=True so transaction.on_commit() fires.
 """
 
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -55,7 +56,7 @@ def _make_cert_record(entity) -> EntityAccessCertificate:
         issuer_dn="CN=Test CA",
         subject_dn="CN=Test Entity",
         not_before=now,
-        not_after=now.replace(year=now.year + 1),
+        not_after=now + timedelta(days=365),
         is_current=True,
         certificate_pem=(
             "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
@@ -195,23 +196,23 @@ def test_issue_returns_400_for_certificate_pem_instead_of_csr(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_for_pending_entity(api_client):
+def test_issue_returns_409_for_pending_entity(api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
     EntityEntitlementFactory(registered_entity=entity)
 
     response = _post_issue(api_client, entity.id, _make_csr_pem())
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_for_suspended_entity(api_client):
+def test_issue_returns_409_for_suspended_entity(api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.SUSPENDED)
     EntityEntitlementFactory(registered_entity=entity)
 
     response = _post_issue(api_client, entity.id, _make_csr_pem())
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db

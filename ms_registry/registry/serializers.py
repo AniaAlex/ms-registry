@@ -389,17 +389,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             primary_identifier__identifier_value=identifier_value,
         ).first()
 
-        if legal_entity is not None:
-            if RegisteredEntity.objects.filter(legal_entity=legal_entity).exists():
-                raise serializers.ValidationError(
-                    {
-                        "legal_entity_identifier": (
-                            "A registered entity already exists for the provided "
-                            "legal entity identifier."
-                        )
-                    }
-                )
-        else:
+        if legal_entity is None:
             legal_person = LegalPerson.objects.create(legal_name=legal_name)
             legal_entity = LegalEntity.objects.create(
                 legal_person=legal_person,

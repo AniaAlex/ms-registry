@@ -308,10 +308,16 @@ class CSRSubmissionSerializer(serializers.Serializer):
     """
     Validates a CSR submitted for access certificate issuance.
 
-    The CA will override most CSR fields with registry data, so validation
-    is minimal — we mainly check:
+    The CSR subject DN is used as-is in the issued certificate and must
+    therefore match the entity's registry data. Validation checks:
     1. Valid PEM-encoded CSR
     2. CSR signature is valid (proves possession of private key)
+    3. Entity is eligible for certificate issuance (entitlements present)
+
+    Subject DN matching against registry data is performed later in
+    ca_integration.validate_csr_subject(). The CA adds authoritative
+    extensions (SAN, policy OIDs, key usage) derived from registry data,
+    but does not override the Subject DN supplied in the CSR.
 
     Required context:
         entity (RegisteredEntity): The registered entity requesting a certificate.
@@ -343,25 +349,13 @@ class CSRSubmissionSerializer(serializers.Serializer):
 
     def validate(self, data: dict) -> dict:
         """
-        Additional validation against registry data.
-
-        Note: The CA will override Subject DN and extensions with registry data,
-        so we don't strictly validate CSR subject matching. We just ensure the
-        entity is eligible for certificate issuance.
+        Check entity eligibility. Subject DN matching against registry data
+        is handled in ca_integration.validate_csr_subject() during issuance.
         """
         entity = self.context.get("entity")
         if not entity:
             raise serializers.ValidationError(
                 "Internal error: entity context required."
-            )
-
-        # Entity must be active
-        from core.models import RegistrationStatus
-
-        if entity.registration_status != RegistrationStatus.ACTIVE:
-            raise serializers.ValidationError(
-                f"Entity registration status is '{entity.registration_status}', "
-                f"not 'active'. Certificates can only be issued for active entities."
             )
 
         # Entity must have at least one entitlement
