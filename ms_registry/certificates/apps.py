@@ -3,6 +3,7 @@ from django.apps import AppConfig
 
 class CertificatesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
+    default = True
     name = "certificates"
     verbose_name = "Certificates & Audit"
 

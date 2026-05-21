@@ -9,49 +9,69 @@ import logging
 
 from certificates.ca_integration import revoke_entity_certificates
 from core.models import RegistrationStatus
-from django.db.models.signals import pre_save
+from django.db import transaction
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from registry.models import RegisteredEntity
 
 logger = logging.getLogger(__name__)
 
+_REVOCATION_STATUSES = {RegistrationStatus.SUSPENDED, RegistrationStatus.REVOKED}
+
 
 @receiver(pre_save, sender=RegisteredEntity)
-def auto_revoke_certificates_on_status_change(sender, instance, **kwargs):
-    """
-    Automatically revoke all active certificates when entity status changes
-    to SUSPENDED or REVOKED.
-
-    Uses pre_save to compare old and new status values.
-    """
-    # Skip if this is a new entity (no pk yet)
+def _snapshot_status_before_save(sender, instance, **kwargs):
+    """Store old registration_status on the instance so post_save can compare."""
     if not instance.pk:
+        instance._pre_save_status = None
         return
-
-    # Get the old status from the database
     try:
-        old_instance = RegisteredEntity.objects.get(pk=instance.pk)
+        instance._pre_save_status = RegisteredEntity.objects.values_list(
+            "registration_status", flat=True
+        ).get(pk=instance.pk)
     except RegisteredEntity.DoesNotExist:
+        instance._pre_save_status = None
+
+
+@receiver(post_save, sender=RegisteredEntity)
+def auto_revoke_certificates_on_status_change(sender, instance, created, **kwargs):
+    """
+    Revoke all active certificates when entity status changes to SUSPENDED or REVOKED.
+
+    Runs in post_save so the status change is already persisted, and defers the
+    actual revocation to transaction.on_commit so a subsequent rollback cannot
+    leave certificates revoked while the status change is undone.
+    """
+    if created:
         return
 
-    old_status = old_instance.registration_status
+    old_status = getattr(instance, "_pre_save_status", None)
     new_status = instance.registration_status
 
-    # Check if status changed to SUSPENDED or REVOKED
-    revocation_statuses = {RegistrationStatus.SUSPENDED, RegistrationStatus.REVOKED}
+    if old_status in _REVOCATION_STATUSES or new_status not in _REVOCATION_STATUSES:
+        return
 
-    if old_status not in revocation_statuses and new_status in revocation_statuses:
-        # Determine revocation reason based on status
-        if new_status == RegistrationStatus.SUSPENDED:
-            reason = "certificateHold"  # Temporary suspension
-        else:
-            reason = "cessationOfOperation"  # Permanent revocation
+    reason = (
+        "certificateHold"
+        if new_status == RegistrationStatus.SUSPENDED
+        else "cessationOfOperation"
+    )
+    entity_pk = instance.pk
 
-        # Revoke all certificates
-        count = revoke_entity_certificates(instance, reason=reason)
-
+    def do_revoke():
+        try:
+            entity = RegisteredEntity.objects.get(pk=entity_pk)
+        except RegisteredEntity.DoesNotExist:
+            return
+        count = revoke_entity_certificates(entity, reason=reason)
         if count > 0:
             logger.info(
-                f"Auto-revoked {count} certificate(s) for entity {instance.id} "
-                f"due to status change: {old_status} → {new_status}"
+                "Auto-revoked %d certificate(s) for entity %s "
+                "due to status change: %s → %s",
+                count,
+                entity_pk,
+                old_status,
+                new_status,
             )
+
+    transaction.on_commit(do_revoke)

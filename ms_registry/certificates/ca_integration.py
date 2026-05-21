@@ -18,6 +18,7 @@ References:
 """
 
 import hashlib
+import logging
 from datetime import timedelta
 
 from certificates.models import EntityAccessCertificate
@@ -28,6 +29,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from registry.models import RegisteredEntity
+
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ETSI TS 119 475 Annex A — Entitlement OIDs
@@ -102,9 +105,15 @@ def format_org_identifier(
 
 
 class CertificateIssuanceError(Exception):
-    """Raised when certificate issuance fails."""
+    """Raised when certificate issuance fails.
 
-    pass
+    Attributes:
+        http_status: Suggested HTTP status code for the view layer.
+    """
+
+    def __init__(self, message: str, http_status: int = 500) -> None:
+        super().__init__(message)
+        self.http_status = http_status
 
 
 def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
@@ -129,7 +138,8 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
     if entity.registration_status != RegistrationStatus.ACTIVE:
         raise CertificateIssuanceError(
             f"Entity registration status is '{entity.registration_status}', "
-            f"not 'active'. Certificates can only be issued for active entities."
+            f"not 'active'. Certificates can only be issued for active entities.",
+            http_status=409,
         )
 
     return entity
@@ -307,14 +317,14 @@ def get_policy_oid(entity: RegisteredEntity) -> str:
 
 def issue_access_certificate(
     entity_id: str,
-    csr_pem: str,
+    csr: x509.CertificateSigningRequest,
 ) -> EntityAccessCertificate:
     """
     Issue an access certificate for a registered entity.
 
     Args:
         entity_id: UUID of the RegisteredEntity
-        csr_pem: PEM-encoded Certificate Signing Request
+        csr: Parsed CertificateSigningRequest (already validated by the serializer)
 
     Returns:
         EntityAccessCertificate record with issued certificate
@@ -336,8 +346,13 @@ def issue_access_certificate(
     entity = get_entity_for_issuance(entity_id)
 
     # 2. Get the CA
-    # First try to find by name "SE Access CA", then fall back to first usable
-    ca = CertificateAuthority.objects.filter(name="SE Access CA").first()
+    # Priority: CA_DEFAULT_CA serial (env-driven) → name → first usable
+    ca = None
+    ca_serial = getattr(settings, "CA_DEFAULT_CA", None)
+    if ca_serial:
+        ca = CertificateAuthority.objects.filter(serial=ca_serial).first()
+    if not ca:
+        ca = CertificateAuthority.objects.filter(name="SE Access CA").first()
     if not ca:
         ca = CertificateAuthority.objects.usable().first()
     if not ca:
@@ -345,17 +360,12 @@ def issue_access_certificate(
             "No usable CA found. Create one with: make init-ca"
         )
 
-    # 3. Parse CSR
-    try:
-        csr = x509.load_pem_x509_csr(csr_pem.encode())
-    except Exception as e:
-        raise CertificateIssuanceError(f"Invalid CSR: {e}")
-
-    # 4. Validate CSR subject matches registry data
+    # 3. Validate CSR subject matches registry data
     validation_errors = validate_csr_subject(csr, entity)
     if validation_errors:
         raise CertificateIssuanceError(
-            f"CSR subject validation failed: {'; '.join(validation_errors)}"
+            f"CSR subject validation failed: {'; '.join(validation_errors)}",
+            http_status=400,
         )
 
     # 5. Build certificate extensions from registry data
@@ -417,12 +427,12 @@ def issue_access_certificate(
         access_cert = EntityAccessCertificate.objects.create(
             registered_entity=entity,
             django_ca_certificate=cert,
-            certificate_serial=cert.serial,
+            certificate_serial=format(cert_obj.serial_number, "x").upper(),
             certificate_fingerprint_sha256=fingerprint,
-            issuer_dn=str(cert.ca.subject),
-            subject_dn=str(cert.subject),
-            not_before=cert.not_before,
-            not_after=cert.not_after,
+            issuer_dn=cert_obj.issuer.rfc4514_string(),
+            subject_dn=cert_obj.subject.rfc4514_string(),
+            not_before=cert_obj.not_valid_before_utc,
+            not_after=cert_obj.not_valid_after_utc,
             is_current=True,
             certificate_pem=cert_pem,
         )
@@ -470,14 +480,23 @@ def revoke_entity_certificates(
     ).select_related("django_ca_certificate")
 
     for access_cert in certs:
-        # Revoke in django-ca if linked
         if access_cert.django_ca_certificate:
             try:
                 access_cert.django_ca_certificate.revoke(reason=reason)
-            except Exception:
-                pass  # Log error but continue
+            except Exception as exc:
+                # Do NOT mark the local record as revoked: keeping local state
+                # in sync with django-ca (OCSP/CRL) is more important than a
+                # partial update. The operator must investigate and retry.
+                logger.error(
+                    "Failed to revoke certificate %s in django-ca for entity %s: %s. "
+                    "Local record left unchanged to avoid OCSP/CRL desync.",
+                    access_cert.certificate_serial,
+                    entity.id,
+                    exc,
+                    exc_info=True,
+                )
+                continue
 
-        # Update local record
         access_cert.revoked_at = now
         access_cert.revocation_reason = reason
         access_cert.save(update_fields=["revoked_at", "revocation_reason"])

@@ -460,8 +460,6 @@ class IssueCertificateView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        csr_pem = request.data.get("csr_pem", "")
-
         # 3. Issue certificate via CA integration
         from certificates.ca_integration import (
             CertificateIssuanceError,
@@ -471,26 +469,10 @@ class IssueCertificateView(APIView):
         try:
             cert_record = issue_access_certificate(
                 entity_id=str(entity_id),
-                csr_pem=csr_pem,
+                csr=serializer.validated_data["csr"],
             )
         except CertificateIssuanceError as e:
-            # Determine appropriate status code
-            error_msg = str(e)
-            if "not 'active'" in error_msg:
-                return Response(
-                    {"detail": error_msg},
-                    status=status.HTTP_409_CONFLICT,
-                )
-            elif "not found" in error_msg.lower():
-                return Response(
-                    {"detail": error_msg},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            else:
-                return Response(
-                    {"detail": error_msg},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+            return Response({"detail": str(e)}, status=e.http_status)
 
         # 4. Return certificate
         return Response(
