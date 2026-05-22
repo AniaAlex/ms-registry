@@ -102,7 +102,9 @@ def format_org_identifier(
     """
     prefix = ORG_ID_PREFIXES.get(identifier_type, "OTH")
     effective_country = "XG" if identifier_type == "LEI" else country
-    return f"{prefix}{effective_country}-{identifier_value}"
+    # Strip formatting separators per ETSI EN 319 412-1 §5.1.4
+    clean_value = identifier_value.replace("-", "").replace(" ", "")
+    return f"{prefix}{effective_country}-{clean_value}"
 
 
 class CertificateIssuanceError(Exception):
@@ -143,18 +145,18 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             http_status=409,
         )
 
-    # GEN-6.6.1-07: SAN must contain at least one contact method that is
-    # actually encoded in the SAN. Phone has no standard SAN type and is
-    # omitted; registry_uri and support_uris are added as URI entries.
+    # GEN-6.6.1-07: SAN must contain at least one of URI, email, or phone.
+    # All three are encoded in the SAN (phone via otherName/id-at-telephoneNumber).
     has_san_contact = (
         entity.registry_uri
         or entity.legal_entity.email
+        or entity.legal_entity.phone
         or list(entity.support_uris.all())
     )
     if not has_san_contact:
         raise CertificateIssuanceError(
-            "Entity has no contact information that can be encoded in the SAN "
-            "(registry_uri, email, or support URI required — GEN-6.6.1-07).",
+            "Entity has no contact information for the certificate SAN "
+            "(registry_uri, email, phone, or support URI required — GEN-6.6.1-07).",
             http_status=400,
         )
 
@@ -295,15 +297,12 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     Build Subject Alternative Name entries from registry data.
 
-    Includes:
-    - URI: registry_uri (entity identifier in the registry)
-    - URI: support_uris (all registered support/contact URLs)
-    - email: contact email (if present)
-    - RegisteredID: entitlement OIDs (ETSI TS 119 475)
+    Per ETSI TS 119 411-8 GEN-6.6.1-07, SAN must contain at least one of:
+    - URI: registry_uri / support_uris (helpdesk/support website)
+    - rfc822Name: contact email
+    - otherName (id-at-telephoneNumber OID 2.5.4.20): contact phone
 
-    Phone numbers have no standard X.509 SAN type and are omitted from
-    the SAN, but count toward the GEN-6.6.1-07 contact method check in
-    get_entity_for_issuance().
+    Entitlement OIDs (ETSI TS 119 475) go in qcStatements, NOT in SAN.
     """
     san_entries: list[x509.GeneralName] = []
 
@@ -311,19 +310,20 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     if entity.registry_uri:
         san_entries.append(x509.UniformResourceIdentifier(entity.registry_uri))
 
-    # Support/contact URIs (GEN-6.6.1-07 contact method)
+    # Support/contact URIs
     for support_uri in entity.support_uris.all():
         san_entries.append(x509.UniformResourceIdentifier(support_uri.support_uri))
 
-    # Contact email
+    # Contact email (rfc822Name)
     if entity.legal_entity.email:
         san_entries.append(x509.RFC822Name(entity.legal_entity.email))
 
-    # Entitlement OIDs
-    for entitlement in entity.entitlements.all():
-        oid = ENTITLEMENT_OIDS.get(entitlement.entitlement_type)
-        if oid:
-            san_entries.append(x509.RegisteredID(x509.ObjectIdentifier(oid)))
+    # Contact phone — otherName with id-at-telephoneNumber (OID 2.5.4.20)
+    # Encoded as UTF8String: tag 0x0C + length + value
+    if entity.legal_entity.phone:
+        phone_bytes = entity.legal_entity.phone.encode("utf-8")
+        encoded = bytes([0x0C, len(phone_bytes)]) + phone_bytes
+        san_entries.append(x509.OtherName(x509.ObjectIdentifier("2.5.4.20"), encoded))
 
     return san_entries
 
@@ -398,6 +398,41 @@ def issue_access_certificate(
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
 
+    # Build qcStatements value: sequence of entitlement OIDs per ETSI TS 119 475
+    # Each entitlement is encoded as a qcStatement: SEQUENCE { statementId OID }
+    # OID for id-etsi-qcs (1.3.6.1.5.5.7.1) — qcStatements extension OID
+    QC_STATEMENTS_OID = x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3")
+    entitlement_oids = [
+        ENTITLEMENT_OIDS[e.entitlement_type]
+        for e in entity.entitlements.all()
+        if e.entitlement_type in ENTITLEMENT_OIDS
+    ]
+
+    # Encode qcStatements as raw DER: SEQUENCE of SEQUENCE { OID }
+    def _encode_oid(dotted: str) -> bytes:
+        parts = [int(p) for p in dotted.split(".")]
+        first = parts[0] * 40 + parts[1]
+        body = []
+        for part in [first] + parts[2:]:
+            enc = [part & 0x7F]
+            part >>= 7
+            while part:
+                enc.insert(0, (part & 0x7F) | 0x80)
+                part >>= 7
+            body.extend(enc)
+        return bytes(body)
+
+    def _tlv(tag: int, content: bytes) -> bytes:
+        return bytes([tag, len(content)]) + content
+
+    qc_der = b""
+    for oid_str in entitlement_oids:
+        oid_body = _encode_oid(oid_str)
+        oid_tlv = _tlv(0x06, oid_body)  # OID TLV
+        stmt = _tlv(0x30, oid_tlv)  # SEQUENCE { OID }
+        qc_der += stmt
+    qc_value = _tlv(0x30, qc_der)  # outer SEQUENCE
+
     # 6. Build extensions as cryptography x509.Extension objects.
     # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only
     # pass extensions that carry per-entity data.
@@ -417,6 +452,16 @@ def issue_access_certificate(
             ),
         ),
     ]
+
+    # Add qcStatements only if entity has entitlements
+    if qc_value and entitlement_oids:
+        extensions.append(
+            x509.Extension(
+                oid=QC_STATEMENTS_OID,
+                critical=False,
+                value=x509.UnrecognizedExtension(QC_STATEMENTS_OID, qc_value),
+            )
+        )
 
     # 7. Issue certificate via django-ca
     # Subject DN is taken from the CSR, CA only adds extensions
@@ -439,6 +484,7 @@ def issue_access_certificate(
                 not_after=not_after,
                 extensions=extensions,
                 profile=get_profile(profile_name),
+                allow_unrecognized_extensions=True,
             )
         except Exception as e:
             raise CertificateIssuanceError(f"Certificate signing failed: {e}")
