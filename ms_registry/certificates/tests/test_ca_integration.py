@@ -9,6 +9,9 @@ import pytest
 from certificates.ca_integration import (
     POLICY_OIDS,
     CertificateIssuanceError,
+    _der_tlv,
+    _der_utf8string,
+    _encode_oid,
     build_san_from_entity,
     build_subject_from_entity,
     format_org_identifier,
@@ -18,7 +21,7 @@ from certificates.ca_integration import (
     validate_csr_subject,
 )
 from certificates.models import EntityAccessCertificate
-from core.models import Identifier, RegistrationStatus
+from core.models import EntitlementType, Identifier, RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -29,6 +32,7 @@ from legal_entities.models import (
     PhysicalAddress,
 )
 from registry.tests.factories import (
+    EntityEntitlementFactory,
     EntitySupportURIFactory,
     RegisteredEntityFactory,
 )
@@ -442,9 +446,77 @@ def test_build_san_phone_utf8_encoded():
     san = build_san_from_entity(entity)
     other = next(e for e in san if isinstance(e, x509.OtherName))
 
-    # DER: 0x0C (UTF8String tag) + length + UTF-8 bytes
-    expected = b"\x0c\x03+46"
-    assert other.value == expected
+    assert other.value == b"\x0c\x03+46"
+
+
+# ---------------------------------------------------------------------------
+# issue_access_certificate — entitlement OID mapping
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_issue_raises_for_unmapped_entitlement_type():
+    from unittest.mock import MagicMock, patch
+
+    from certificates.ca_integration import issue_access_certificate
+
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+    EntityEntitlementFactory(
+        registered_entity=entity,
+        entitlement_type=EntitlementType.INTERMEDIARY,
+    )
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(x509.Name([]))
+        .sign(key, hashes.SHA256())
+    )
+
+    mock_ca = MagicMock()
+    with (
+        patch("certificates.ca_integration.validate_csr_subject", return_value=[]),
+        patch(
+            "django_ca.models.CertificateAuthority.objects",
+            **{"filter.return_value.first.return_value": mock_ca},
+        ),
+    ):
+        with pytest.raises(CertificateIssuanceError) as exc_info:
+            issue_access_certificate(str(entity.id), csr)
+
+    assert exc_info.value.http_status == 500
+    assert "Intermediary" in str(exc_info.value)
+
+
+# _der_tlv / _der_utf8string / _encode_oid
+
+
+def test_der_tlv_short_form():
+    content = b"A" * 127
+    out = _der_tlv(0x30, content)
+    assert out == bytes([0x30, 127]) + content
+
+
+def test_der_tlv_long_form_one_byte():
+    content = b"A" * 128
+    out = _der_tlv(0x30, content)
+    assert out == bytes([0x30, 0x81, 128]) + content
+
+
+def test_der_tlv_long_form_two_bytes():
+    content = b"A" * 256
+    out = _der_tlv(0x30, content)
+    assert out == bytes([0x30, 0x82, 0x01, 0x00]) + content
+
+
+def test_der_utf8string_delegates_to_der_tlv():
+    value = b"+46"
+    assert _der_utf8string(value) == _der_tlv(0x0C, value)
+
+
+def test_encode_oid_known_value():
+    # OID 2.5.4.20 (id-at-telephoneNumber): body should be 55 04 14
+    assert _encode_oid("2.5.4.20") == bytes([0x55, 0x04, 0x14])
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +545,9 @@ def test_get_policy_oid_natural_person():
 def test_get_entity_for_issuance_not_found():
     import uuid
 
-    with pytest.raises(Exception):  # DoesNotExist
+    from registry.models import RegisteredEntity
+
+    with pytest.raises(RegisteredEntity.DoesNotExist):
         get_entity_for_issuance(str(uuid.uuid4()))
 
 

@@ -193,3 +193,32 @@ def test_revocation_deferred_until_commit():
     # Transaction committed — on_commit fires now
     cert.refresh_from_db()
     assert cert.revoked_at is not None
+
+
+# ---------------------------------------------------------------------------
+# pre_save short-circuit when registration_status not in update_fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_unrelated_update_fields_skips_db_query_and_preserves_snapshot():
+    from unittest.mock import patch
+
+    entity = _active_entity()
+    cert = _make_cert(entity)
+
+    # Simulate a prior snapshot already set (e.g. from a previous save)
+    entity._pre_save_status = RegistrationStatus.ACTIVE
+
+    query_path = "registry.models.RegisteredEntity.objects.values_list"
+    with patch(query_path) as mock_qs:
+        entity.trade_name = "Patched"
+        entity.save(update_fields=["trade_name"])
+
+    # The DB snapshot query must not have been called
+    mock_qs.assert_not_called()
+    # The existing snapshot must be preserved (not reset to None)
+    assert entity._pre_save_status == RegistrationStatus.ACTIVE
+    # No revocation should have fired
+    cert.refresh_from_db()
+    assert cert.revoked_at is None

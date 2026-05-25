@@ -293,6 +293,36 @@ def validate_csr_subject(
     return errors
 
 
+def _der_tlv(tag: int, content: bytes) -> bytes:
+    """DER tag-length-value with correct short/long-form length encoding."""
+    n = len(content)
+    if n < 0x80:
+        length = bytes([n])
+    else:
+        width = (n.bit_length() + 7) // 8
+        length = bytes([0x80 | width]) + n.to_bytes(width, "big")
+    return bytes([tag]) + length + content
+
+
+def _der_utf8string(value: bytes) -> bytes:
+    return _der_tlv(0x0C, value)
+
+
+def _encode_oid(dotted: str) -> bytes:
+    """DER-encode a dotted OID string as the OID body (without tag/length)."""
+    parts = [int(p) for p in dotted.split(".")]
+    first = parts[0] * 40 + parts[1]
+    body = []
+    for part in [first] + parts[2:]:
+        enc = [part & 0x7F]
+        part >>= 7
+        while part:
+            enc.insert(0, (part & 0x7F) | 0x80)
+            part >>= 7
+        body.extend(enc)
+    return bytes(body)
+
+
 def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     Build Subject Alternative Name entries from registry data.
@@ -319,11 +349,14 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
         san_entries.append(x509.RFC822Name(entity.legal_entity.email))
 
     # Contact phone — otherName with id-at-telephoneNumber (OID 2.5.4.20)
-    # Encoded as UTF8String: tag 0x0C + length + value
     if entity.legal_entity.phone:
         phone_bytes = entity.legal_entity.phone.encode("utf-8")
-        encoded = bytes([0x0C, len(phone_bytes)]) + phone_bytes
-        san_entries.append(x509.OtherName(x509.ObjectIdentifier("2.5.4.20"), encoded))
+        san_entries.append(
+            x509.OtherName(
+                x509.ObjectIdentifier("2.5.4.20"),
+                _der_utf8string(phone_bytes),
+            )
+        )
 
     return san_entries
 
@@ -402,36 +435,22 @@ def issue_access_certificate(
     # Each entitlement is encoded as a qcStatement: SEQUENCE { statementId OID }
     # OID for id-etsi-qcs (1.3.6.1.5.5.7.1) — qcStatements extension OID
     QC_STATEMENTS_OID = x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3")
-    entitlement_oids = [
-        ENTITLEMENT_OIDS[e.entitlement_type]
-        for e in entity.entitlements.all()
-        if e.entitlement_type in ENTITLEMENT_OIDS
-    ]
+    entitlement_oids = []
+    for e in entity.entitlements.all():
+        if e.entitlement_type not in ENTITLEMENT_OIDS:
+            raise CertificateIssuanceError(
+                f"No qcStatement OID defined for entitlement"
+                f" type '{e.entitlement_type}'.",
+                http_status=500,
+            )
+        entitlement_oids.append(ENTITLEMENT_OIDS[e.entitlement_type])
 
     # Encode qcStatements as raw DER: SEQUENCE of SEQUENCE { OID }
-    def _encode_oid(dotted: str) -> bytes:
-        parts = [int(p) for p in dotted.split(".")]
-        first = parts[0] * 40 + parts[1]
-        body = []
-        for part in [first] + parts[2:]:
-            enc = [part & 0x7F]
-            part >>= 7
-            while part:
-                enc.insert(0, (part & 0x7F) | 0x80)
-                part >>= 7
-            body.extend(enc)
-        return bytes(body)
-
-    def _tlv(tag: int, content: bytes) -> bytes:
-        return bytes([tag, len(content)]) + content
-
     qc_der = b""
     for oid_str in entitlement_oids:
-        oid_body = _encode_oid(oid_str)
-        oid_tlv = _tlv(0x06, oid_body)  # OID TLV
-        stmt = _tlv(0x30, oid_tlv)  # SEQUENCE { OID }
-        qc_der += stmt
-    qc_value = _tlv(0x30, qc_der)  # outer SEQUENCE
+        oid_tlv = _der_tlv(0x06, _encode_oid(oid_str))
+        qc_der += _der_tlv(0x30, oid_tlv)  # SEQUENCE { OID }
+    qc_value = _der_tlv(0x30, qc_der)  # outer SEQUENCE
 
     # 6. Build extensions as cryptography x509.Extension objects.
     # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only

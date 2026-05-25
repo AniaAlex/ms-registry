@@ -20,8 +20,11 @@ _REVOCATION_STATUSES = {RegistrationStatus.SUSPENDED, RegistrationStatus.REVOKED
 
 
 @receiver(pre_save, sender=RegisteredEntity)
-def _snapshot_status_before_save(sender, instance, **kwargs):
+def _snapshot_status_before_save(sender, instance, update_fields=None, **kwargs):
     """Store old registration_status on the instance so post_save can compare."""
+    if update_fields is not None and "registration_status" not in update_fields:
+        instance._pre_save_status = getattr(instance, "_pre_save_status", None)
+        return
     if not instance.pk:
         instance._pre_save_status = None
         return
