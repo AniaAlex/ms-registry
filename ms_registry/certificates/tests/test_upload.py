@@ -39,8 +39,8 @@ def _upload_page_url(entity_id):
     return reverse("certificates:upload-page", args=[entity_id])
 
 
-def _post_upload(api_client, entity_id, pem, **extra):
-    return api_client.post(
+def _post_upload(authenticated_api_client, entity_id, pem, **extra):
+    return authenticated_api_client.post(
         _upload_url(entity_id),
         {"certificate_pem": pem},
         format="json",
@@ -114,18 +114,18 @@ def _add_identifier(
 
 
 @pytest.mark.django_db
-def test_upload_returns_201_for_valid_cert(api_client):
+def test_upload_returns_201_for_valid_cert(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_201_CREATED
 
 
 @pytest.mark.django_db
-def test_upload_response_contains_expected_fields(api_client):
+def test_upload_response_contains_expected_fields(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     data = response.data
     for field in (
         "id",
@@ -140,24 +140,24 @@ def test_upload_response_contains_expected_fields(api_client):
 
 
 @pytest.mark.django_db
-def test_upload_stores_certificate_in_db(api_client):
+def test_upload_stores_certificate_in_db(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    _post_upload(api_client, entity.id, pem)
+    _post_upload(authenticated_api_client, entity.id, pem)
     assert EntityAccessCertificate.objects.filter(registered_entity=entity).exists()
 
 
 @pytest.mark.django_db
-def test_upload_sets_is_current_true(api_client):
+def test_upload_sets_is_current_true(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    _post_upload(api_client, entity.id, pem)
+    _post_upload(authenticated_api_client, entity.id, pem)
     cert = EntityAccessCertificate.objects.get(registered_entity=entity)
     assert cert.is_current is True
 
 
 @pytest.mark.django_db
-def test_upload_marks_previous_cert_not_current(api_client):
+def test_upload_marks_previous_cert_not_current(authenticated_api_client):
     entity = _make_active_entity()
     # Pre-create an existing current certificate
     old_cert = EntityAccessCertificate.objects.create(
@@ -168,33 +168,33 @@ def test_upload_marks_previous_cert_not_current(api_client):
         is_current=True,
     )
     pem = _make_cert_pem(entity)
-    _post_upload(api_client, entity.id, pem)
+    _post_upload(authenticated_api_client, entity.id, pem)
     old_cert.refresh_from_db()
     assert old_cert.is_current is False
 
 
 # TODO: Add a proper CT log implementation, e.g. using the python-ct library
 # @pytest.mark.django_db
-# def test_upload_stores_ct_log_fields(api_client):
+# def test_upload_stores_ct_log_fields(authenticated_api_client):
 #     entity = _make_active_entity()
 #     pem = _make_cert_pem(entity)
-#     _post_upload(api_client, entity.id, pem)
+#     _post_upload(authenticated_api_client, entity.id, pem)
 #     cert = EntityAccessCertificate.objects.get(registered_entity=entity)
 #     assert cert.ct_log_id == "mock-log-id"
 #     assert cert.ct_sct == b'{"sct_version":"v2"}'
 
 
 @pytest.mark.django_db
-def test_upload_stores_certificate_pem(api_client):
+def test_upload_stores_certificate_pem(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    _post_upload(api_client, entity.id, pem)
+    _post_upload(authenticated_api_client, entity.id, pem)
     cert = EntityAccessCertificate.objects.get(registered_entity=entity)
     assert "BEGIN CERTIFICATE" in cert.certificate_pem
 
 
 @pytest.mark.django_db
-def test_upload_with_identifier_validates_org_identifier(api_client):
+def test_upload_with_identifier_validates_org_identifier(authenticated_api_client):
     entity = _make_active_entity()
     _add_identifier(entity)
     EntityEntitlementFactory(
@@ -202,12 +202,12 @@ def test_upload_with_identifier_validates_org_identifier(api_client):
         entitlement_type=EntitlementType.SERVICE_PROVIDER,
     )
     pem = _make_cert_pem(entity)
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_201_CREATED
 
 
 @pytest.mark.django_db
-def test_upload_lei_identifier_uses_xg_country_code(api_client):
+def test_upload_lei_identifier_uses_xg_country_code(authenticated_api_client):
     """
     ETSI EN 319 412-1 LEG-5.1.4-03 item 4: LEI is a global scheme; the country
     code in the organizationIdentifier shall be 'XG', not the entity's national
@@ -222,7 +222,7 @@ def test_upload_lei_identifier_uses_xg_country_code(api_client):
     )
     pem = _make_cert_pem(entity)
     # Certificate must be accepted — organizationIdentifier should be LEIXG-…
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_201_CREATED
     # Confirm the stored DN actually contains XG, not SE
     cert = EntityAccessCertificate.objects.get(registered_entity=entity)
@@ -234,9 +234,9 @@ def test_upload_lei_identifier_uses_xg_country_code(api_client):
 
 
 @pytest.mark.django_db
-def test_upload_returns_404_for_unknown_entity(api_client):
+def test_upload_returns_404_for_unknown_entity(authenticated_api_client):
     response = _post_upload(
-        api_client,
+        authenticated_api_client,
         uuid.uuid4(),
         "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----",
     )
@@ -244,58 +244,58 @@ def test_upload_returns_404_for_unknown_entity(api_client):
 
 
 @pytest.mark.django_db
-def test_upload_returns_409_for_pending_entity(api_client):
+def test_upload_returns_409_for_pending_entity(authenticated_api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
-    response = _post_upload(api_client, entity.id, "pem")
+    response = _post_upload(authenticated_api_client, entity.id, "pem")
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_upload_returns_409_for_suspended_entity(api_client):
+def test_upload_returns_409_for_suspended_entity(authenticated_api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.SUSPENDED)
-    response = _post_upload(api_client, entity.id, "pem")
+    response = _post_upload(authenticated_api_client, entity.id, "pem")
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_upload_returns_409_for_revoked_entity(api_client):
+def test_upload_returns_409_for_revoked_entity(authenticated_api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.REVOKED)
-    response = _post_upload(api_client, entity.id, "pem")
+    response = _post_upload(authenticated_api_client, entity.id, "pem")
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_invalid_pem(api_client):
+def test_upload_returns_400_for_invalid_pem(authenticated_api_client):
     entity = _make_active_entity()
-    response = _post_upload(api_client, entity.id, "not-a-cert")
+    response = _post_upload(authenticated_api_client, entity.id, "not-a-cert")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_wrong_organization_name(api_client):
+def test_upload_returns_400_for_wrong_organization_name(authenticated_api_client):
     from certificates.tests._cert_builder import build_cert_with_overrides
 
     entity = _make_active_entity()
     pem = build_cert_with_overrides(entity, org_name="Wrong Company Name")
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     errors = str(response.data)
     assert "organization" in errors.lower()
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_wrong_country(api_client):
+def test_upload_returns_400_for_wrong_country(authenticated_api_client):
     from certificates.tests._cert_builder import build_cert_with_overrides
 
     entity = _make_active_entity()
     pem = build_cert_with_overrides(entity, country="DE")
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "country" in str(response.data).lower()
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_expired_cert(api_client):
+def test_upload_returns_400_for_expired_cert(authenticated_api_client):
     from certificates.tests._cert_builder import build_cert_with_overrides
 
     entity = _make_active_entity()
@@ -305,13 +305,13 @@ def test_upload_returns_400_for_expired_cert(api_client):
         not_valid_before=past - timedelta(days=365),
         not_valid_after=past,
     )
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "expired" in str(response.data).lower()
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_missing_entitlement_oid(api_client):
+def test_upload_returns_400_for_missing_entitlement_oid(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(
         registered_entity=entity,
@@ -333,13 +333,15 @@ def test_upload_returns_400_for_missing_entitlement_oid(api_client):
         "contact": {"email": None, "phone": None},
     }
     pem, _ = generate_certificate_from_cnf(cnf)
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "entitlement" in str(response.data).lower()
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_legal_person_without_primary_identifier(api_client):
+def test_upload_returns_400_for_legal_person_without_primary_identifier(
+    authenticated_api_client,
+):
     """
     GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons.
     If the entity has no primary_identifier in the registry, the certificate
@@ -365,7 +367,7 @@ def test_upload_returns_400_for_legal_person_without_primary_identifier(api_clie
         "contact": {"email": None, "phone": None},
     }
     pem, _ = generate_certificate_from_cnf(cnf)
-    response = _post_upload(api_client, entity.id, pem)
+    response = _post_upload(authenticated_api_client, entity.id, pem)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "organizationidentifier" in str(response.data).lower()
 
@@ -374,31 +376,31 @@ def test_upload_returns_400_for_legal_person_without_primary_identifier(api_clie
 
 
 @pytest.mark.django_db
-def test_upload_page_get_returns_200(api_client):
+def test_upload_page_get_returns_200(authenticated_api_client):
     entity = _make_active_entity()
-    response = api_client.get(_upload_page_url(entity.id))
+    response = authenticated_api_client.get(_upload_page_url(entity.id))
     assert response.status_code == 200
     assert b"Upload Access Certificate" in response.content
 
 
 @pytest.mark.django_db
-def test_upload_page_get_shows_entity_name(api_client):
+def test_upload_page_get_shows_entity_name(authenticated_api_client):
     entity = _make_active_entity()
-    response = api_client.get(_upload_page_url(entity.id))
+    response = authenticated_api_client.get(_upload_page_url(entity.id))
     assert entity.display_name.encode() in response.content
 
 
 @pytest.mark.django_db
-def test_upload_page_get_404_for_unknown_entity(api_client):
-    response = api_client.get(_upload_page_url(uuid.uuid4()))
+def test_upload_page_get_404_for_unknown_entity(authenticated_api_client):
+    response = authenticated_api_client.get(_upload_page_url(uuid.uuid4()))
     assert response.status_code == 404
 
 
 @pytest.mark.django_db
-def test_upload_page_post_success_shows_cert_details(api_client):
+def test_upload_page_post_success_shows_cert_details(authenticated_api_client):
     entity = _make_active_entity()
     pem = _make_cert_pem(entity)
-    response = api_client.post(
+    response = authenticated_api_client.post(
         _upload_page_url(entity.id),
         {"certificate_pem": pem},
     )
@@ -407,9 +409,9 @@ def test_upload_page_post_success_shows_cert_details(api_client):
 
 
 @pytest.mark.django_db
-def test_upload_page_post_shows_validation_errors(api_client):
+def test_upload_page_post_shows_validation_errors(authenticated_api_client):
     entity = _make_active_entity()
-    response = api_client.post(
+    response = authenticated_api_client.post(
         _upload_page_url(entity.id),
         {"certificate_pem": "garbage"},
     )
@@ -439,32 +441,32 @@ def _make_cert_record(entity, **kwargs):
 
 
 @pytest.mark.django_db
-def test_detail_page_returns_200_for_valid_cert(api_client):
+def test_detail_page_returns_200_for_valid_cert(authenticated_api_client):
     entity = _make_active_entity()
     _make_cert_record(entity)
-    response = api_client.get(_detail_page_url(entity.id))
+    response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"AABBCC" in response.content
 
 
 @pytest.mark.django_db
-def test_detail_page_returns_404_for_unknown_entity(api_client):
+def test_detail_page_returns_404_for_unknown_entity(authenticated_api_client):
     import uuid
 
-    response = api_client.get(_detail_page_url(uuid.uuid4()))
+    response = authenticated_api_client.get(_detail_page_url(uuid.uuid4()))
     assert response.status_code == 404
 
 
 @pytest.mark.django_db
-def test_detail_page_shows_no_cert_message_when_none_stored(api_client):
+def test_detail_page_shows_no_cert_message_when_none_stored(authenticated_api_client):
     entity = _make_active_entity()
-    response = api_client.get(_detail_page_url(entity.id))
+    response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"No active certificate found" in response.content
 
 
 @pytest.mark.django_db
-def test_detail_page_excludes_not_yet_valid_cert(api_client):
+def test_detail_page_excludes_not_yet_valid_cert(authenticated_api_client):
     """
     A certificate whose not_before is in the future must not be shown —
     the query filters not_before__lte=now in addition to not_after__gt=now.
@@ -472,13 +474,13 @@ def test_detail_page_excludes_not_yet_valid_cert(api_client):
     entity = _make_active_entity()
     future = datetime.now(tz=timezone.utc) + timedelta(days=1)
     _make_cert_record(entity, not_before=future)
-    response = api_client.get(_detail_page_url(entity.id))
+    response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"No active certificate found" in response.content
 
 
 @pytest.mark.django_db
-def test_detail_page_excludes_expired_cert(api_client):
+def test_detail_page_excludes_expired_cert(authenticated_api_client):
     entity = _make_active_entity()
     past = datetime.now(tz=timezone.utc) - timedelta(days=1)
     _make_cert_record(
@@ -486,18 +488,18 @@ def test_detail_page_excludes_expired_cert(api_client):
         not_before=past - timedelta(days=365),
         not_after=past,
     )
-    response = api_client.get(_detail_page_url(entity.id))
+    response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"No active certificate found" in response.content
 
 
 @pytest.mark.django_db
-def test_detail_page_excludes_revoked_cert(api_client):
+def test_detail_page_excludes_revoked_cert(authenticated_api_client):
     entity = _make_active_entity()
     _make_cert_record(
         entity,
         revoked_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
     )
-    response = api_client.get(_detail_page_url(entity.id))
+    response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"No active certificate found" in response.content

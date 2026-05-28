@@ -67,8 +67,8 @@ def _make_entity(identifier_value="TEST-ID-001"):
 
 
 @pytest.mark.django_db
-def test_missing_rpidentifier_returns_400(api_client):
-    response = api_client.get(CHECK_URL)
+def test_missing_rpidentifier_returns_400(authenticated_api_client):
+    response = authenticated_api_client.get(CHECK_URL)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -78,16 +78,18 @@ def test_missing_rpidentifier_returns_400(api_client):
 
 
 @pytest.mark.django_db
-def test_unknown_rpidentifier_returns_false(api_client):
-    response = api_client.get(CHECK_URL, {"rpidentifier": "DOES-NOT-EXIST"})
+def test_unknown_rpidentifier_returns_false(authenticated_api_client):
+    response = authenticated_api_client.get(
+        CHECK_URL, {"rpidentifier": "DOES-NOT-EXIST"}
+    )
     assert response.status_code == status.HTTP_200_OK
     assert _payload(response)["data"]["isRegistered"] is False
 
 
 @pytest.mark.django_db
-def test_entity_with_no_intended_use_returns_false(api_client):
+def test_entity_with_no_intended_use_returns_false(authenticated_api_client):
     entity = _make_entity()
-    response = api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
+    response = authenticated_api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
     assert response.status_code == status.HTTP_200_OK
     assert _payload(response)["data"]["isRegistered"] is False
     _ = entity  # used via rpidentifier lookup
@@ -99,16 +101,16 @@ def test_entity_with_no_intended_use_returns_false(api_client):
 
 
 @pytest.mark.django_db
-def test_entity_with_active_intended_use_returns_true(api_client):
+def test_entity_with_active_intended_use_returns_true(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
+    response = authenticated_api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
     assert response.status_code == status.HTTP_200_OK
     assert _payload(response)["data"]["isRegistered"] is True
 
 
 @pytest.mark.django_db
-def test_revoked_intended_use_not_counted(api_client):
+def test_revoked_intended_use_not_counted(authenticated_api_client):
     """validity_end set → excluded from active IU check."""
     from datetime import date
 
@@ -117,7 +119,7 @@ def test_revoked_intended_use_not_counted(api_client):
     iu.validity_end = date.today()
     iu.save(update_fields=["validity_end", "updated_at"])
 
-    response = api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
+    response = authenticated_api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
     assert _payload(response)["data"]["isRegistered"] is False
 
 
@@ -127,10 +129,10 @@ def test_revoked_intended_use_not_counted(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_intendeduseidentifier_match(api_client):
+def test_filter_intendeduseidentifier_match(authenticated_api_client):
     entity = _make_entity()
     iu = create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {
             "rpidentifier": "TEST-ID-001",
@@ -141,10 +143,10 @@ def test_filter_intendeduseidentifier_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_intendeduseidentifier_no_match(api_client):
+def test_filter_intendeduseidentifier_no_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "intendeduseidentifier": "IU-WRONG"},
     )
@@ -157,10 +159,10 @@ def test_filter_intendeduseidentifier_no_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_credentialformat_match(api_client):
+def test_filter_credentialformat_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "credentialformat": "dc+sd-jwt"},
     )
@@ -168,10 +170,10 @@ def test_filter_credentialformat_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_credentialformat_no_match(api_client):
+def test_filter_credentialformat_no_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "credentialformat": "mso_mdoc"},
     )
@@ -184,10 +186,10 @@ def test_filter_credentialformat_no_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_claimpath_match(api_client):
+def test_filter_claimpath_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "claimpath": "given_name"},
     )
@@ -195,11 +197,11 @@ def test_filter_claimpath_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_claimpath_nested_element_match(api_client):
+def test_filter_claimpath_nested_element_match(authenticated_api_client):
     """'street_address' is inside ['address', 'street_address'] — should match."""
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "claimpath": "street_address"},
     )
@@ -207,10 +209,10 @@ def test_filter_claimpath_nested_element_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_claimpath_no_match(api_client):
+def test_filter_claimpath_no_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {"rpidentifier": "TEST-ID-001", "claimpath": "date_of_birth"},
     )
@@ -223,10 +225,10 @@ def test_filter_claimpath_no_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_policyurl_match(api_client):
+def test_filter_policyurl_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {
             "rpidentifier": "TEST-ID-001",
@@ -237,10 +239,10 @@ def test_filter_policyurl_match(api_client):
 
 
 @pytest.mark.django_db
-def test_filter_policyurl_no_match(api_client):
+def test_filter_policyurl_no_match(authenticated_api_client):
     entity = _make_entity()
     create_intended_use(entity, _IU_PAYLOAD)
-    response = api_client.get(
+    response = authenticated_api_client.get(
         CHECK_URL,
         {
             "rpidentifier": "TEST-ID-001",
@@ -256,9 +258,9 @@ def test_filter_policyurl_no_match(api_client):
 
 
 @pytest.mark.django_db
-def test_response_contains_iss_and_iat(api_client):
+def test_response_contains_iss_and_iat(authenticated_api_client):
     _make_entity()
-    response = api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
+    response = authenticated_api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
     data = _payload(response)
     assert "iss" in data
     assert "iat" in data
@@ -266,14 +268,14 @@ def test_response_contains_iss_and_iat(api_client):
 
 
 @pytest.mark.django_db
-def test_signed_response_is_application_jwt(api_client, monkeypatch):
+def test_signed_response_is_application_jwt(authenticated_api_client, monkeypatch):
     """When sign_jwt succeeds the Content-Type is application/jwt."""
     import core.signing
 
     monkeypatch.setattr(core.signing, "sign_jwt", lambda payload: "header.payload.sig")
     _make_entity()
 
-    response = api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
+    response = authenticated_api_client.get(CHECK_URL, {"rpidentifier": "TEST-ID-001"})
     assert response.status_code == status.HTTP_200_OK
     assert response["Content-Type"] == "application/jwt"
     assert response["x-jku-url"].endswith("/.well-known/jwks.json")

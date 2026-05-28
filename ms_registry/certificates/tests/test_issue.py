@@ -64,8 +64,8 @@ def _make_cert_record(entity) -> EntityAccessCertificate:
     )
 
 
-def _post_issue(api_client, entity_id, csr_pem, **extra):
-    return api_client.post(
+def _post_issue(authenticated_api_client, entity_id, csr_pem, **extra):
+    return authenticated_api_client.post(
         _issue_url(entity_id),
         {"csr_pem": csr_pem},
         format="json",
@@ -88,25 +88,25 @@ def _patch_issue(return_value=None, side_effect=None):
 
 
 @pytest.mark.django_db
-def test_issue_returns_201_for_valid_csr(api_client):
+def test_issue_returns_201_for_valid_csr(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
     with _patch_issue(return_value=cert_record):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_201_CREATED
 
 
 @pytest.mark.django_db
-def test_issue_response_contains_expected_fields(api_client):
+def test_issue_response_contains_expected_fields(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
     with _patch_issue(return_value=cert_record):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     data = response.data
     for field in (
@@ -123,13 +123,13 @@ def test_issue_response_contains_expected_fields(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_response_values_match_cert_record(api_client):
+def test_issue_response_values_match_cert_record(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
     with _patch_issue(return_value=cert_record):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     data = response.data
     assert data["id"] == str(cert_record.id)
@@ -148,8 +148,8 @@ def test_issue_response_values_match_cert_record(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_returns_404_for_unknown_entity(api_client):
-    response = _post_issue(api_client, uuid.uuid4(), _make_csr_pem())
+def test_issue_returns_404_for_unknown_entity(authenticated_api_client):
+    response = _post_issue(authenticated_api_client, uuid.uuid4(), _make_csr_pem())
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -159,33 +159,33 @@ def test_issue_returns_404_for_unknown_entity(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_when_csr_pem_missing(api_client):
+def test_issue_returns_400_when_csr_pem_missing(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
 
-    response = api_client.post(_issue_url(entity.id), {}, format="json")
+    response = authenticated_api_client.post(_issue_url(entity.id), {}, format="json")
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_for_non_pem_input(api_client):
+def test_issue_returns_400_for_non_pem_input(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
 
-    response = _post_issue(api_client, entity.id, "not-a-csr")
+    response = _post_issue(authenticated_api_client, entity.id, "not-a-csr")
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_for_certificate_pem_instead_of_csr(api_client):
+def test_issue_returns_400_for_certificate_pem_instead_of_csr(authenticated_api_client):
     """Submitting a certificate PEM where a CSR is expected must be rejected."""
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
     # A PEM block with CERTIFICATE header is not a valid CSR
     fake_cert_pem = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
-    response = _post_issue(api_client, entity.id, fake_cert_pem)
+    response = _post_issue(authenticated_api_client, entity.id, fake_cert_pem)
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -196,31 +196,31 @@ def test_issue_returns_400_for_certificate_pem_instead_of_csr(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_returns_409_for_pending_entity(api_client):
+def test_issue_returns_409_for_pending_entity(authenticated_api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
     EntityEntitlementFactory(registered_entity=entity)
 
-    response = _post_issue(api_client, entity.id, _make_csr_pem())
+    response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_issue_returns_409_for_suspended_entity(api_client):
+def test_issue_returns_409_for_suspended_entity(authenticated_api_client):
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.SUSPENDED)
     EntityEntitlementFactory(registered_entity=entity)
 
-    response = _post_issue(api_client, entity.id, _make_csr_pem())
+    response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_issue_returns_400_for_entity_without_entitlements(api_client):
+def test_issue_returns_400_for_entity_without_entitlements(authenticated_api_client):
     entity = _make_active_entity()
     # no entitlements attached
 
-    response = _post_issue(api_client, entity.id, _make_csr_pem())
+    response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -231,31 +231,31 @@ def test_issue_returns_400_for_entity_without_entitlements(api_client):
 
 
 @pytest.mark.django_db
-def test_issue_returns_500_on_ca_signing_failure(api_client):
+def test_issue_returns_500_on_ca_signing_failure(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
 
     with _patch_issue(
         side_effect=CertificateIssuanceError("Certificate signing failed: CA error")
     ):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 @pytest.mark.django_db
-def test_issue_returns_500_when_no_ca_configured(api_client):
+def test_issue_returns_500_when_no_ca_configured(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
 
     with _patch_issue(side_effect=CertificateIssuanceError("No usable CA found.")):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 @pytest.mark.django_db
-def test_issue_returns_409_on_race_condition_entity_inactive(api_client):
+def test_issue_returns_409_on_race_condition_entity_inactive(authenticated_api_client):
     """
     If the entity becomes inactive between serializer validation and CA call
     (race condition), CertificateIssuanceError with http_status=409 is returned.
@@ -266,19 +266,19 @@ def test_issue_returns_409_on_race_condition_entity_inactive(api_client):
     with _patch_issue(
         side_effect=CertificateIssuanceError("Entity not active.", http_status=409)
     ):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
-def test_issue_error_response_contains_detail(api_client):
+def test_issue_error_response_contains_detail(authenticated_api_client):
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
     msg = "No usable CA found."
 
     with _patch_issue(side_effect=CertificateIssuanceError(msg)):
-        response = _post_issue(api_client, entity.id, _make_csr_pem())
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
     assert response.data["detail"] == msg
 

@@ -36,6 +36,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views import View
 from drf_spectacular.utils import extend_schema
+from participant.views import JWTLoginRequiredMixin
 from registry.models import RegisteredEntity
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -63,7 +64,6 @@ class CnfView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    authentication_classes = []
 
     @extend_schema(
         summary="Get signed cnf JWT for access certificate issuance",
@@ -192,7 +192,7 @@ class CnfView(APIView):
 
 
 # django views, excluded from swagger
-class CnfPageView(View):
+class CnfPageView(JWTLoginRequiredMixin, View):
     """
     GET /certificates/cnf/<entity_id>/view/
 
@@ -292,7 +292,6 @@ class AccessCertificateUploadView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    authentication_classes = []
 
     @extend_schema(
         summary="Upload access certificate for an entity (simplified flow)",
@@ -405,7 +404,6 @@ class IssueCertificateView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    authentication_classes = []
 
     @extend_schema(
         summary="Issue access certificate (Integrated Access CA)",
@@ -507,7 +505,7 @@ class IssueCertificateView(APIView):
 # ── Certificate detail page ───────────────────────────────────────────────────
 
 
-class AccessCertificateDetailPageView(View):
+class AccessCertificateDetailPageView(JWTLoginRequiredMixin, View):
     """
     GET /certificates/detail/<entity_id>/view/
 
@@ -552,7 +550,7 @@ class AccessCertificateDetailPageView(View):
 # ── HTML page view ────────────────────────────────────────────────────────────
 
 
-class AccessCertificateUploadPageView(View):
+class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
     """
     GET  /certificates/upload/<entity_id>/view/  – render upload form
     POST /certificates/upload/<entity_id>/view/  – process upload, show result

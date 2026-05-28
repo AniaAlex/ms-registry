@@ -10,7 +10,7 @@ from legal_entities.models import LegalEntity
 from legal_entities.serializers import LegalEntityCreateSerializer
 from participant.views import JWTLoginRequiredMixin
 from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -677,7 +677,7 @@ class JWKSView(APIView):
     Falls back to a placeholder when the env var is absent (dev/test only).
     """
 
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
     authentication_classes = []
     # TODO: reconsider placeholder
     # Placeholder EC P-256 public key (fake - for development only).

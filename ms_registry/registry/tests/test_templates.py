@@ -17,22 +17,22 @@ from rest_framework import status
 
 
 @pytest.mark.django_db
-def test_get_supervisory_authority_form(client):
+def test_get_supervisory_authority_form(auth_client):
     url = reverse("registry:supervisory-authority-add-form")
-    response = client.get(url)
+    response = auth_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert "add_supervisory_authority.html" in [t.name for t in response.templates]
 
 
 @pytest.mark.django_db
-def test_form_post_supervisory_authority_renders_success_template(client):
+def test_form_post_supervisory_authority_renders_success_template(auth_client):
     url = reverse("registry:supervisory-authority-add-form")
     data = {
         "authority_name": "Swedish IMY",
         "country_code": "SE",
         "email": "imy@imy.se",
     }
-    response = client.post(url, data)
+    response = auth_client.post(url, data)
     assert response.status_code == status.HTTP_201_CREATED
     assert "add_supervisory_authority_success.html" in [
         t.name for t in response.templates
@@ -41,20 +41,20 @@ def test_form_post_supervisory_authority_renders_success_template(client):
 
 
 @pytest.mark.django_db
-def test_form_post_supervisory_authority_invalid_rerenders_form(client):
+def test_form_post_supervisory_authority_invalid_rerenders_form(auth_client):
     url = reverse("registry:supervisory-authority-add-form")
     data = {"authority_name": "Swedish IMY", "country_code": "SE"}  # missing contact
-    response = client.post(url, data)
+    response = auth_client.post(url, data)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "add_supervisory_authority.html" in [t.name for t in response.templates]
     assert SupervisoryAuthority.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_form_post_supervisory_authority_preserves_form_data_on_error(client):
+def test_form_post_supervisory_authority_preserves_form_data_on_error(auth_client):
     url = reverse("registry:supervisory-authority-add-form")
     data = {"authority_name": "Swedish IMY", "country_code": "SE"}  # missing contact
-    response = client.post(url, data)
+    response = auth_client.post(url, data)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["form_data"]["country_code"] == "SE"
     assert response.context["errors"] is not None
@@ -66,15 +66,15 @@ def test_form_post_supervisory_authority_preserves_form_data_on_error(client):
 
 
 @pytest.mark.django_db
-def test_get_register_entity_form(client):
+def test_get_register_entity_form(auth_client):
     url = reverse("registry:entity-list-create")
-    response = client.get(url, HTTP_ACCEPT="text/html")
+    response = auth_client.get(url, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_200_OK
     assert "register_entity.html" in [t.name for t in response.templates]
 
 
 @pytest.mark.django_db
-def test_form_post_register_entity_renders_success_template(client):
+def test_form_post_register_entity_renders_success_template(auth_client):
     legal_entity = LegalEntityFactory()
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
@@ -84,33 +84,33 @@ def test_form_post_register_entity_renders_success_template(client):
         "entity_role": "relying_party",
         "trade_name": "Test Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
     assert "register_entity_success.html" in [t.name for t in response.templates]
     assert RegisteredEntity.objects.count() == 1
 
 
 @pytest.mark.django_db
-def test_form_post_register_entity_invalid_rerenders_form(client):
+def test_form_post_register_entity_invalid_rerenders_form(auth_client):
     url = reverse("registry:entity-list-create")
     data = {"trade_name": "Test Service"}  # missing required fields
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "register_entity.html" in [t.name for t in response.templates]
     assert RegisteredEntity.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_form_post_register_entity_preserves_errors_in_context(client):
+def test_form_post_register_entity_preserves_errors_in_context(auth_client):
     url = reverse("registry:entity-list-create")
     data = {"trade_name": "Test Service"}  # missing required fields
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["errors"] is not None
 
 
 @pytest.mark.django_db
-def test_form_post_inline_legal_entity_creation(client):
+def test_form_post_inline_legal_entity_creation(auth_client):
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
     data = {
@@ -122,14 +122,14 @@ def test_form_post_inline_legal_entity_creation(client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
     assert "register_entity_success.html" in [t.name for t in response.templates]
     assert RegisteredEntity.objects.count() == 1
 
 
 @pytest.mark.django_db
-def test_form_post_inline_legal_entity_invalid_rerenders_form(client):
+def test_form_post_inline_legal_entity_invalid_rerenders_form(auth_client):
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
     data = {
@@ -140,14 +140,14 @@ def test_form_post_inline_legal_entity_invalid_rerenders_form(client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "register_entity.html" in [t.name for t in response.templates]
     assert response.context["legal_entity_errors"] is not None
 
 
 @pytest.mark.django_db
-def test_form_post_inline_supervisory_authority_creation(client):
+def test_form_post_inline_supervisory_authority_creation(auth_client):
     legal_entity = LegalEntityFactory()
     url = reverse("registry:entity-list-create")
     data = {
@@ -159,14 +159,14 @@ def test_form_post_inline_supervisory_authority_creation(client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
     assert "register_entity_success.html" in [t.name for t in response.templates]
     assert SupervisoryAuthority.objects.count() == 1
 
 
 @pytest.mark.django_db
-def test_form_post_inline_supervisory_authority_invalid_rerenders_form(client):
+def test_form_post_inline_supervisory_authority_invalid_rerenders_form(auth_client):
     legal_entity = LegalEntityFactory()
     url = reverse("registry:entity-list-create")
     data = {
@@ -177,7 +177,7 @@ def test_form_post_inline_supervisory_authority_invalid_rerenders_form(client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "register_entity.html" in [t.name for t in response.templates]
     assert response.context["sa_errors"] is not None
@@ -189,7 +189,7 @@ def test_form_post_inline_supervisory_authority_invalid_rerenders_form(client):
 
 
 @pytest.mark.django_db
-def test_main_form_error_preserves_supervisory_authority_selection(client):
+def test_main_form_error_preserves_supervisory_authority_selection(auth_client):
     """form_data carries the submitted SA id so the dropdown stays selected."""
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
@@ -197,13 +197,13 @@ def test_main_form_error_preserves_supervisory_authority_selection(client):
         "supervisory_authority": str(authority.id),
         # deliberately omit entity_role / legal_entity to trigger main-form errors
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["form_data"]["supervisory_authority"] == str(authority.id)
 
 
 @pytest.mark.django_db
-def test_main_form_error_preserves_selected_entitlements(client):
+def test_main_form_error_preserves_selected_entitlements(auth_client):
     """selected_entitlements carries the submitted values so checkboxes stay checked."""
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
@@ -211,14 +211,14 @@ def test_main_form_error_preserves_selected_entitlements(client):
         "supervisory_authority": str(authority.id),
         "entitlements": ["Service_Provider", "PID_Provider"],
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "Service_Provider" in response.context["selected_entitlements"]
     assert "PID_Provider" in response.context["selected_entitlements"]
 
 
 @pytest.mark.django_db
-def test_inline_sa_error_preserves_sa_form_data(client):
+def test_inline_sa_error_preserves_sa_form_data(auth_client):
     """When inline SA creation fails, filled SA fields are returned in sa_form_data."""
     legal_entity = LegalEntityFactory()
     url = reverse("registry:entity-list-create")
@@ -229,14 +229,14 @@ def test_inline_sa_error_preserves_sa_form_data(client):
         "sa_country_code": "DE",  # missing contact
         "entity_role": "relying_party",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["sa_form_data"]["authority_name"] == "New DPA"
     assert response.context["sa_form_data"]["country_code"] == "DE"
 
 
 @pytest.mark.django_db
-def test_inline_sa_error_preserves_form_data(client):
+def test_inline_sa_error_preserves_form_data(auth_client):
     """When inline SA creation fails, form_data is also available for other fields."""
     legal_entity = LegalEntityFactory()
     url = reverse("registry:entity-list-create")
@@ -248,13 +248,13 @@ def test_inline_sa_error_preserves_form_data(client):
         "entity_role": "relying_party",
         "trade_name": "My Service",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["form_data"]["trade_name"] == "My Service"
 
 
 @pytest.mark.django_db
-def test_inline_le_error_preserves_sa_form_data_when_sa_open(client):
+def test_inline_le_error_preserves_sa_form_data_when_sa_open(auth_client):
     """When LE creation fails and SA inline form was also open, sa_form_data is set."""
     url = reverse("registry:entity-list-create")
     data = {
@@ -266,7 +266,7 @@ def test_inline_le_error_preserves_sa_form_data_when_sa_open(client):
         "sa_country_code": "SE",
         "entity_role": "relying_party",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["legal_entity_errors"] is not None
     assert response.context["sa_form_data"]["authority_name"] == "Typed DPA Name"
@@ -274,7 +274,7 @@ def test_inline_le_error_preserves_sa_form_data_when_sa_open(client):
 
 
 @pytest.mark.django_db
-def test_inline_le_error_no_sa_form_data_when_sa_not_open(client):
+def test_inline_le_error_no_sa_form_data_when_sa_not_open(auth_client):
     """When LE creation fails and SA inline form was NOT open, sa_form_data is empty."""
     url = reverse("registry:entity-list-create")
     data = {
@@ -283,7 +283,7 @@ def test_inline_le_error_no_sa_form_data_when_sa_not_open(client):
         "le_country_code": "SE",  # missing le_legal_name → LE error
         "entity_role": "relying_party",
     }
-    response = client.post(url, data, HTTP_ACCEPT="text/html")
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.context["legal_entity_errors"] is not None
     assert response.context["sa_form_data"] == {}

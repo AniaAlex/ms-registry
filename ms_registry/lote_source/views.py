@@ -216,7 +216,6 @@ class LOTEPIDProvidersView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    authentication_classes = []
 
     def get(self, request, *args, **kwargs):
         now = timezone.now()
@@ -265,7 +264,6 @@ class LOTEPubEAAProvidersView(APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    authentication_classes = []
 
     def get(self, request, *args, **kwargs):
         now = timezone.now()

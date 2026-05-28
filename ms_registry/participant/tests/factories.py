@@ -12,6 +12,12 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.Participant
         django_get_or_create = ("email",)
+        skip_postgeneration_save = True
+
+    @classmethod
+    def _after_postgeneration(cls, instance, create, results=None):
+        if create and results:
+            instance.save()
 
     @factory.post_generation
     def groups(obj, create, extracted, **kwargs):
