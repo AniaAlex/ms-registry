@@ -3,9 +3,11 @@ celery==5.5.3
 coverage==7.10.7
 cryptography==46.0.4
 Django==5.2.6
+django-ca==2.3.0
 django-cors-headers==4.9.0
 django-debug-toolbar==6.0.0
 django-extensions==4.1
+django-object-actions==4.3.0
 django-otp==1.6.1
 django-redis==6.0.0
 djangorestframework==3.16.1

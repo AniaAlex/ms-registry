@@ -11,6 +11,10 @@ POST /certificates/upload/<entity_id>/
     registered entity data (ETSI TS 119 411-8), and stores the certificate
     in EntityAccessCertificate.
 
+POST /certificates/issue/<entity_id>/
+    Accepts a CSR, validates the entity, and issues a signed access certificate
+    using the integrated Access CA (django-ca).
+
 GET/POST /certificates/upload/<entity_id>/view/
     HTML form equivalent of the upload endpoint.
 """
@@ -20,7 +24,10 @@ import time
 
 import jwt as pyjwt
 from certificates.models import EntityAccessCertificate
-from certificates.serializers import AccessCertificateUploadSerializer
+from certificates.serializers import (
+    AccessCertificateUploadSerializer,
+    CSRSubmissionSerializer,
+)
 from core.models import RegistrationStatus
 from core.signing import sign_jwt
 from cryptography.hazmat.primitives import serialization
@@ -362,6 +369,135 @@ class AccessCertificateUploadView(APIView):
                 "not_after": cert_record.not_after.isoformat(),
                 # TODO: "ct_log_id": cert_record.ct_log_id,
                 # TODO: "ct_log_timestamp": cert_record.ct_log_timestamp.isoformat(),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ── Certificate Issuance (Integrated Access CA) ───────────────────────────────
+
+
+class IssueCertificateView(APIView):
+    """
+    POST /certificates/issue/<entity_id>/
+
+    Issue an access certificate for a registered entity using the integrated
+    Access CA (django-ca). Implements the Integrated Model per ETSI TS 119 475
+    Annex D.1.
+
+    The entity submits a CSR; the CA validates it against registry data and
+    issues a signed X.509 access certificate with:
+    - Subject DN from registry (C, O, CN, organizationIdentifier)
+    - SAN containing registry_uri, email, and entitlement OIDs
+    - Certificate policy OID (NCP-l-eudiwrp or NCP-n-eudiwrp)
+    - 1 year validity
+
+    Request body (JSON):
+        { "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\\n..." }
+
+    Responses:
+        201  Certificate issued; returns certificate and metadata.
+        400  Validation error (invalid CSR, entity not eligible).
+        404  Entity not found.
+        409  Entity is not active.
+        500  CA error (CA not configured, signing failed).
+    """
+
+    permission_classes = []
+    authentication_classes = []
+
+    @extend_schema(
+        summary="Issue access certificate (Integrated Access CA)",
+        description=(
+            "Submit a CSR to receive a signed X.509 access certificate. "
+            "The certificate is issued by the integrated Access CA and includes "
+            "Subject DN, SAN (with entitlement OIDs), and certificate policy "
+            "derived from the entity's registry data. "
+            "Only active entities are eligible."
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {"csr_pem": {"type": "string"}},
+                "required": ["csr_pem"],
+            }
+        },
+        responses={
+            201: {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "certificate_pem": {"type": "string"},
+                    "certificate_serial": {"type": "string"},
+                    "certificate_fingerprint_sha256": {"type": "string"},
+                    "subject_dn": {"type": "string"},
+                    "issuer_dn": {"type": "string"},
+                    "not_before": {"type": "string"},
+                    "not_after": {"type": "string"},
+                },
+            },
+            400: {"description": "Validation error"},
+            404: {"description": "Entity not found"},
+            409: {"description": "Entity is not active"},
+            500: {"description": "CA error"},
+        },
+    )
+    def post(self, request, entity_id, *args, **kwargs):
+        # 1. Get entity
+        try:
+            entity = _get_entity_for_upload(entity_id)
+        except RegisteredEntity.DoesNotExist:
+            return Response(
+                {"detail": "Entity not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if entity.registration_status != RegistrationStatus.ACTIVE:
+            return Response(
+                {
+                    "detail": (
+                        f"Entity registration status is "
+                        f"'{entity.registration_status}', not 'active'."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 2. Validate CSR
+        serializer = CSRSubmissionSerializer(
+            data=request.data,
+            context={"entity": entity},
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Issue certificate via CA integration
+        from certificates.ca_integration import (
+            CertificateIssuanceError,
+            issue_access_certificate,
+        )
+
+        try:
+            cert_record = issue_access_certificate(
+                entity_id=str(entity_id),
+                csr=serializer.validated_data["csr"],
+            )
+        except CertificateIssuanceError as e:
+            return Response({"detail": str(e)}, status=e.http_status)
+
+        # 4. Return certificate
+        return Response(
+            {
+                "id": str(cert_record.id),
+                "certificate_pem": cert_record.certificate_pem,
+                "certificate_serial": cert_record.certificate_serial,
+                "certificate_fingerprint_sha256": (
+                    cert_record.certificate_fingerprint_sha256
+                ),
+                "subject_dn": cert_record.subject_dn,
+                "issuer_dn": cert_record.issuer_dn,
+                "not_before": cert_record.not_before.isoformat(),
+                "not_after": cert_record.not_after.isoformat(),
             },
             status=status.HTTP_201_CREATED,
         )

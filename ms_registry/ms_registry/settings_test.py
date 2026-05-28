@@ -1,4 +1,5 @@
 from .settings import *  # NOQA
+from .settings import STORAGES  # noqa: F811 — explicit import to satisfy flake8 F405
 
 TEST = True
 DEBUG = False
@@ -22,8 +23,12 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
 
-DEFAULT_FILE_STORAGE = "django.core.files.storage.InMemoryStorage"
-STATICFILES_STORAGE = "django.core.files.storage.InMemoryStorage"
+STORAGES = {
+    **STORAGES,
+    "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    "staticfiles": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    "django-ca": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+}
 
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_ALWAYS_EAGER = True

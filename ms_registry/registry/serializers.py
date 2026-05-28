@@ -163,6 +163,19 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def validate_registry_uri(self, value):
+        # Blank means not yet assigned; skip the uniqueness check.
+        if not value:
+            return value
+        qs = RegisteredEntity.objects.filter(registry_uri=value)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "A registered entity with this registry URI already exists."
+            )
+        return value
+
     def validate_entitlements(self, value):
         """Validate that at least one entitlement is provided"""
         if not value:
@@ -389,17 +402,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             primary_identifier__identifier_value=identifier_value,
         ).first()
 
-        if legal_entity is not None:
-            if RegisteredEntity.objects.filter(legal_entity=legal_entity).exists():
-                raise serializers.ValidationError(
-                    {
-                        "legal_entity_identifier": (
-                            "A registered entity already exists for the provided "
-                            "legal entity identifier."
-                        )
-                    }
-                )
-        else:
+        if legal_entity is None:
             legal_person = LegalPerson.objects.create(legal_name=legal_name)
             legal_entity = LegalEntity.objects.create(
                 legal_person=legal_person,

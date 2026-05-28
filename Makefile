@@ -1,9 +1,31 @@
 src=.
 
 .PHONY: run
-run: ## Build and start project
+run: env ## Build and start project
 	@docker-compose build
 	@docker-compose up -d
+	@echo "Waiting for postgres to be ready..."
+	@until docker-compose exec -T postgres sh -c 'pg_isready -U "$${POSTGRES_USER:-postgres}" -q'; do sleep 1; done
+	@echo "Postgres is ready."
+	@$(MAKE) migrate
+	@$(MAKE) init-ca
+
+.PHONY: env
+env: ## Create .env from .env.example if not exists
+	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+
+.PHONY: init-ca
+init-ca: ## Initialize Access CA if not exists
+	@docker-compose run --rm django sh -c '\
+		python manage.py shell -c "from django_ca.models import CertificateAuthority; exit(0 if CertificateAuthority.objects.filter(name=\"SE Access CA\").exists() else 1)" 2>/dev/null \
+		&& echo "Access CA already exists" \
+		|| (python manage.py init_ca \
+			--key-type EC \
+			--elliptic-curve secp256r1 \
+			--path-length 0 \
+			"SE Access CA" \
+			"CN=SE Access Certificate Authority,O=EUDI Wallet Registry,C=SE" \
+		&& echo "Access CA initialized")'
 
 .PHONY: lint
 lint: ## PEP8 syntax check

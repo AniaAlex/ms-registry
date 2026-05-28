@@ -27,6 +27,8 @@ urlpatterns = [
     path("tsl/", include("tsl_generator.urls", namespace="tsl_generator")),
     path("certificates/", include("certificates.urls", namespace="certificates")),
     path("lote-source/", include("lote_source.urls", namespace="lote_source")),
+    # django-ca URLs (Access CA functionality)
+    path("ca/", include("django_ca.urls")),
 ]
 
 # OpenAPI docs

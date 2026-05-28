@@ -3,5 +3,10 @@ from django.apps import AppConfig
 
 class CertificatesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
+    default = True
     name = "certificates"
     verbose_name = "Certificates & Audit"
+
+    def ready(self):
+        # Import signals to register them
+        import certificates.signals  # noqa: F401

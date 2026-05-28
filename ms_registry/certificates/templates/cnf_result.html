@@ -42,25 +42,16 @@ function downloadCnf() {
         'EORI': 'EORI', 'NATIONAL_BUSINESS_REG': 'NTR',
         'NATIONAL_TAX_REG': 'TAX', 'SERIAL_NUMBER': 'PAS', 'OTHER': 'OTH',
     };
-    const ENTITLEMENT_OID = {
-        'Service_Provider':    '0.4.0.19475.1.1',
-        'QEAA_Provider':       '0.4.0.19475.1.2',
-        'Non_Q_EAA_Provider':  '0.4.0.19475.1.3',
-        'PUB_EAA_Provider':    '0.4.0.19475.1.4',
-        'PID_Provider':        '0.4.0.19475.1.5',
-    };
-    const POLICY_OID = {
-        'natural_person': '0.4.0.194118.1.1',
-        'legal_person':   '0.4.0.194118.1.2',
-    };
 
-    const entityType = cnf.entity_type || 'legal_person';
-    const country    = cnf.country || 'XX';
-    const prefix     = ORG_ID_PREFIX[cnf.org_identifier_type] || 'OTH';
-    const orgId      = cnf.org_identifier ? `${prefix}${country}-${cnf.org_identifier}` : null;
-    const policyOid  = POLICY_OID[entityType] || '0.4.0.194118.1.2';
+    const entityType   = cnf.entity_type || 'legal_person';
+    const country      = cnf.country || 'XX';
+    const prefix       = ORG_ID_PREFIX[cnf.org_identifier_type] || 'OTH';
+    const orgIdCountry = cnf.org_identifier_type === 'LEI' ? 'XG' : country;
+    // Strip formatting separators (e.g. Swedish "202100-5448" → "2021005448") per ETSI EN 319 412-1 §5.1.4
+    const orgIdRaw     = (cnf.org_identifier || '').replace(/[-\s]/g, '');
+    const orgId        = orgIdRaw ? `${prefix}${orgIdCountry}-${orgIdRaw}` : null;
 
-    // Build Subject DN attributes
+    // Subject DN only — CA derives SAN and extensions from registry data
     let dn = [];
     if (entityType === 'natural_person') {
         dn.push(`C            = ${country}`);
@@ -75,44 +66,20 @@ function downloadCnf() {
         if (orgId) dn.push(`organizationIdentifier = ${orgId}`);
     }
 
-    // Build SAN entries
-    let altNames = [];
-    if (cnf.urls && cnf.urls.length > 0) altNames.push(`URI.1   = ${cnf.urls[0]}`);
-    if (cnf.contact && cnf.contact.email) altNames.push(`email.1 = ${cnf.contact.email}`);
-    (cnf.entitlements || []).forEach((e, i) => {
-        const oid = ENTITLEMENT_OID[e];
-        // registeredID is the recognised label according to RFC 5280
-        if (oid) altNames.push(`RID.${i + 1}   = ${oid}`);
-    });
-
     let lines = [
         `# OpenSSL configuration for access certificate CSR`,
         `# Entity: ${cnf.friendly_name || cnf.name} (${country})`,
         `# Role: ${cnf.role}`,
         ``,
         `[ req ]`,
-        `default_bits       = 256`,
         `default_md         = sha256`,
         `prompt             = no`,
         `utf8               = yes`,
         `distinguished_name = req_distinguished_name`,
-        `req_extensions     = v3_req`,
         ``,
         `[ req_distinguished_name ]`,
         ...dn,
-        ``,
-        `[ v3_req ]`,
-        `basicConstraints    = critical, CA:FALSE`,
-        `keyUsage            = critical, digitalSignature`,
-        `certificatePolicies = ${policyOid}`,
     ];
-
-    if (altNames.length > 0) {
-        lines.push(`subjectAltName      = @alt_names`);
-        lines.push(``);
-        lines.push(`[ alt_names ]`);
-        lines.push(...altNames);
-    }
 
     const content  = lines.join('\n') + '\n';
     const filename = `${(cnf.name || 'entity').replace(/\s+/g, '_').toLowerCase()}.cnf`;

@@ -22,6 +22,7 @@ from core.models import (
 )
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from legal_entities.models import LegalEntity
 
@@ -80,12 +81,16 @@ class RegisteredEntity(BaseModel):
     The entity's capabilities are defined by their entitlements, not by a role field.
     The entity_role field is kept for internal classification convenience.
 
+    A LegalEntity can have multiple RegisteredEntity instances (e.g., dev, staging,
+    production environments). Each instance has its own registry_uri and receives
+    its own access certificate per Reg_10a.
+
     TS5 Reference:
     https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
     """
 
-    legal_entity = models.OneToOneField(
-        LegalEntity, on_delete=models.CASCADE, related_name="registered_entity"
+    legal_entity = models.ForeignKey(
+        LegalEntity, on_delete=models.CASCADE, related_name="registered_entities"
     )
 
     # Entity role in the ecosystem (ARF Topic 27)
@@ -167,6 +172,13 @@ class RegisteredEntity(BaseModel):
             models.Index(fields=["is_psb"]),
             models.Index(fields=["is_intermediary"]),
             models.Index(fields=["registration_status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["registry_uri"],
+                condition=~Q(registry_uri=""),
+                name="unique_registered_entity_registry_uri",
+            ),
         ]
 
     def clean(self):
