@@ -8,6 +8,7 @@ import pytest
 from core.models import EntitlementType, EntityRole
 from django.urls import reverse
 from legal_entities.tests.factories import LegalEntityFactory
+from participant.tests.factories import ParticipantFactory
 from registry.models import RegisteredEntity, SupervisoryAuthority
 from registry.tests.factories import (
     EntityEntitlementFactory,
@@ -16,6 +17,8 @@ from registry.tests.factories import (
     SupervisoryAuthorityFactory,
 )
 from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # =============================================================================
 # SupervisoryAuthority API
@@ -96,6 +99,29 @@ def test_registry_uri_is_set_after_create(authenticated_api_client):
     assert entity.registry_uri != ""
     assert str(entity.id) in entity.registry_uri
     assert "/wrp/" in entity.registry_uri
+
+
+@pytest.mark.django_db
+def test_create_entity_assigns_participant_to_authenticated_user():
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "trade_name": "My Service",
+        "supervisory_authority": str(authority.id),
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.participant == participant
 
 
 @pytest.mark.django_db

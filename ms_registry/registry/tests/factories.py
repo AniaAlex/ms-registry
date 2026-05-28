@@ -1,6 +1,7 @@
 import factory
 from core.models import EntitlementType, EntityRole
 from legal_entities.tests.factories import LegalEntityFactory
+from participant.tests.factories import ParticipantFactory
 from registry.models import (
     EntityEntitlement,
     EntitySupportURI,
@@ -23,6 +24,7 @@ class RegisteredEntityFactory(factory.django.DjangoModelFactory):
         model = RegisteredEntity
 
     legal_entity = factory.SubFactory(LegalEntityFactory)
+    participant = factory.SubFactory(ParticipantFactory)
     entity_role = EntityRole.RELYING_PARTY
     registry_uri = factory.Sequence(
         lambda n: f"https://registry.example.com/entities/{n}"

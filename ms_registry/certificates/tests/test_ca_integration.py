@@ -31,6 +31,7 @@ from legal_entities.models import (
     NaturalPerson,
     PhysicalAddress,
 )
+from participant.tests.factories import ParticipantFactory
 from registry.tests.factories import (
     EntityEntitlementFactory,
     EntitySupportURIFactory,
@@ -95,6 +96,7 @@ def _make_natural_person_entity(**kwargs):
 
     entity = RegisteredEntity.objects.create(
         legal_entity=le,
+        participant=ParticipantFactory(),
         entity_role=EntityRole.PID_PROVIDER,
         supervisory_authority=sa,
         **kwargs,

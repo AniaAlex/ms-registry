@@ -46,7 +46,7 @@ class HomeView(JWTLoginRequiredMixin, TemplateView):
         return context
 
 
-class EntityDetailView(TemplateView):
+class EntityDetailView(JWTLoginRequiredMixin, TemplateView):
     """
     HTML detail page for a single registered entity.
     Shows entity info and provides a UI to manage intended uses.
@@ -89,7 +89,7 @@ class EntityDetailView(TemplateView):
         return context
 
 
-class RegisteredEntityListCreateView(generics.ListCreateAPIView):
+class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateAPIView):
     """
     List all registered entities or create a new one.
     Supports both API (JSON) and HTML form rendering.
@@ -296,7 +296,7 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
         # pointing to this entity's record in the national registry API.
         # Alternatively, the Registrar can update registry_uri in a second step
         # via PATCH /registry/entities/<uuid>/ if a custom URI is required.
-        entity = serializer.save()
+        entity = serializer.save(participant=self.request.user)
         registry_uri = self.request.build_absolute_uri(
             reverse("registry:wrp-detail", kwargs={"pk": entity.pk})
         )
@@ -539,7 +539,7 @@ class WalletRelyingPartyView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        registered_entity = serializer.save()
+        registered_entity = serializer.save(participant=request.user)
 
         return Response(
             serializer.to_representation(registered_entity),

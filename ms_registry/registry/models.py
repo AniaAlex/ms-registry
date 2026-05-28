@@ -20,6 +20,7 @@ from core.models import (
     Policy,
     RegistrationStatus,
 )
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -92,6 +93,11 @@ class RegisteredEntity(BaseModel):
     legal_entity = models.ForeignKey(
         LegalEntity, on_delete=models.CASCADE, related_name="registered_entities"
     )
+    participant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="registered_entities",
+    )
 
     # Entity role in the ecosystem (ARF Topic 27)
     entity_role = models.CharField(
@@ -150,7 +156,7 @@ class RegisteredEntity(BaseModel):
         choices=RegistrationStatus.choices,
         default=RegistrationStatus.PENDING,
     )
-    registered_at = models.DateTimeField(blank=True, null=True)
+    registered_at = models.DateTimeField(default=timezone.now)
 
     # Audit fields
     created_by = models.CharField(max_length=200, blank=True, null=True)
