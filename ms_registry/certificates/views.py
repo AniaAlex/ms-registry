@@ -38,6 +38,7 @@ from django.views import View
 from drf_spectacular.utils import extend_schema
 from registry.models import RegisteredEntity
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -61,7 +62,7 @@ class CnfView(APIView):
       - registration_status: always "active" at time of issuance
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     authentication_classes = []
 
     @extend_schema(
@@ -290,7 +291,7 @@ class AccessCertificateUploadView(APIView):
         409  Entity is not active.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     authentication_classes = []
 
     @extend_schema(
@@ -403,7 +404,7 @@ class IssueCertificateView(APIView):
         500  CA error (CA not configured, signing failed).
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     authentication_classes = []
 
     @extend_schema(

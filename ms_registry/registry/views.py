@@ -8,7 +8,9 @@ from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
 from legal_entities.serializers import LegalEntityCreateSerializer
+from participant.views import JWTLoginRequiredMixin
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,7 +18,7 @@ from rest_framework.views import APIView
 from . import models, serializers
 
 
-class HomeView(TemplateView):
+class HomeView(JWTLoginRequiredMixin, TemplateView):
     """
     Home page view that lists all registered entities.
     """
@@ -96,7 +98,7 @@ class RegisteredEntityListCreateView(generics.ListCreateAPIView):
     POST: Create a new registered entity
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.RegisteredEntitySerializer
     queryset = models.RegisteredEntity.objects.all()
     renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
@@ -311,7 +313,7 @@ class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
     DELETE: Delete entity (or revoke)
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.RegisteredEntitySerializer
     queryset = models.RegisteredEntity.objects.all()
 
@@ -353,7 +355,7 @@ class SupervisoryAuthorityListCreateView(generics.ListCreateAPIView):
     POST: Create a new supervisory authority
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     queryset = models.SupervisoryAuthority.objects.all()
 
     def get_serializer_class(self):
@@ -384,7 +386,7 @@ class SupervisoryAuthorityDetailView(generics.RetrieveUpdateDestroyAPIView):
     Retrieve, update or delete a supervisory authority.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.SupervisoryAuthoritySerializer
     queryset = models.SupervisoryAuthority.objects.all()
 
@@ -397,7 +399,7 @@ class SupervisoryAuthorityFormView(generics.CreateAPIView):
     POST: Create a new supervisory authority
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.SupervisoryAuthorityCreateSerializer
     queryset = models.SupervisoryAuthority.objects.all()
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
@@ -477,7 +479,7 @@ class WalletRelyingPartyView(generics.GenericAPIView):
     blob/main/docs/technical-specifications/ts5-common-formats-and-api-for-rp-registration-information.md
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.WalletRelyingPartySerializer
     queryset = models.RegisteredEntity.objects.all().select_related(
         "legal_entity", "supervisory_authority"
@@ -621,7 +623,7 @@ class WalletRelyingPartyListView(generics.ListAPIView):
     GET: Returns a list of all registered WalletRelyingParties.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.WalletRelyingPartySerializer
     queryset = models.RegisteredEntity.objects.all().select_related(
         "legal_entity", "supervisory_authority"
@@ -643,7 +645,7 @@ class WalletRelyingPartyDetailView(generics.RetrieveAPIView):
     GET: Returns the WalletRelyingParty data for the given ID.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.WalletRelyingPartySerializer
     queryset = models.RegisteredEntity.objects.filter(
         entity_role="RELYING_PARTY"
@@ -675,7 +677,7 @@ class JWKSView(APIView):
     Falls back to a placeholder when the env var is absent (dev/test only).
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     authentication_classes = []
     # TODO: reconsider placeholder
     # Placeholder EC P-256 public key (fake - for development only).

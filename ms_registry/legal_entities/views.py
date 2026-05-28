@@ -7,6 +7,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
@@ -18,7 +19,7 @@ class LegalEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
     Retrieve, update or delete a legal entity.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.LegalEntitySerializer
     queryset = models.LegalEntity.objects.all()
 
@@ -31,7 +32,7 @@ class LegalEntityCreateView(generics.CreateAPIView):
           - JSON: returns created entity data or validation errors.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.LegalEntityCreateSerializer
     queryset = models.LegalEntity.objects.all()
     renderer_classes = [JSONRenderer, TemplateHTMLRenderer]

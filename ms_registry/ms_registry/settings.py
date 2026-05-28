@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django_ca",  # Access CA functionality
     # Local apps - new modular structure
     "core",
+    "participant",
     "legal_entities",
     "registry",
     "credentials",
@@ -46,6 +47,8 @@ INSTALLED_APPS = [
     "tsl_generator",
     "lote_source",
 ]
+
+AUTH_USER_MODEL = "participant.Participant"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -177,6 +180,9 @@ LOGGING = {
 # Django REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
 }
 
 # drf-spectacular settings
