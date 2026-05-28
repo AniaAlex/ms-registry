@@ -44,7 +44,7 @@ class ParticipantManager(BaseUserManager):
 
 
 class Participant(UUIDModel, TimestampedModel, AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField()
+    email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=255, blank=True)
     last_name = models.CharField(max_length=255, blank=True)
 
