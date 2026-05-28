@@ -1,3 +1,4 @@
+from core.models import TimestampedModel, UUIDModel
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
@@ -7,7 +8,6 @@ from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
-from utils.models import TimestampedModel, UUIDModel
 
 
 class ParticipantManager(BaseUserManager):
@@ -44,7 +44,7 @@ class ParticipantManager(BaseUserManager):
 
 
 class Participant(UUIDModel, TimestampedModel, AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(unique=True)
+    email = models.EmailField()
     first_name = models.CharField(max_length=255, blank=True)
     last_name = models.CharField(max_length=255, blank=True)
 

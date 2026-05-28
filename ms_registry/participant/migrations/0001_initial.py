@@ -42,7 +42,7 @@ class Migration(migrations.Migration):
                         serialize=False,
                     ),
                 ),
-                ("email", models.EmailField(max_length=254, unique=True)),
+                ("email", models.EmailField(max_length=254)),
                 ("first_name", models.CharField(blank=True, max_length=255)),
                 ("last_name", models.CharField(blank=True, max_length=255)),
                 (

@@ -17,10 +17,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 
 class LoginThrottle(AnonRateThrottle):
-    rate = "overriden/below"  # Needed but overriden by parse_rate()
+    rate = None
+    num_requests = 10
+    duration = 60 * 15
 
     def parse_rate(self, rate):
-        return 10, 60 * 15  # 10 requests per 15 minutes
+        return self.num_requests, self.duration
 
 
 class ParticipantTokenObtainPairView(TokenObtainPairView):
@@ -31,7 +33,7 @@ def _is_valid_access_token(token_str):
     try:
         AccessToken(token_str)
         return True
-    except Exception:
+    except (InvalidToken, TokenError):
         return False
 
 
@@ -45,8 +47,6 @@ def _token_from_request(request):
 
 
 class JWTLoginRequiredMixin:
-    """Redirect to login if request carries no valid JWT (cookie or Bearer header)."""
-
     def dispatch(self, request, *args, **kwargs):
         token = _token_from_request(request)
         if not token or not _is_valid_access_token(token):
@@ -90,7 +90,7 @@ class LoginView(APIView):
             response.set_cookie(
                 "access_token",
                 tokens["access"],
-                httponly=False,  # accessible to JS for API calls
+                httponly=False,
                 samesite="Lax",
             )
             response.set_cookie(
