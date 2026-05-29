@@ -8,7 +8,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from django.views.generic import RedirectView
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -17,8 +16,7 @@ from drf_spectacular.views import (
 from registry.views import HomeView, JWKSView
 
 urlpatterns = [
-    path("", RedirectView.as_view(url="/participants/login/"), name="root"),
-    path("home/", HomeView.as_view(), name="home"),
+    path("", HomeView.as_view(), name="home"),
     path(".well-known/jwks.json", JWKSView.as_view(), name="jwks"),
     path("admin/", admin.site.urls),
     path("registry/", include("registry.urls", namespace="registry")),

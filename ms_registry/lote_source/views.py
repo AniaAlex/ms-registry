@@ -46,7 +46,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 from registry.models import RegisteredEntity
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -215,7 +215,7 @@ class LOTEPIDProvidersView(APIView):
     PID LoTE rule: ServiceStatus MUST be absent per g119612 validate.go.
     """
 
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def get(self, request, *args, **kwargs):
         now = timezone.now()
@@ -263,7 +263,7 @@ class LOTEPubEAAProvidersView(APIView):
     Revoked entities remain permanently as withdrawn.
     """
 
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def get(self, request, *args, **kwargs):
         now = timezone.now()
