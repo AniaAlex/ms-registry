@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In — EUDI Wallet Registry{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-wrap {
+        max-width: 440px;
+        margin: 3rem auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .login-wrap h2 {
+        margin-top: 0;
+        margin-bottom: 0.25rem;
+    }
+    .login-subtitle {
+        color: #6c757d;
+        margin-bottom: 2rem;
+        font-size: 0.95rem;
+    }
+    .format-note {
+        margin-top: 1.5rem;
+        padding: 0.75rem 1rem;
+        background: #e8f0fe;
+        border-left: 3px solid #003399;
+        border-radius: 0 4px 4px 0;
+        font-size: 0.85rem;
+        color: #003399;
+    }
+    .format-note code {
+        background: rgba(0,51,153,0.1);
+        padding: 0.1em 0.35em;
+        border-radius: 3px;
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+    <h2>Sign In</h2>
+    <p class="login-subtitle">EUDI Wallet Registry participant portal</p>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'participant:login' %}">
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                class="form-control"
+                placeholder="you@example.com"
+                autofocus
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input
+                type="password"
+                id="password"
+                name="password"
+                class="form-control"
+                placeholder="••••••••"
+                required
+            >
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Sign in</button>
+        </div>
+    </form>
+
+    <div class="format-note">
+        For API access, <code>POST /participants/token/</code> with
+        <code>Content-Type: application/json</code> and
+        <code>{"email": "…", "password": "…"}</code>.
+    </div>
+</div>
+{% endblock %}

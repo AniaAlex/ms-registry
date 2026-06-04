@@ -5,6 +5,7 @@ Views for TSL Generator
 from django.http import HttpResponse
 from legal_entities.models import LegalEntity
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
@@ -27,7 +28,7 @@ class TrustServiceProviderListCreateView(generics.ListCreateAPIView):
     POST: Create a new TSP
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     queryset = TrustServiceProvider.objects.all()
 
     def get_serializer_class(self):
@@ -58,7 +59,7 @@ class TrustServiceProviderDetailView(generics.RetrieveUpdateDestroyAPIView):
     Retrieve, update or delete a Trust Service Provider.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.TrustServiceProviderSerializer
     queryset = TrustServiceProvider.objects.all()
 
@@ -71,7 +72,7 @@ class TrustServiceProviderFormView(generics.CreateAPIView):
     POST: Create a new Trust Service Provider
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.TrustServiceProviderCreateSerializer
     queryset = TrustServiceProvider.objects.all()
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
@@ -131,7 +132,7 @@ class TSLSchemeListView(generics.ListAPIView):
     List all active TSL Schemes.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.TSLSchemeSerializer
     queryset = TSLScheme.objects.filter(is_active=True)
 
@@ -143,7 +144,7 @@ class TSLSchemeXMLView(generics.RetrieveAPIView):
     GET: Returns application/xml
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     queryset = TSLScheme.objects.filter(is_active=True)
 
     def retrieve(self, request, *args, **kwargs):
@@ -160,7 +161,7 @@ class TSLXMLView(generics.GenericAPIView):
     GET /tsl/xml/?download=true - Returns XML as downloadable file
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, *args, **kwargs):
         scheme = TSLScheme.objects.filter(is_active=True).first()
@@ -192,7 +193,7 @@ class TrustServiceListCreateView(generics.ListCreateAPIView):
     POST: Create a new service
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     queryset = TrustService.objects.all()
 
     def get_serializer_class(self):
@@ -223,7 +224,7 @@ class TrustServiceDetailView(generics.RetrieveUpdateDestroyAPIView):
     Retrieve, update or delete a Trust Service.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.TrustServiceSerializer
     queryset = TrustService.objects.all()
 
@@ -236,7 +237,7 @@ class TrustServiceFormView(generics.CreateAPIView):
     POST: Create a new Trust Service (optionally with new TSP)
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
     serializer_class = serializers.TrustServiceCreateSerializer
     queryset = TrustService.objects.all()
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]

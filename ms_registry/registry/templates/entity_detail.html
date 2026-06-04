@@ -517,7 +517,7 @@
     try {
       resp = await fetch(IU_LIST_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken"), "Authorization": getAuthHeader() },
         body: JSON.stringify(payload),
       });
     } catch (e) {
@@ -613,7 +613,7 @@
     const url = IU_LIST_URL + iuId + "/";
     const resp = await fetch(url, {
       method: "DELETE",
-      headers: { "X-CSRFToken": getCookie("csrftoken") },
+      headers: { "X-CSRFToken": getCookie("csrftoken"), "Authorization": getAuthHeader() },
     });
 
     if (resp.status === 204 || resp.ok) {
@@ -660,6 +660,11 @@
     const parts = val.split(`; ${name}=`);
     if (parts.length === 2) return parts.pop().split(";").shift();
     return "";
+  }
+
+  function getAuthHeader() {
+    const token = getCookie("access_token");
+    return token ? `Bearer ${token}` : "";
   }
 
   function escHtml(str) {

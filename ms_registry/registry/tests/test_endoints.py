@@ -8,6 +8,7 @@ import pytest
 from core.models import EntitlementType, EntityRole
 from django.urls import reverse
 from legal_entities.tests.factories import LegalEntityFactory
+from participant.tests.factories import ParticipantFactory
 from registry.models import RegisteredEntity, SupervisoryAuthority
 from registry.tests.factories import (
     EntityEntitlementFactory,
@@ -16,6 +17,8 @@ from registry.tests.factories import (
     SupervisoryAuthorityFactory,
 )
 from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # =============================================================================
 # SupervisoryAuthority API
@@ -23,41 +26,41 @@ from rest_framework import status
 
 
 @pytest.mark.django_db
-def test_list_supervisory_authorities(api_client):
+def test_list_supervisory_authorities(authenticated_api_client):
     SupervisoryAuthorityFactory.create_batch(2)
     url = reverse("registry:supervisory-authority-list-create")
-    response = api_client.get(url)
+    response = authenticated_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == 2
 
 
 @pytest.mark.django_db
-def test_create_supervisory_authority_api(api_client):
+def test_create_supervisory_authority_api(authenticated_api_client):
     url = reverse("registry:supervisory-authority-list-create")
     data = {
         "authority_name": "French CNIL",
         "country_code": "FR",
         "email": "contact@cnil.fr",
     }
-    response = api_client.post(url, data, format="json")
+    response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
     assert SupervisoryAuthority.objects.count() == 1
     assert SupervisoryAuthority.objects.first().authority_name == "French CNIL"
 
 
 @pytest.mark.django_db
-def test_create_supervisory_authority_requires_contact(api_client):
+def test_create_supervisory_authority_requires_contact(authenticated_api_client):
     url = reverse("registry:supervisory-authority-list-create")
     data = {"authority_name": "Test Authority", "country_code": "SE"}
-    response = api_client.post(url, data, format="json")
+    response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db
-def test_get_supervisory_authority_detail(api_client):
+def test_get_supervisory_authority_detail(authenticated_api_client):
     authority = SupervisoryAuthorityFactory(authority_name="Test DPA")
     url = reverse("registry:supervisory-authority-detail", args=[authority.id])
-    response = api_client.get(url)
+    response = authenticated_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert response.data["authority_name"] == "Test DPA"
 
@@ -68,18 +71,18 @@ def test_get_supervisory_authority_detail(api_client):
 
 
 @pytest.mark.django_db
-def test_list_registered_entities(api_client):
+def test_list_registered_entities(authenticated_api_client):
     legal_entity = LegalEntityFactory()
     authority = SupervisoryAuthorityFactory()
     RegisteredEntityFactory(legal_entity=legal_entity, supervisory_authority=authority)
     url = reverse("registry:entity-list-create")
-    response = api_client.get(url)
+    response = authenticated_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == 1
 
 
 @pytest.mark.django_db
-def test_registry_uri_is_set_after_create(api_client):
+def test_registry_uri_is_set_after_create(authenticated_api_client):
     legal_entity = LegalEntityFactory()
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
@@ -89,7 +92,7 @@ def test_registry_uri_is_set_after_create(api_client):
         "trade_name": "Test Service",
         "supervisory_authority": str(authority.id),
     }
-    response = api_client.post(url, data, format="json")
+    response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
 
     entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
@@ -99,9 +102,34 @@ def test_registry_uri_is_set_after_create(api_client):
 
 
 @pytest.mark.django_db
-def test_create_registered_entity_missing_required_fields(api_client):
+def test_create_entity_assigns_participant_to_authenticated_user():
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
-    response = api_client.post(url, {"trade_name": "Test Service"}, format="json")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "trade_name": "My Service",
+        "supervisory_authority": str(authority.id),
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.participant == participant
+
+
+@pytest.mark.django_db
+def test_create_registered_entity_missing_required_fields(authenticated_api_client):
+    url = reverse("registry:entity-list-create")
+    response = authenticated_api_client.post(
+        url, {"trade_name": "Test Service"}, format="json"
+    )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -111,22 +139,22 @@ def test_create_registered_entity_missing_required_fields(api_client):
 
 
 @pytest.mark.django_db
-def test_home_page_loads(client):
-    response = client.get(reverse("home"))
+def test_home_page_loads(auth_client):
+    response = auth_client.get(reverse("home"))
     assert response.status_code == 200
     assert "home.html" in [t.name for t in response.templates]
 
 
 @pytest.mark.django_db
-def test_home_page_shows_entities(client):
+def test_home_page_shows_entities(auth_client):
     RegisteredEntityFactory(trade_name="Visible Entity")
-    response = client.get(reverse("home"))
+    response = auth_client.get(reverse("home"))
     assert b"Visible Entity" in response.content
 
 
 @pytest.mark.django_db
-def test_home_page_empty_state(client):
-    response = client.get(reverse("home"))
+def test_home_page_empty_state(auth_client):
+    response = auth_client.get(reverse("home"))
     assert b"No registered entities yet" in response.content
 
 
@@ -167,9 +195,9 @@ def wrp_data(db):
 
 
 @pytest.mark.django_db
-def test_filter_by_entitlement_service_provider(api_client, wrp_data):
+def test_filter_by_entitlement_service_provider(authenticated_api_client, wrp_data):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url, {"entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider"}
     )
     assert response.status_code == status.HTTP_200_OK
@@ -177,9 +205,9 @@ def test_filter_by_entitlement_service_provider(api_client, wrp_data):
 
 
 @pytest.mark.django_db
-def test_filter_by_entitlement_pub_eaa_provider(api_client, wrp_data):
+def test_filter_by_entitlement_pub_eaa_provider(authenticated_api_client, wrp_data):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url, {"entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider"}
     )
     assert response.status_code == status.HTTP_200_OK
@@ -187,17 +215,19 @@ def test_filter_by_entitlement_pub_eaa_provider(api_client, wrp_data):
 
 
 @pytest.mark.django_db
-def test_no_entitlement_filter_returns_all(api_client, wrp_data):
+def test_no_entitlement_filter_returns_all(authenticated_api_client, wrp_data):
     url = reverse("registry:wrp")
-    response = api_client.get(url)
+    response = authenticated_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == 3
 
 
 @pytest.mark.django_db
-def test_filter_by_entitlement_no_match_returns_empty(api_client, wrp_data):
+def test_filter_by_entitlement_no_match_returns_empty(
+    authenticated_api_client, wrp_data
+):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url, {"entitlement": "http://data.europa.eu/eudi/entitlement/NonExistent"}
     )
     assert response.status_code == status.HTTP_200_OK
@@ -205,9 +235,11 @@ def test_filter_by_entitlement_no_match_returns_empty(api_client, wrp_data):
 
 
 @pytest.mark.django_db
-def test_filter_by_entitlement_invalid_uri_returns_empty(api_client, wrp_data):
+def test_filter_by_entitlement_invalid_uri_returns_empty(
+    authenticated_api_client, wrp_data
+):
     url = reverse("registry:wrp")
-    response = api_client.get(url, {"entitlement": "invalid-uri"})
+    response = authenticated_api_client.get(url, {"entitlement": "invalid-uri"})
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == 0
 
@@ -223,16 +255,20 @@ def test_filter_by_entitlement_invalid_uri_returns_empty(api_client, wrp_data):
         ("invalid", 2),
     ],
 )
-def test_filter_by_isintermediary(api_client, wrp_data, value, expected):
-    response = api_client.get(reverse("registry:wrp"), {"isintermediary": value})
+def test_filter_by_isintermediary(authenticated_api_client, wrp_data, value, expected):
+    response = authenticated_api_client.get(
+        reverse("registry:wrp"), {"isintermediary": value}
+    )
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data) == expected
 
 
 @pytest.mark.django_db
-def test_combined_filter_entitlement_and_isintermediary_true(api_client, wrp_data):
+def test_combined_filter_entitlement_and_isintermediary_true(
+    authenticated_api_client, wrp_data
+):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url,
         {
             "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",
@@ -245,9 +281,11 @@ def test_combined_filter_entitlement_and_isintermediary_true(api_client, wrp_dat
 
 
 @pytest.mark.django_db
-def test_combined_filter_entitlement_and_isintermediary_false(api_client, wrp_data):
+def test_combined_filter_entitlement_and_isintermediary_false(
+    authenticated_api_client, wrp_data
+):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url,
         {
             "entitlement": "http://data.europa.eu/eudi/entitlement/Service_Provider",
@@ -260,9 +298,9 @@ def test_combined_filter_entitlement_and_isintermediary_false(api_client, wrp_da
 
 
 @pytest.mark.django_db
-def test_combined_filter_no_match(api_client, wrp_data):
+def test_combined_filter_no_match(authenticated_api_client, wrp_data):
     url = reverse("registry:wrp")
-    response = api_client.get(
+    response = authenticated_api_client.get(
         url,
         {
             "entitlement": "http://data.europa.eu/eudi/entitlement/PUB_EAA_Provider",
@@ -279,27 +317,29 @@ def test_combined_filter_no_match(api_client, wrp_data):
 
 
 @pytest.mark.django_db
-def test_jwks_returns_real_key_when_env_var_set(api_client):
+def test_jwks_returns_real_key_when_env_var_set(authenticated_api_client):
     fake_jwk = {"kty": "EC", "crv": "P-256", "x": "abc", "y": "def"}
     with patch("core.signing.public_key_as_jwk", return_value=fake_jwk):
-        response = api_client.get(reverse("jwks"))
+        response = authenticated_api_client.get(reverse("jwks"))
     assert response.status_code == status.HTTP_200_OK
     assert response.data["keys"][0] == fake_jwk
 
 
 @pytest.mark.django_db
-def test_jwks_falls_back_to_placeholder_when_key_not_configured(api_client):
+def test_jwks_falls_back_to_placeholder_when_key_not_configured(
+    authenticated_api_client,
+):
     from core.signing import KeyNotConfiguredError
 
     with patch("core.signing.public_key_as_jwk", side_effect=KeyNotConfiguredError):
-        response = api_client.get(reverse("jwks"))
+        response = authenticated_api_client.get(reverse("jwks"))
     assert response.status_code == status.HTTP_200_OK
     assert response.data["keys"][0]["kid"] == "ms-registry-signing-key-v1"
 
 
 @pytest.mark.django_db
-def test_jwks_returns_500_for_invalid_key_configuration(api_client):
+def test_jwks_returns_500_for_invalid_key_configuration(authenticated_api_client):
     with patch("core.signing.public_key_as_jwk", side_effect=ValueError("bad key")):
-        response = api_client.get(reverse("jwks"))
+        response = authenticated_api_client.get(reverse("jwks"))
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert "detail" in response.data

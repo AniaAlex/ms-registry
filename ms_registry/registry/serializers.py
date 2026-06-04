@@ -142,6 +142,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "legal_entity",
+            "participant",
             "entity_role",
             "trade_name",
             "is_psb",
@@ -157,6 +158,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "participant",
             "registration_status",
             "registered_at",
             "created_at",
@@ -424,6 +426,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         # Create registered entity (WRP)
         registered_entity = RegisteredEntity.objects.create(
             legal_entity=legal_entity,
+            participant=validated_data.get("participant"),
             entity_role=EntityRole.RELYING_PARTY,
             trade_name=validated_data.get("trade_name"),
             is_psb=validated_data.get("is_psb", False),

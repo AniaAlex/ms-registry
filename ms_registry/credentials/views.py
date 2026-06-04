@@ -6,6 +6,7 @@ from django.urls import reverse
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from registry.models import RegisteredEntity
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -56,7 +57,7 @@ class IntendedUseListCreateView(APIView):
     POST /registry/wrp/{entity_pk}/intended-use/  — add a new intended use
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
 
     def _get_entity(self, entity_pk):
         return get_object_or_404(RegisteredEntity, pk=entity_pk)
@@ -97,7 +98,7 @@ class IntendedUseDetailView(APIView):
     DELETE /registry/wrp/{entity_pk}/intended-use/{iu_id}/  — revoke (sets revokedAt)
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
 
     def _get_intended_use(self, entity_pk, iu_id):
         return get_object_or_404(
@@ -131,7 +132,7 @@ class CheckIntendedUseView(APIView):
     Falls back to plain JSON when REGISTRY_SIGNING_KEY_PEM is not set.
     """
 
-    permission_classes = []
+    permission_classes = (IsAuthenticated,)
 
     @extend_schema(
         summary="Check intended use (TS5)",
