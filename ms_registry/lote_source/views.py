@@ -41,14 +41,21 @@ Configure via Django settings (all optional):
   LOTE_PUBLIC_BASE_URL  default "http://localhost"
 """
 
+import base64
+import logging
 from datetime import timedelta
 
+from core.models import EntitlementType
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 from django.utils import timezone
 from registry.models import RegisteredEntity
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # ETSI TS 119 602 URI constants
@@ -60,7 +67,7 @@ _LOTE_TYPE_PUBEAA = "http://uri.etsi.org/19602/LoTEType/EUPubEAAProvidersList"
 _SVC_TYPE_PID = "http://uri.etsi.org/19602/SvcType/PIDProvider"
 _SVC_TYPE_PUBEAA = "http://uri.etsi.org/19602/SvcType/PubEAAProvider"
 
-_STATUS_GRANTED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted"
+_STATUS_NOTIFIED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/notified"
 _STATUS_WITHDRAWN = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn"
 
 _NEXT_UPDATE_DAYS = 180
@@ -100,43 +107,48 @@ def _nameset(entity):
     return [{"lang": "en", "value": entity.trade_name or entity.display_name}]
 
 
-def _service_digital_identity(entity):
+def _service_digital_identity(entity, entitlement_type):
     """
-    ServiceDigitalIdentity from tsl_generator ServiceCertificate.
+    ServiceDigitalIdentity from EntitySigningCertificate.
     Returns {"X509Certificates": [{"val": "<base64-DER>"}]} or None if not found.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
-        for tsp in entity.legal_entity.trust_service_providers.all():
-            if not tsp.is_active:
-                continue
-            for svc in tsp.services.all():
-                if not svc.is_active:
-                    continue
-                for cert in svc.certificates.all():
-                    b64 = cert.get_base64_der()
-                    if not b64:
-                        continue
-                    sdi = {"X509Certificates": [{"val": b64}]}
-                    if cert.x509_subject_name:
-                        sdi["X509SubjectNames"] = [cert.x509_subject_name]
-                    return sdi
+        cert_record = next(
+            (
+                c
+                for c in entity.signing_certificates.all()
+                if c.entitlement_type == entitlement_type
+                and c.is_current
+                and c.revoked_at is None
+            ),
+            None,
+        )
+
+        if cert_record is None:
+            logger.warning(
+                "LoTE: no signing certificate for %s (%s) entitlement %s — excluded",
+                entity.display_name,
+                entity.pk,
+                entitlement_type,
+            )
+            return None
+
+        cert = x509.load_pem_x509_certificate(cert_record.certificate_pem.encode())
+        der = cert.public_bytes(serialization.Encoding.DER)
+        b64 = base64.b64encode(der).decode()
+
+        sdi = {"X509Certificates": [{"val": b64}]}
+        if cert_record.subject_dn:
+            sdi["X509SubjectNames"] = [cert_record.subject_dn]
+        return sdi
+
     except Exception:
         logger.exception(
-            "LoTE: error reading digital identity for %s (%s)",
+            "LoTE: error reading signing certificate for %s (%s)",
             entity.display_name,
             entity.pk,
         )
-
-    logger.warning(
-        "LoTE: no ServiceCertificate found for %s (%s) — excluded from LoTE",
-        entity.display_name,
-        entity.pk,
-    )
-    return None
+        return None
 
 
 def _te_information_uri(entity):
@@ -149,7 +161,7 @@ def _te_information_uri(entity):
     return []
 
 
-def _build_entity(entity, service_type, service_status=None):
+def _build_entity(entity, service_type, entitlement_type, service_status=None):
     """
     Build a TrustedEntity dict matching etsi119602.TrustedEntity Go struct.
     Returns None if the entity has no digital identity or no information URI.
@@ -157,7 +169,7 @@ def _build_entity(entity, service_type, service_status=None):
     PID profile: service_status must be None (absent from output).
     PuB-EAA profile: service_status is required.
     """
-    sdi = _service_digital_identity(entity)
+    sdi = _service_digital_identity(entity, entitlement_type)
     if not sdi:
         return None
 
@@ -229,14 +241,15 @@ class LOTEPIDProvidersView(APIView):
             .select_related("legal_entity__physical_address")
             .prefetch_related(
                 "service_descriptions",
-                "legal_entity__trust_service_providers__services__certificates",
+                "signing_certificates",
             )
         )
 
         trusted_entities = [
             entry
             for e in entities
-            if (entry := _build_entity(e, _SVC_TYPE_PID)) is not None
+            if (entry := _build_entity(e, _SVC_TYPE_PID, EntitlementType.PID_PROVIDER))
+            is not None
         ]
 
         lote = {
@@ -277,13 +290,13 @@ class LOTEPubEAAProvidersView(APIView):
             .select_related("legal_entity__physical_address")
             .prefetch_related(
                 "service_descriptions",
-                "legal_entity__trust_service_providers__services__certificates",
+                "signing_certificates",
             )
         )
 
         def svc_status(entity):
             return (
-                _STATUS_GRANTED
+                _STATUS_NOTIFIED
                 if entity.registration_status == "active"
                 else _STATUS_WITHDRAWN
             )
@@ -293,7 +306,10 @@ class LOTEPubEAAProvidersView(APIView):
             for e in entities
             if (
                 entry := _build_entity(
-                    e, _SVC_TYPE_PUBEAA, service_status=svc_status(e)
+                    e,
+                    _SVC_TYPE_PUBEAA,
+                    EntitlementType.PUB_EAA_PROVIDER,
+                    service_status=svc_status(e),
                 )
             )
             is not None

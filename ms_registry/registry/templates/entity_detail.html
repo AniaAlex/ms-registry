@@ -30,6 +30,10 @@
       <dt>Trade Name</dt>
       <dd>{{ entity.trade_name }}</dd>
       {% endif %}
+      {% if entity.domain_uri %}
+      <dt>Domain URI</dt>
+      <dd><a href="{{ entity.domain_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.domain_uri }}</a></dd>
+      {% endif %}
       <dt>Supervisory Authority</dt>
       <dd>{{ entity.supervisory_authority }}</dd>
       <dt>Registry URI</dt>

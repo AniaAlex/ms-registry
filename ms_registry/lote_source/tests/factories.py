@@ -1,57 +1,40 @@
+import hashlib
+from datetime import datetime, timezone
+
 import factory
+from certificates.models import EntitySigningCertificate
 from core.models import EntitlementType
-from legal_entities.tests.factories import LegalEntityFactory
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
+from legal_entities.tests.factories import LegalEntityFactory  # noqa: F401
 from registry.models import EntityEntitlement, EntityServiceDescription
 from registry.tests.factories import RegisteredEntityFactory
-from tsl_generator.models import (
-    ServiceCertificate,
-    TrustService,
-    TrustServiceProvider,
-    TSLScheme,
-)
 
-# Fake PEM — get_base64_der() only strips headers, so structure is enough.
-_FAKE_PEM = (
-    "-----BEGIN CERTIFICATE-----\n"
-    "MIIBmjCCAQOgAwIBAgIUFakeCertForLoteSourceTests1234567890wCgYIKoZI\n"
-    "zj0EAwIwDzENMAsGA1UEAxMEdGVzdDAeFw0yNjA0MzAxMjAwMDBaFw0yNzA0MzAx\n"
-    "MjAwMDBaMA8xDTALBgNVBAMTBHRlc3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNC\n"
-    "AARfakePublicKeyDataHereForTestingPurposesOnlyDoNotUseFakeKeyXyzABC\n"
-    "-----END CERTIFICATE-----\n"
-)
+_ISSUER_ENTITLEMENT_TYPES = {
+    EntitlementType.PID_PROVIDER,
+    EntitlementType.QEAA_PROVIDER,
+    EntitlementType.PUB_EAA_PROVIDER,
+    EntitlementType.NON_Q_EAA_PROVIDER,
+}
 
 
-class TSLSchemeFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = TSLScheme
-
-    name = factory.Sequence(lambda n: f"Test Scheme {n}")
-    territory = "EU"
-
-
-class TrustServiceProviderFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = TrustServiceProvider
-
-    scheme = factory.SubFactory(TSLSchemeFactory)
-    legal_entity = factory.SubFactory(LegalEntityFactory)
-    is_active = True
-
-
-class TrustServiceFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = TrustService
-
-    provider = factory.SubFactory(TrustServiceProviderFactory)
-    is_active = True
-
-
-class ServiceCertificateFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ServiceCertificate
-
-    service = factory.SubFactory(TrustServiceFactory)
-    certificate_pem = _FAKE_PEM
+def _make_test_cert_pem(cn="test"):
+    """Generate a minimal self-signed EC certificate for tests."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime(2024, 1, 1, tzinfo=timezone.utc))
+        .not_valid_after(datetime(2030, 1, 1, tzinfo=timezone.utc))
+        .sign(key, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
 
 
 class PIDProviderFactory(RegisteredEntityFactory):
@@ -81,6 +64,7 @@ class EntityEntitlementFactory(factory.django.DjangoModelFactory):
     registered_entity = factory.SubFactory(RegisteredEntityFactory)
     entitlement_type = EntitlementType.PID_PROVIDER
     entitlement_uri = "http://uri.etsi.org/19602/SvcType/PIDProvider"
+    is_active = True
 
 
 class EntityServiceDescriptionFactory(factory.django.DjangoModelFactory):
@@ -109,7 +93,32 @@ def add_pubeaa_entitlement(entity):
 
 
 def add_certificate(entity):
-    """Add a ServiceCertificate via the correct chain: TSP → TrustService → cert."""
-    tsp = TrustServiceProviderFactory(legal_entity=entity.legal_entity)
-    svc = TrustServiceFactory(provider=tsp)
-    return ServiceCertificateFactory(service=svc)
+    """
+    Create an EntitySigningCertificate for each active issuer entitlement
+    the entity currently holds. Tests must call add_*_entitlement() first.
+    """
+    entitlement_types = list(
+        entity.entitlements.filter(
+            entitlement_type__in=list(_ISSUER_ENTITLEMENT_TYPES),
+        ).values_list("entitlement_type", flat=True)
+    )
+
+    certs = []
+    for et in entitlement_types:
+        pem = _make_test_cert_pem(cn=f"test-{et}")
+        cert_obj = x509.load_pem_x509_certificate(pem.encode())
+        der = cert_obj.public_bytes(serialization.Encoding.DER)
+        certs.append(
+            EntitySigningCertificate.objects.create(
+                registered_entity=entity,
+                entitlement_type=et,
+                certificate_pem=pem,
+                certificate_serial=format(cert_obj.serial_number, "x").upper(),
+                certificate_fingerprint_sha256=hashlib.sha256(der).hexdigest(),
+                subject_dn=cert_obj.subject.rfc4514_string(),
+                not_before=cert_obj.not_valid_before_utc,
+                not_after=cert_obj.not_valid_after_utc,
+                is_current=True,
+            )
+        )
+    return certs

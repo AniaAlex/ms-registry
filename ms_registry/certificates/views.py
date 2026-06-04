@@ -23,12 +23,13 @@ import hashlib
 import time
 
 import jwt as pyjwt
-from certificates.models import EntityAccessCertificate
+from certificates.models import EntityAccessCertificate, EntitySigningCertificate
 from certificates.serializers import (
     AccessCertificateUploadSerializer,
     CSRSubmissionSerializer,
+    SigningCertificateUploadSerializer,
 )
-from core.models import RegistrationStatus
+from core.models import EntitlementType, RegistrationStatus
 from core.signing import sign_jwt
 from cryptography.hazmat.primitives import serialization
 from django.db import transaction
@@ -42,6 +43,13 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+_ISSUER_ENTITLEMENT_TYPES = {
+    EntitlementType.PID_PROVIDER,
+    EntitlementType.QEAA_PROVIDER,
+    EntitlementType.PUB_EAA_PROVIDER,
+    EntitlementType.NON_Q_EAA_PROVIDER,
+}
 
 CNF_VALIDITY_SECONDS = 24 * 60 * 60  # 24 hours
 
@@ -616,3 +624,299 @@ class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
         cert_record = _store_certificate(entity, cert, certificate_pem)
         ctx["certificate"] = cert_record
         return render(request, "upload_certificate.html", ctx, status=201)
+
+
+# ── Signing Certificate helpers ───────────────────────────────────────────────
+
+
+def _store_signing_certificate(entity, cert, certificate_pem, entitlement_type):
+    """
+    Persist a new signing certificate, marking the previous current one
+    as historical.
+    """
+    cert_der = cert.public_bytes(serialization.Encoding.DER)
+    fingerprint = hashlib.sha256(cert_der).hexdigest()
+    serial = format(cert.serial_number, "x").upper()
+
+    with transaction.atomic():
+        EntitySigningCertificate.objects.filter(
+            registered_entity=entity,
+            entitlement_type=entitlement_type,
+            is_current=True,
+        ).update(is_current=False)
+
+        return EntitySigningCertificate.objects.create(
+            registered_entity=entity,
+            entitlement_type=entitlement_type,
+            certificate_pem=certificate_pem,
+            certificate_serial=serial,
+            certificate_fingerprint_sha256=fingerprint,
+            subject_dn=cert.subject.rfc4514_string(),
+            not_before=cert.not_valid_before_utc,
+            not_after=cert.not_valid_after_utc,
+            is_current=True,
+        )
+
+
+def _signing_cert_response(cert_record):
+    return {
+        "id": str(cert_record.id),
+        "entitlement_type": cert_record.entitlement_type,
+        "certificate_serial": cert_record.certificate_serial,
+        "certificate_fingerprint_sha256": cert_record.certificate_fingerprint_sha256,
+        "subject_dn": cert_record.subject_dn,
+        "not_before": (
+            cert_record.not_before.isoformat() if cert_record.not_before else None
+        ),
+        "not_after": (
+            cert_record.not_after.isoformat() if cert_record.not_after else None
+        ),
+        "is_current": cert_record.is_current,
+        "revoked_at": (
+            cert_record.revoked_at.isoformat() if cert_record.revoked_at else None
+        ),
+        "created_at": cert_record.created_at.isoformat(),
+    }
+
+
+# ── Signing Certificate JSON API ──────────────────────────────────────────────
+
+
+class SigningCertificateListCreateView(APIView):
+    """
+    GET  /certificates/signing/<entity_id>/   List all signing certs for entity.
+    POST /certificates/signing/<entity_id>/   Upload a new signing cert.
+
+    Request body (POST, JSON):
+        {
+            "entitlement_type": "PID_Provider",
+            "certificate_pem": "-----BEGIN CERTIFICATE-----\\n..."
+        }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_entity(self, entity_id):
+        return RegisteredEntity.objects.prefetch_related("entitlements").get(
+            id=entity_id
+        )
+
+    def get(self, request, entity_id):  # noqa: ARG002
+        try:
+            entity = self._get_entity(entity_id)
+        except RegisteredEntity.DoesNotExist:
+            return Response(
+                {"detail": "Entity not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        certs = EntitySigningCertificate.objects.filter(
+            registered_entity=entity
+        ).order_by("entitlement_type", "-created_at")
+
+        return Response([_signing_cert_response(c) for c in certs])
+
+    def post(self, request, entity_id):
+        try:
+            entity = self._get_entity(entity_id)
+        except RegisteredEntity.DoesNotExist:
+            return Response(
+                {"detail": "Entity not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SigningCertificateUploadSerializer(
+            data=request.data, context={"entity": entity}
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        cert = serializer.validated_data["certificate_pem"]
+        certificate_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
+        entitlement_type = serializer.validated_data["entitlement_type"]
+        cert_record = _store_signing_certificate(
+            entity, cert, certificate_pem, entitlement_type
+        )
+
+        return Response(
+            _signing_cert_response(cert_record), status=status.HTTP_201_CREATED
+        )
+
+
+class SigningCertificateDetailView(APIView):
+    """
+    GET    /certificates/signing/<entity_id>/<cert_id>/   Retrieve a specific cert.
+    DELETE /certificates/signing/<entity_id>/<cert_id>/   Revoke a cert.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_cert(self, entity_id, cert_id):
+        return EntitySigningCertificate.objects.select_related("registered_entity").get(
+            id=cert_id, registered_entity__id=entity_id
+        )
+
+    def get(self, request, entity_id, cert_id):
+        try:
+            cert_record = self._get_cert(entity_id, cert_id)
+        except EntitySigningCertificate.DoesNotExist:
+            return Response(
+                {"detail": "Certificate not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(_signing_cert_response(cert_record))
+
+    def delete(self, request, entity_id, cert_id):
+        try:
+            cert_record = self._get_cert(entity_id, cert_id)
+        except EntitySigningCertificate.DoesNotExist:
+            return Response(
+                {"detail": "Certificate not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        if cert_record.revoked_at:
+            return Response(
+                {"detail": "Certificate is already revoked."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        cert_record.revoked_at = timezone.now()
+        cert_record.revocation_reason = request.data.get("revocation_reason", "")
+        cert_record.is_current = False
+        cert_record.save(
+            update_fields=["revoked_at", "revocation_reason", "is_current"]
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Signing Certificate HTML page ─────────────────────────────────────────────
+
+
+class SigningCertificatePageView(JWTLoginRequiredMixin, View):
+    """
+    GET  /certificates/signing/<entity_id>/view/
+        Shows one section per issuer entitlement: current cert status + upload form.
+
+    POST /certificates/signing/<entity_id>/view/
+        Processes an upload for a single entitlement (entitlement_type in form data).
+    """
+
+    TEMPLATE = "upload_signing_certificate.html"
+
+    def _get_entity(self, entity_id):
+        return (
+            RegisteredEntity.objects.prefetch_related("entitlements")
+            .select_related(
+                "legal_entity__legal_person", "legal_entity__natural_person"
+            )
+            .get(id=entity_id)
+        )
+
+    def _build_sections(self, entity):
+        """
+        Returns a list of dicts, one per issuer entitlement the entity holds:
+            { entitlement_type, label, current_cert, errors, pem_value }
+        """
+        label_map = {
+            EntitlementType.PID_PROVIDER: "PID Provider",
+            EntitlementType.QEAA_PROVIDER: "Qualified EAA Provider",
+            EntitlementType.PUB_EAA_PROVIDER: "Public EAA Provider",
+            EntitlementType.NON_Q_EAA_PROVIDER: "Non-Qualified EAA Provider",
+        }
+        current_certs = {
+            c.entitlement_type: c
+            for c in EntitySigningCertificate.objects.filter(
+                registered_entity=entity, is_current=True
+            )
+        }
+        sections = []
+        for ent in entity.entitlements.filter(
+            entitlement_type__in=list(_ISSUER_ENTITLEMENT_TYPES), is_active=True
+        ):
+            sections.append(
+                {
+                    "entitlement_type": ent.entitlement_type,
+                    "label": label_map.get(ent.entitlement_type, ent.entitlement_type),
+                    "current_cert": current_certs.get(ent.entitlement_type),
+                    "errors": [],
+                    "pem_value": "",
+                }
+            )
+        return sections
+
+    def get(self, request, entity_id):
+        try:
+            entity = self._get_entity(entity_id)
+        except RegisteredEntity.DoesNotExist:
+            return render(
+                request, self.TEMPLATE, {"error": "Entity not found."}, status=404
+            )
+
+        return render(
+            request,
+            self.TEMPLATE,
+            {
+                "entity": entity,
+                "sections": self._build_sections(entity),
+                "all_uploaded": all(
+                    s["current_cert"] for s in self._build_sections(entity)
+                ),
+            },
+        )
+
+    def post(self, request, entity_id):
+        try:
+            entity = self._get_entity(entity_id)
+        except RegisteredEntity.DoesNotExist:
+            return render(
+                request, self.TEMPLATE, {"error": "Entity not found."}, status=404
+            )
+
+        entitlement_type = request.POST.get("entitlement_type", "")
+        pem_value = request.POST.get("certificate_pem", "")
+
+        serializer = SigningCertificateUploadSerializer(
+            data={"certificate_pem": pem_value, "entitlement_type": entitlement_type},
+            context={"entity": entity},
+        )
+
+        sections = self._build_sections(entity)
+
+        if not serializer.is_valid():
+            for section in sections:
+                if section["entitlement_type"] == entitlement_type:
+                    section["errors"] = (
+                        serializer.errors.get("certificate_pem", [])
+                        + serializer.errors.get("entitlement_type", [])
+                        + serializer.errors.get("non_field_errors", [])
+                    )
+                    section["pem_value"] = pem_value
+                    break
+            return render(
+                request,
+                self.TEMPLATE,
+                {
+                    "entity": entity,
+                    "sections": sections,
+                    "all_uploaded": False,
+                },
+                status=400,
+            )
+
+        cert = serializer.validated_data["certificate_pem"]
+        certificate_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
+        _store_signing_certificate(entity, cert, certificate_pem, entitlement_type)
+
+        # Rebuild sections with the freshly stored cert
+        sections = self._build_sections(entity)
+        all_uploaded = all(s["current_cert"] for s in sections)
+
+        return render(
+            request,
+            self.TEMPLATE,
+            {
+                "entity": entity,
+                "sections": sections,
+                "all_uploaded": all_uploaded,
+                "success_entitlement": entitlement_type,
+            },
+        )

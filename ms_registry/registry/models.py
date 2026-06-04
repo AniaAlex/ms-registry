@@ -130,6 +130,15 @@ class RegisteredEntity(BaseModel):
         ),
     )
 
+    # domainURI: the URL of the service/application the entity actually operates.
+    # Used as the SAN dNSName base when issuing access certificates.
+    domain_uri = models.URLField(
+        max_length=2048,
+        blank=True,
+        null=True,
+        help_text="URL of the entity's own domain/service (used for certificate SANs)",
+    )
+
     # registryURI: URI for national registry API (provided by Registrar).
     # Auto-generated on creation as <host>/registry/wrp/<uuid>/
     # (per Reg_03, Reg_04). Alternatively, can be set manually in a second

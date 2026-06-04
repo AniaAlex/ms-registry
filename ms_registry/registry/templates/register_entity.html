@@ -200,10 +200,18 @@
             
             <div class="form-group">
                 <label for="trade_name">Trade Name</label>
-                <input type="text" name="trade_name" id="trade_name" class="form-control" 
+                <input type="text" name="trade_name" id="trade_name" class="form-control"
                        value="{{ form_data.trade_name|default:'' }}">
             </div>
-            
+
+            <div class="form-group">
+                <label for="domain_uri">Domain URI</label>
+                <input type="url" name="domain_uri" id="domain_uri" class="form-control"
+                       placeholder="https://service.example.com"
+                       value="{{ form_data.domain_uri|default:'' }}">
+                <small class="form-help">URL of the entity's own service domain (used for certificate SANs).</small>
+            </div>
+
         </fieldset>
         
         <fieldset>

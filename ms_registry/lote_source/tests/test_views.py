@@ -13,7 +13,7 @@ Coverage:
   - TEInformationURI: fallback to registry_uri when info_uri is blank
   - Multilingual TEName from EntityServiceDescription
   - PID profile: ServiceStatus absent from ServiceInformation
-  - PuB-EAA profile: ServiceStatus present, active→granted, revoked→withdrawn
+  - PuB-EAA profile: ServiceStatus present, active→notified, revoked→withdrawn
   - ServiceTypeIdentifier correct for each list
   - Empty list is valid (no entities registered yet)
 """
@@ -35,7 +35,7 @@ from .factories import (
 PID_URL = "lote_source:pid-providers"
 PUBEAA_URL = "lote_source:pubeaa-providers"
 
-STATUS_GRANTED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted"
+STATUS_NOTIFIED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/notified"
 STATUS_WITHDRAWN = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn"
 LOTE_TYPE_PID = "http://uri.etsi.org/19602/LoTEType/EUPIDProvidersList"
 LOTE_TYPE_PUBEAA = "http://uri.etsi.org/19602/LoTEType/EUPubEAAProvidersList"
@@ -340,12 +340,12 @@ def test_pubeaa_excludes_entity_without_certificate(authenticated_api_client):
 
 
 @pytest.mark.django_db
-def test_pubeaa_active_maps_to_granted(authenticated_api_client):
+def test_pubeaa_active_maps_to_notified(authenticated_api_client):
     _make_pubeaa(registration_status="active")
 
     response = authenticated_api_client.get(reverse(PUBEAA_URL))
     svc_info = _entities(response)[0]["TrustedEntityServices"][0]["ServiceInformation"]
-    assert svc_info["ServiceStatus"] == STATUS_GRANTED
+    assert svc_info["ServiceStatus"] == STATUS_NOTIFIED
 
 
 @pytest.mark.django_db
