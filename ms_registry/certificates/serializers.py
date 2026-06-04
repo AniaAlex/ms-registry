@@ -374,12 +374,12 @@ class CSRSubmissionSerializer(serializers.Serializer):
 
 # ── Signing Certificate ───────────────────────────────────────────────────────
 
-_ISSUER_ENTITLEMENT_TYPES = {
+_ISSUER_ENTITLEMENT_TYPES = [
     "PID_Provider",
     "QEAA_Provider",
     "Non_Q_EAA_Provider",
     "PUB_EAA_Provider",
-}
+]
 
 
 class SigningCertificateUploadSerializer(serializers.Serializer):

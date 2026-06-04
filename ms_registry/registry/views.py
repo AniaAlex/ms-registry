@@ -281,7 +281,8 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
                 EntitlementType.NON_Q_EAA_PROVIDER,
             }
             has_issuer_entitlements = entity.entitlements.filter(
-                entitlement_type__in=_ISSUER_TYPES
+                entitlement_type__in=_ISSUER_TYPES,
+                is_active=True,
             ).exists()
             if has_issuer_entitlements:
                 return redirect(
