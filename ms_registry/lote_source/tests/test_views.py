@@ -226,10 +226,26 @@ def test_pid_info_uri_from_legal_entity(authenticated_api_client):
 
 
 @pytest.mark.django_db
+def test_pid_info_uri_uses_domain_uri(authenticated_api_client):
+    le = LegalEntityFactory(info_uri=None, email=None)
+    _make_pid(
+        legal_entity=le,
+        domain_uri="https://service.pid-provider.example.com",
+        registry_uri="https://registry.example.com/entities/42",
+    )
+
+    response = authenticated_api_client.get(reverse(PID_URL))
+    uris = _entities(response)[0]["TrustedEntityInformation"]["TEInformationURI"]
+    assert any("service.pid-provider.example.com" in u["uriValue"] for u in uris)
+    assert not any("registry.example.com" in u["uriValue"] for u in uris)
+
+
+@pytest.mark.django_db
 def test_pid_info_uri_falls_back_to_registry_uri(authenticated_api_client):
     le = LegalEntityFactory(info_uri=None, email=None)
     _make_pid(
         legal_entity=le,
+        domain_uri=None,
         registry_uri="https://registry.example.com/entities/42",
     )
 

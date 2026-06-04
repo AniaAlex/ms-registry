@@ -156,6 +156,8 @@ def _te_information_uri(entity):
     le = entity.legal_entity
     if getattr(le, "info_uri", None):
         return [{"lang": "en", "uriValue": le.info_uri}]
+    if entity.domain_uri:
+        return [{"lang": "en", "uriValue": entity.domain_uri}]
     if entity.registry_uri:
         return [{"lang": "en", "uriValue": entity.registry_uri}]
     return []
