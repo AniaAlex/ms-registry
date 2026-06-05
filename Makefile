@@ -21,7 +21,8 @@ init-ca: ## Initialize Access CA if not exists
 		&& echo "Access CA already exists" \
 		|| (python manage.py init_ca \
 			--key-type EC \
-			--elliptic-curve secp256r1 \
+			--elliptic-curve secp384r1 \
+			--algorithm SHA-384 \
 			--path-length 0 \
 			"SE Access CA" \
 			"CN=SE Access Certificate Authority,O=EUDI Wallet Registry,C=SE" \

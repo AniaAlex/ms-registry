@@ -264,6 +264,11 @@ CA_DEFAULT_SUBJECT = [
 # Certificate validity (days)
 CA_DEFAULT_EXPIRES = 365  # 1 year for entity certificates
 
+# Signature hash algorithm for issued certificates.
+# WP4 access certificate policy specifies ecdsa-with-SHA384 (django-ca
+# defaults to SHA-512). Applies to EC/RSA CAs.
+CA_DEFAULT_SIGNATURE_HASH_ALGORITHM = "SHA-384"
+
 # OCSP and CRL URLs (set based on deployment URL)
 CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", "localhost:8000")
 
@@ -276,6 +281,12 @@ CA_PROFILES = {
             "key_usage": {
                 "critical": True,
                 "value": ["digital_signature"],
+            },
+            # ETSI EN 319 411-1 §6.6.1 / WP4 access cert policy — the WRPAC is
+            # used to authenticate the entity to the Wallet Unit (clientAuth).
+            "extended_key_usage": {
+                "critical": False,
+                "value": ["clientAuth"],
             },
         },
         "subject": False,  # Use subject from CSR or issuance call

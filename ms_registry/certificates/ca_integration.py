@@ -24,7 +24,7 @@ from datetime import timedelta
 from certificates.models import EntityAccessCertificate
 from core.models import RegistrationStatus
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -501,6 +501,10 @@ def issue_access_certificate(
                 csr=csr,
                 subject=csr.subject,
                 not_after=not_after,
+                # WP4 access certificate policy mandates ecdsa-with-SHA384.
+                # The CA's stored default may differ (e.g. SHA-512), so pin it
+                # per issuance.
+                algorithm=hashes.SHA384(),
                 extensions=extensions,
                 profile=get_profile(profile_name),
                 allow_unrecognized_extensions=True,
