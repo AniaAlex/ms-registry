@@ -58,6 +58,19 @@ POLICY_OIDS = {
     "QCP-l-eudiwrp": "0.4.0.194118.1.4",  # Qualified, legal person
 }
 
+# Entitlements that require Qualified Certificate Policy (QCP-*)
+# Per ETSI TS 119 475 and eIDAS Article 45a
+QUALIFIED_ENTITLEMENTS = {
+    "QEAA_Provider",  # Qualified EAA Provider
+    "QCert_for_ESeal_Provider",
+    "QCert_for_ESig_Provider",
+}
+
+# ETSI EN 319 412-5 — QcStatements OIDs
+QC_COMPLIANCE_OID = "0.4.0.1862.1.1"  # id-etsi-qcs-QcCompliance
+QC_TYPE_OID = "0.4.0.1862.1.6"  # id-etsi-qcs-QcType
+QC_TYPE_ESEAL_OID = "0.4.0.1862.1.6.2"  # id-etsi-qct-eseal
+
 # ETSI EN 319 412-1 §5.1.4 — organizationIdentifier scheme prefixes
 ORG_ID_PREFIXES = {
     "EUID": "EUID",
@@ -361,16 +374,34 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     return san_entries
 
 
+def requires_qualified_policy(entity: RegisteredEntity) -> bool:
+    """
+    Check if entity has entitlements requiring a Qualified Certificate Policy.
+
+    QEAA providers and qualified certificate providers need QCP-* policies.
+    """
+    entity_entitlements = {e.entitlement_type for e in entity.entitlements.all()}
+    return bool(entity_entitlements & QUALIFIED_ENTITLEMENTS)
+
+
 def get_policy_oid(entity: RegisteredEntity) -> str:
     """
-    Determine certificate policy OID based on entity type.
+    Determine certificate policy OID based on entity type and entitlements.
 
-    Natural person → NCP-n-eudiwrp
-    Legal person → NCP-l-eudiwrp
+    Qualified entitlements (QEAA, etc.):
+        Natural person → QCP-n-eudiwrp
+        Legal person → QCP-l-eudiwrp
+
+    Non-qualified (Service Provider, PID Provider, etc.):
+        Natural person → NCP-n-eudiwrp
+        Legal person → NCP-l-eudiwrp
     """
-    if entity.legal_entity.entity_type == "natural_person":
-        return POLICY_OIDS["NCP-n-eudiwrp"]
-    return POLICY_OIDS["NCP-l-eudiwrp"]
+    is_qualified = requires_qualified_policy(entity)
+    is_natural = entity.legal_entity.entity_type == "natural_person"
+
+    if is_qualified:
+        return POLICY_OIDS["QCP-n-eudiwrp" if is_natural else "QCP-l-eudiwrp"]
+    return POLICY_OIDS["NCP-n-eudiwrp" if is_natural else "NCP-l-eudiwrp"]
 
 
 def issue_access_certificate(
@@ -430,31 +461,42 @@ def issue_access_certificate(
     # Note: Subject DN comes from the CSR - we only add authoritative extensions
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
+    is_qualified = requires_qualified_policy(entity)
 
-    # Build qcStatements value: sequence of entitlement OIDs per ETSI TS 119 475
-    # Each entitlement is encoded as a qcStatement: SEQUENCE { statementId OID }
-    # OID for id-etsi-qcs (1.3.6.1.5.5.7.1) — qcStatements extension OID
+    # Build qcStatements extension (ETSI EN 319 412-5)
+    # Only for qualified certificates: QcCompliance + QcType
+    # Note: Entitlement OIDs are stored in the registry, NOT in the certificate
     QC_STATEMENTS_OID = x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3")
-    entitlement_oids = []
-    for e in entity.entitlements.all():
-        if e.entitlement_type not in ENTITLEMENT_OIDS:
-            raise CertificateIssuanceError(
-                f"No qcStatement OID defined for entitlement"
-                f" type '{e.entitlement_type}'.",
-                http_status=500,
-            )
-        entitlement_oids.append(ENTITLEMENT_OIDS[e.entitlement_type])
 
-    # Encode qcStatements as raw DER: SEQUENCE of SEQUENCE { OID }
+    # Encode qcStatements as raw DER (only for qualified certs)
     qc_der = b""
-    for oid_str in entitlement_oids:
-        oid_tlv = _der_tlv(0x06, _encode_oid(oid_str))
-        qc_der += _der_tlv(0x30, oid_tlv)  # SEQUENCE { OID }
-    qc_value = _der_tlv(0x30, qc_der)  # outer SEQUENCE
+
+    # Add QcCompliance for qualified certificates (id-etsi-qcs-QcCompliance)
+    # SEQUENCE { OID 0.4.0.1862.1.1 } — indicates EU qualified certificate
+    if is_qualified:
+        qc_compliance_oid = _der_tlv(0x06, _encode_oid(QC_COMPLIANCE_OID))
+        qc_der += _der_tlv(0x30, qc_compliance_oid)
+
+        # Add QcType: id-etsi-qct-eseal (0.4.0.1862.1.6.2) for legal persons
+        # SEQUENCE { OID 0.4.0.1862.1.6, SEQUENCE { OID 0.4.0.1862.1.6.2 } }
+        qc_type_oid = _der_tlv(0x06, _encode_oid(QC_TYPE_OID))
+        qc_type_eseal = _der_tlv(0x06, _encode_oid(QC_TYPE_ESEAL_OID))
+        qc_type_value = _der_tlv(0x30, qc_type_eseal)  # SEQUENCE { eseal OID }
+        qc_der += _der_tlv(0x30, qc_type_oid + qc_type_value)
+
+    qc_value = _der_tlv(0x30, qc_der) if qc_der else None  # outer SEQUENCE
 
     # 6. Build extensions as cryptography x509.Extension objects.
     # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only
     # pass extensions that carry per-entity data.
+
+    # Certificate Policies with optional CPS URI (ETSI TS 119 411-8 GEN-6.6.1-06)
+    cps_uri = getattr(settings, "CA_CPS_URI", None)
+    if cps_uri:
+        policy_qualifiers = [cps_uri]  # CPS URI qualifier
+    else:
+        policy_qualifiers = None
+
     extensions = [
         x509.Extension(
             oid=x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME,
@@ -466,14 +508,16 @@ def issue_access_certificate(
             critical=False,
             value=x509.CertificatePolicies(
                 [
-                    x509.PolicyInformation(x509.ObjectIdentifier(policy_oid), None),
+                    x509.PolicyInformation(
+                        x509.ObjectIdentifier(policy_oid), policy_qualifiers
+                    ),
                 ]
             ),
         ),
     ]
 
-    # Add qcStatements only if entity has entitlements
-    if qc_value and entitlement_oids:
+    # Add qcStatements only for qualified certificates (QEAA providers, etc.)
+    if qc_value:
         extensions.append(
             x509.Extension(
                 oid=QC_STATEMENTS_OID,

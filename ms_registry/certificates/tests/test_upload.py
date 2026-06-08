@@ -311,34 +311,6 @@ def test_upload_returns_400_for_expired_cert(authenticated_api_client):
 
 
 @pytest.mark.django_db
-def test_upload_returns_400_for_missing_entitlement_oid(authenticated_api_client):
-    entity = _make_active_entity()
-    EntityEntitlementFactory(
-        registered_entity=entity,
-        entitlement_type=EntitlementType.SERVICE_PROVIDER,
-    )
-    # Build cert with no entitlements in SAN
-    from core.management.commands.generate_access_certificates_help_function import (
-        generate_certificate_from_cnf,
-    )
-
-    cnf = {
-        "name": entity.display_name,
-        "country": entity.legal_entity.physical_address.country_code,
-        "org_identifier": None,
-        "org_identifier_type": None,
-        "role": entity.entity_role,
-        "entitlements": [],  # intentionally empty
-        "urls": ["https://example.com"],  # satisfy GEN-6.6.1-07 contact requirement
-        "contact": {"email": None, "phone": None},
-    }
-    pem, _ = generate_certificate_from_cnf(cnf)
-    response = _post_upload(authenticated_api_client, entity.id, pem)
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "entitlement" in str(response.data).lower()
-
-
-@pytest.mark.django_db
 def test_upload_returns_400_for_legal_person_without_primary_identifier(
     authenticated_api_client,
 ):

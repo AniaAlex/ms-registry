@@ -34,15 +34,6 @@ _ORG_ID_PREFIX = {
     "OTHER": "OTH",
 }
 
-# ── ETSI TS 119 475 – entitlement OIDs ───────────────────────────────────────
-_ENTITLEMENT_OID = {
-    "Service_Provider": "0.4.0.19475.1.1",
-    "QEAA_Provider": "0.4.0.19475.1.2",
-    "Non_Q_EAA_Provider": "0.4.0.19475.1.3",
-    "PUB_EAA_Provider": "0.4.0.19475.1.4",
-    "PID_Provider": "0.4.0.19475.1.5",
-}
-
 # ── ITU-T X.520 §6.7.1 – id-at-telephoneNumber OID ───────────────────────────
 _TELEPHONE_NUMBER_OID = x509.ObjectIdentifier("2.5.4.20")
 
@@ -91,7 +82,8 @@ class AccessCertificateUploadSerializer(serializers.Serializer):
         self._check_subject_dn(cert, entity, errors)
         self._check_key_usage(cert, errors)
         self._check_policy_oids(cert, errors)
-        self._check_entitlements(cert, entity, errors)
+        # Note: Entitlements are stored in the registry, NOT in the certificate.
+        # The certificate proves identity; the registry proves authorization.
         self._check_san_contact_info(cert, errors)
 
         if errors:
@@ -271,32 +263,6 @@ class AccessCertificateUploadSerializer(serializers.Serializer):
                 "Certificate SAN must include at least one contact method: "
                 "uniformResourceIdentifier (website), rfc822Name (email), or "
                 "otherName/id-at-telephoneNumber (phone) — GEN-6.6.1-07."
-            )
-
-    def _check_entitlements(self, cert: x509.Certificate, entity, errors: list) -> None:
-        registered = {e.entitlement_type for e in entity.entitlements.all()}
-        if not registered:
-            return
-
-        # Collect RegisteredID OIDs from SAN
-        cert_oids: set[str] = set()
-        try:
-            san_ext = cert.extensions.get_extension_for_class(
-                x509.SubjectAlternativeName
-            )
-            for rid in san_ext.value.get_values_for_type(x509.RegisteredID):
-                cert_oids.add(rid.dotted_string)
-        except x509.ExtensionNotFound:
-            pass
-
-        expected_oids = {
-            _ENTITLEMENT_OID[et] for et in registered if et in _ENTITLEMENT_OID
-        }
-        missing = expected_oids - cert_oids
-        if missing:
-            errors.append(
-                f"Certificate SAN missing entitlement OIDs: "
-                f"{', '.join(sorted(missing))}."
             )
 
 

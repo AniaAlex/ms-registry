@@ -21,7 +21,7 @@ from certificates.ca_integration import (
     validate_csr_subject,
 )
 from certificates.models import EntityAccessCertificate
-from core.models import EntitlementType, Identifier, RegistrationStatus
+from core.models import Identifier, RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -33,7 +33,6 @@ from legal_entities.models import (
 )
 from participant.tests.factories import ParticipantFactory
 from registry.tests.factories import (
-    EntityEntitlementFactory,
     EntitySupportURIFactory,
     RegisteredEntityFactory,
 )
@@ -451,45 +450,6 @@ def test_build_san_phone_utf8_encoded():
     assert other.value == b"\x0c\x03+46"
 
 
-# ---------------------------------------------------------------------------
-# issue_access_certificate — entitlement OID mapping
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_issue_raises_for_unmapped_entitlement_type():
-    from unittest.mock import MagicMock, patch
-
-    from certificates.ca_integration import issue_access_certificate
-
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
-    EntityEntitlementFactory(
-        registered_entity=entity,
-        entitlement_type=EntitlementType.INTERMEDIARY,
-    )
-
-    key = ec.generate_private_key(ec.SECP256R1())
-    csr = (
-        x509.CertificateSigningRequestBuilder()
-        .subject_name(x509.Name([]))
-        .sign(key, hashes.SHA256())
-    )
-
-    mock_ca = MagicMock()
-    with (
-        patch("certificates.ca_integration.validate_csr_subject", return_value=[]),
-        patch(
-            "django_ca.models.CertificateAuthority.objects",
-            **{"filter.return_value.first.return_value": mock_ca},
-        ),
-    ):
-        with pytest.raises(CertificateIssuanceError) as exc_info:
-            issue_access_certificate(str(entity.id), csr)
-
-    assert exc_info.value.http_status == 500
-    assert "Intermediary" in str(exc_info.value)
-
-
 # _der_tlv / _der_utf8string / _encode_oid
 
 
@@ -536,6 +496,42 @@ def test_get_policy_oid_legal_person():
 def test_get_policy_oid_natural_person():
     entity = _make_natural_person_entity()
     assert get_policy_oid(entity) == POLICY_OIDS["NCP-n-eudiwrp"]
+
+
+@pytest.mark.django_db
+def test_get_policy_oid_qeaa_provider_uses_qualified_policy():
+    """QEAA providers should get QCP-l-eudiwrp (qualified) policy."""
+    from registry.models import EntityEntitlement
+
+    entity = RegisteredEntityFactory()
+    EntityEntitlement.objects.create(
+        registered_entity=entity, entitlement_type="QEAA_Provider"
+    )
+    assert get_policy_oid(entity) == POLICY_OIDS["QCP-l-eudiwrp"]
+
+
+@pytest.mark.django_db
+def test_get_policy_oid_qeaa_natural_person_uses_qualified_policy():
+    """Natural person QEAA provider should get QCP-n-eudiwrp."""
+    from registry.models import EntityEntitlement
+
+    entity = _make_natural_person_entity()
+    EntityEntitlement.objects.create(
+        registered_entity=entity, entitlement_type="QEAA_Provider"
+    )
+    assert get_policy_oid(entity) == POLICY_OIDS["QCP-n-eudiwrp"]
+
+
+@pytest.mark.django_db
+def test_get_policy_oid_service_provider_uses_normalized_policy():
+    """Regular Service Providers should get NCP-l (non-qualified) policy."""
+    from registry.models import EntityEntitlement
+
+    entity = RegisteredEntityFactory()
+    EntityEntitlement.objects.create(
+        registered_entity=entity, entitlement_type="Service_Provider"
+    )
+    assert get_policy_oid(entity) == POLICY_OIDS["NCP-l-eudiwrp"]
 
 
 # ---------------------------------------------------------------------------
