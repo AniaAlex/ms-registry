@@ -21,8 +21,7 @@ DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
-# Base URL for the registry (used for CA URLs, callbacks, etc.)
-# Set via SITE_URL env var in production (e.g., "https://registry.example.se")
+# Base URL for the registry (used for callbacks, etc.)
 SITE_URL = os.environ.get("SITE_URL", "http://localhost:8000")
 
 
@@ -277,10 +276,9 @@ CA_DEFAULT_SIGNATURE_HASH_ALGORITHM = "SHA-384"
 # Per ETSI TS 119 411-8 GEN-6.6.1-06
 CA_CPS_URI = os.environ.get("CA_CPS_URI", None)
 
-# OCSP and CRL URLs - derived from SITE_URL automatically
+# OCSP and CRL URLs hostname
 # Django-ca uses this to build CRL/OCSP/CA Issuer URLs in certificates
-_site_url_parsed = SITE_URL.replace("https://", "").replace("http://", "")
-CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", _site_url_parsed)
+CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", "localhost:8000")
 
 # Certificate profiles for EUDI Wallet Access Certificates
 # Note: basic_constraints is not configurable in profiles (set automatically)
