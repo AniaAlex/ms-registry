@@ -5,6 +5,9 @@ from certificates.views import (
     CnfPageView,
     CnfView,
     IssueCertificateView,
+    SigningCertificateDetailView,
+    SigningCertificateListCreateView,
+    SigningCertificatePageView,
 )
 from django.urls import path
 
@@ -30,5 +33,21 @@ urlpatterns = [
         "detail/<uuid:entity_id>/view/",
         AccessCertificateDetailPageView.as_view(),
         name="detail-page",
+    ),
+    # Signing certificates
+    path(
+        "signing/<uuid:entity_id>/",
+        SigningCertificateListCreateView.as_view(),
+        name="signing",
+    ),
+    path(
+        "signing/<uuid:entity_id>/<uuid:cert_id>/",
+        SigningCertificateDetailView.as_view(),
+        name="signing-detail",
+    ),
+    path(
+        "signing/<uuid:entity_id>/view/",
+        SigningCertificatePageView.as_view(),
+        name="signing-page",
     ),
 ]

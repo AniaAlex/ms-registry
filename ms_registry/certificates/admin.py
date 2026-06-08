@@ -2,7 +2,12 @@
 
 from django.contrib import admin
 
-from .models import AuditLog, EntityAccessCertificate, EntityRegistrationCertificate
+from .models import (
+    AuditLog,
+    EntityAccessCertificate,
+    EntityRegistrationCertificate,
+    EntitySigningCertificate,
+)
 
 # Unregister ACME models from admin (not used for EUDI Wallet)
 try:
@@ -73,6 +78,34 @@ class EntityRegistrationCertificateAdmin(admin.ModelAdmin):
     search_fields = ["certificate_identifier", "intended_use__intended_use_identifier"]
     autocomplete_fields = ["intended_use"]
     ordering = ["-issued_at"]
+
+
+@admin.register(EntitySigningCertificate)
+class EntitySigningCertificateAdmin(admin.ModelAdmin):
+    list_display = [
+        "registered_entity",
+        "entitlement_type",
+        "certificate_serial",
+        "is_current",
+        "not_before",
+        "not_after",
+        "revoked_at",
+    ]
+    list_filter = ["entitlement_type", "is_current", "not_before", "not_after"]
+    search_fields = [
+        "certificate_serial",
+        "registered_entity__trade_name",
+        "subject_dn",
+    ]
+    autocomplete_fields = ["registered_entity"]
+    readonly_fields = [
+        "certificate_fingerprint_sha256",
+        "certificate_serial",
+        "subject_dn",
+        "not_before",
+        "not_after",
+    ]
+    ordering = ["-not_before"]
 
 
 @admin.register(AuditLog)

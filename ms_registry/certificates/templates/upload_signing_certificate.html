@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Signing Certificates – {{ entity.display_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <div class="page-header">
+    <h1>Signing Certificates</h1>
+    <p class="subtitle">
+      <strong>{{ entity.display_name }}</strong>
+      &nbsp;·&nbsp;
+      <span class="badge badge-role">{{ entity.get_entity_role_display }}</span>
+    </p>
+    <p class="help-text">
+      Each issuer entitlement requires a self-signed X.509 certificate.
+      Issuers use this certificate to sign credentials issued to citizens.
+      The certificate is published in the national TSL as a ServiceCertificate.
+    </p>
+  </div>
+
+  {% if all_uploaded %}
+  <div class="alert alert-success">
+    All signing certificates have been uploaded. The entity is ready to issue credentials.
+    <a href="{% url 'registry:entity-detail' entity.id %}">View entity</a>
+  </div>
+  {% endif %}
+
+  {% for section in sections %}
+  <div class="cert-section {% if section.current_cert %}cert-section--done{% endif %}">
+
+    <div class="cert-section-header">
+      <h2>{{ section.label }}</h2>
+      {% if section.current_cert %}
+      <span class="badge badge-success">Certificate uploaded</span>
+      {% else %}
+      <span class="badge badge-pending">Pending</span>
+      {% endif %}
+    </div>
+
+    {% if success_entitlement == section.entitlement_type %}
+    <div class="alert alert-success alert-sm">Certificate saved successfully.</div>
+    {% endif %}
+
+    {% if section.current_cert %}
+    <div class="cert-details">
+      <div class="cert-detail-row">
+        <span class="cert-detail-label">Serial</span>
+        <span class="cert-detail-value mono">{{ section.current_cert.certificate_serial }}</span>
+      </div>
+      <div class="cert-detail-row">
+        <span class="cert-detail-label">Subject DN</span>
+        <span class="cert-detail-value mono">{{ section.current_cert.subject_dn }}</span>
+      </div>
+      <div class="cert-detail-row">
+        <span class="cert-detail-label">SHA-256</span>
+        <span class="cert-detail-value mono small">{{ section.current_cert.certificate_fingerprint_sha256 }}</span>
+      </div>
+      <div class="cert-detail-row">
+        <span class="cert-detail-label">Valid from</span>
+        <span class="cert-detail-value">{{ section.current_cert.not_before|date:"Y-m-d" }}</span>
+      </div>
+      <div class="cert-detail-row">
+        <span class="cert-detail-label">Valid until</span>
+        <span class="cert-detail-value">{{ section.current_cert.not_after|date:"Y-m-d" }}</span>
+      </div>
+    </div>
+
+    <details class="rotate-section">
+      <summary>Replace certificate</summary>
+      <div class="rotate-form">
+        <p class="help-text">Uploading a new certificate will mark the current one as historical.</p>
+        {% include "upload_signing_certificate_form.html" with section=section %}
+      </div>
+    </details>
+
+    {% else %}
+
+    {% if section.errors %}
+    <div class="alert alert-danger">
+      <ul class="error-list">
+        {% for error in section.errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% include "upload_signing_certificate_form.html" with section=section %}
+
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="page-actions">
+    <a href="{% url 'registry:entity-detail' entity.id %}" class="btn btn-secondary">
+      Skip for now
+    </a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-header {
+    margin-bottom: 2rem;
+  }
+  .page-header .subtitle {
+    color: #6c757d;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .help-text {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+  .cert-section {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .cert-section--done {
+    border-left: 4px solid #28a745;
+  }
+  .cert-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .cert-section-header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .badge-success { background: #d4edda; color: #155724; }
+  .badge-pending { background: #fff3cd; color: #856404; }
+  .badge-role    { background: #e2e3e5; color: #383d41; }
+  .cert-details {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .cert-detail-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.9rem;
+  }
+  .cert-detail-row:last-child { border-bottom: none; }
+  .cert-detail-label {
+    width: 110px;
+    flex-shrink: 0;
+    color: #6c757d;
+    font-weight: 600;
+  }
+  .cert-detail-value.mono { font-family: monospace; }
+  .cert-detail-value.small { font-size: 0.78rem; word-break: break-all; }
+  .rotate-section {
+    margin-top: 0.5rem;
+  }
+  .rotate-section summary {
+    color: #6c757d;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .rotate-form {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #dee2e6;
+  }
+  .error-list {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+  .alert-sm { padding: 0.5rem 0.75rem; font-size: 0.9rem; }
+  .page-actions {
+    margin-top: 2rem;
+  }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+  textarea.form-control {
+    font-family: monospace;
+    font-size: 0.8rem;
+    resize: vertical;
+  }
+</style>
+{% endblock %}

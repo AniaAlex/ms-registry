@@ -4,6 +4,7 @@ Access certificate serializers.
 Contains:
 - AccessCertificateUploadSerializer: Validates uploaded X.509 certificates
 - CSRSubmissionSerializer: Validates CSRs for certificate issuance
+- SigningCertificateUploadSerializer: Validates self-signed credential-signing certs
 
 Validates against registered entity data per ETSI TS 119 411-8.
 """
@@ -369,3 +370,62 @@ class CSRSubmissionSerializer(serializers.Serializer):
         data["csr"] = data["csr_pem"]
 
         return data
+
+
+# ── Signing Certificate ───────────────────────────────────────────────────────
+
+_ISSUER_ENTITLEMENT_TYPES = [
+    "PID_Provider",
+    "QEAA_Provider",
+    "Non_Q_EAA_Provider",
+    "PUB_EAA_Provider",
+]
+
+
+class SigningCertificateUploadSerializer(serializers.Serializer):
+    """
+    Validates a self-signed X.509 credential-signing certificate.
+
+    After validation, certificate_pem holds the parsed cert object
+    (same pattern as AccessCertificateUploadSerializer).
+    """
+
+    certificate_pem = serializers.CharField(
+        help_text="PEM-encoded self-signed X.509 certificate"
+    )
+    entitlement_type = serializers.ChoiceField(
+        choices=[(t, t) for t in _ISSUER_ENTITLEMENT_TYPES]
+    )
+
+    def validate_certificate_pem(self, value):
+        try:
+            cert = x509.load_pem_x509_certificate(value.encode())
+        except Exception:
+            raise serializers.ValidationError("Invalid PEM-encoded X.509 certificate.")
+
+        if cert.issuer != cert.subject:
+            raise serializers.ValidationError(
+                "Signing certificate must be self-signed "
+                "(issuer Distinguished Name must equal subject)."
+            )
+
+        now = timezone.now()
+        if cert.not_valid_after_utc < now:
+            raise serializers.ValidationError("Certificate has expired.")
+        if cert.not_valid_before_utc > now:
+            raise serializers.ValidationError("Certificate is not yet valid.")
+
+        return cert
+
+    def validate_entitlement_type(self, value):
+        entity = self.context.get("entity")
+        if (
+            entity
+            and not entity.entitlements.filter(
+                entitlement_type=value, is_active=True
+            ).exists()
+        ):
+            raise serializers.ValidationError(
+                f"Entity does not hold an active {value} entitlement."
+            )
+        return value

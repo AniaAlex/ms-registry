@@ -1,7 +1,7 @@
 from certificates.models import EntityAccessCertificate
 from core.models import CredentialFormat, EntitlementType, EntityType, IdentifierType
 from django.db.models import Exists, OuterRef
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView
@@ -268,11 +268,28 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
 
-        # HTML form submission - show success page
+        # HTML form submission
         if (
             hasattr(request, "accepted_renderer")
             and request.accepted_renderer.format == "html"
         ):
+            entity = serializer.instance
+            _ISSUER_TYPES = {
+                EntitlementType.PID_PROVIDER,
+                EntitlementType.QEAA_PROVIDER,
+                EntitlementType.PUB_EAA_PROVIDER,
+                EntitlementType.NON_Q_EAA_PROVIDER,
+            }
+            has_issuer_entitlements = entity.entitlements.filter(
+                entitlement_type__in=_ISSUER_TYPES,
+                is_active=True,
+            ).exists()
+            if has_issuer_entitlements:
+                return redirect(
+                    reverse(
+                        "certificates:signing-page", kwargs={"entity_id": entity.id}
+                    )
+                )
             return Response(
                 {
                     "message": "Entity registered successfully",

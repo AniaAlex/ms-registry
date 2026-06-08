@@ -133,6 +133,72 @@ def test_create_registered_entity_missing_required_fields(authenticated_api_clie
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
+@pytest.mark.django_db
+def test_domain_uri_is_saved_on_create(authenticated_api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "trade_name": "Test Service",
+        "domain_uri": "https://service.example.com",
+        "supervisory_authority": str(authority.id),
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.domain_uri == "https://service.example.com"
+
+
+@pytest.mark.django_db
+def test_domain_uri_returned_in_response(authenticated_api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "domain_uri": "https://service.example.com",
+        "supervisory_authority": str(authority.id),
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["data"]["domain_uri"] == "https://service.example.com"
+
+
+@pytest.mark.django_db
+def test_domain_uri_optional_on_create(authenticated_api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "supervisory_authority": str(authority.id),
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.domain_uri is None
+
+
+@pytest.mark.django_db
+def test_domain_uri_returned_in_wrp_response(authenticated_api_client):
+    entity = RegisteredEntityFactory(domain_uri="https://wrp.example.com")
+    EntityEntitlementFactory(
+        registered_entity=entity,
+        entitlement_uri="http://data.europa.eu/eudi/entitlement/Service_Provider",
+        entitlement_type=EntitlementType.SERVICE_PROVIDER,
+    )
+    EntitySupportURIFactory(registered_entity=entity)
+    url = reverse("registry:wrp")
+    response = authenticated_api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data[0]["domainURI"] == "https://wrp.example.com"
+
+
 # =============================================================================
 # Home view
 # =============================================================================

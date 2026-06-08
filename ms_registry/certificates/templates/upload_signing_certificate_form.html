@@ -1,0 +1,24 @@
+<form method="post" action="">
+  {% csrf_token %}
+  <input type="hidden" name="entitlement_type" value="{{ section.entitlement_type }}">
+
+  <div class="form-group">
+    <label for="cert_pem_{{ section.entitlement_type }}">
+      Self-signed X.509 certificate (PEM)
+    </label>
+    <textarea
+      name="certificate_pem"
+      id="cert_pem_{{ section.entitlement_type }}"
+      class="form-control"
+      rows="10"
+      placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+      required
+    >{{ section.pem_value }}</textarea>
+    <small class="help-text">
+      Paste the PEM block including the BEGIN/END markers.
+      The certificate must be self-signed and currently valid.
+    </small>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Upload certificate</button>
+</form>

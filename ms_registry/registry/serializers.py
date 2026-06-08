@@ -145,6 +145,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             "participant",
             "entity_role",
             "trade_name",
+            "domain_uri",
             "is_psb",
             "is_intermediary",
             "registry_uri",
@@ -314,6 +315,14 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         help_text="Indicates if entity acts as an intermediary",
     )
 
+    # Domain URI (entity's own service domain)
+    domain_uri = serializers.URLField(
+        max_length=2048,
+        required=False,
+        allow_null=True,
+        help_text="URL of the entity's own domain/service (used for certificate SANs)",
+    )
+
     # Registry URI (provided by registrar)
     registry_uri = serializers.URLField(
         max_length=2048,
@@ -429,6 +438,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             participant=validated_data.get("participant"),
             entity_role=EntityRole.RELYING_PARTY,
             trade_name=validated_data.get("trade_name"),
+            domain_uri=validated_data.get("domain_uri"),
             is_psb=validated_data.get("is_psb", False),
             is_intermediary=validated_data.get("is_intermediary", False),
             registry_uri=validated_data.get("registry_uri", ""),
@@ -497,6 +507,8 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             instance.is_psb = validated_data["is_psb"]
         if "is_intermediary" in validated_data:
             instance.is_intermediary = validated_data["is_intermediary"]
+        if "domain_uri" in validated_data:
+            instance.domain_uri = validated_data["domain_uri"]
         if "registry_uri" in validated_data:
             instance.registry_uri = validated_data["registry_uri"]
 
@@ -665,6 +677,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
             "srvDescription": srv_description,
             "supervisoryAuthority": supervisory_authority,
             "supportURI": [s.support_uri for s in instance.support_uris.all()],
+            "domainURI": instance.domain_uri or None,
             "registryURI": instance.registry_uri or None,
             "isIntermediary": instance.is_intermediary,
             "usesIntermediary": uses_intermediary if uses_intermediary else None,
@@ -743,6 +756,7 @@ class WalletRelyingPartyResponseSerializer(serializers.Serializer):
     )
     supervisoryAuthority = _SupervisoryAuthorityResponseSerializer(allow_null=True)
     supportURI = serializers.ListField(child=serializers.CharField())
+    domainURI = serializers.URLField(allow_null=True)
     registryURI = serializers.URLField(allow_null=True)
     isIntermediary = serializers.BooleanField()
     usesIntermediary = serializers.ListField(

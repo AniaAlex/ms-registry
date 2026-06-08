@@ -91,6 +91,61 @@ def test_form_post_register_entity_renders_success_template(auth_client):
 
 
 @pytest.mark.django_db
+def test_form_post_domain_uri_is_saved(auth_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "supervisory_authority": str(authority.id),
+        "entity_role": "relying_party",
+        "domain_uri": "https://service.example.com",
+    }
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
+    assert response.status_code == status.HTTP_201_CREATED
+    entity = RegisteredEntity.objects.get()
+    assert entity.domain_uri == "https://service.example.com"
+
+
+@pytest.mark.django_db
+def test_form_post_domain_uri_optional(auth_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "supervisory_authority": str(authority.id),
+        "entity_role": "relying_party",
+    }
+    response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
+    assert response.status_code == status.HTTP_201_CREATED
+    entity = RegisteredEntity.objects.get()
+    assert entity.domain_uri is None
+
+
+@pytest.mark.django_db
+def test_domain_uri_displayed_in_entity_detail(auth_client):
+    from registry.tests.factories import RegisteredEntityFactory
+
+    entity = RegisteredEntityFactory(domain_uri="https://service.example.com")
+    url = reverse("registry:entity-detail", args=[entity.id])
+    response = auth_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert b"https://service.example.com" in response.content
+
+
+@pytest.mark.django_db
+def test_domain_uri_not_displayed_when_absent(auth_client):
+    from registry.tests.factories import RegisteredEntityFactory
+
+    entity = RegisteredEntityFactory(domain_uri=None)
+    url = reverse("registry:entity-detail", args=[entity.id])
+    response = auth_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert b"Domain URI" not in response.content
+
+
+@pytest.mark.django_db
 def test_form_post_register_entity_invalid_rerenders_form(auth_client):
     url = reverse("registry:entity-list-create")
     data = {"trade_name": "Test Service"}  # missing required fields
