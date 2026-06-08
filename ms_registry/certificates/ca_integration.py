@@ -69,7 +69,8 @@ QUALIFIED_ENTITLEMENTS = {
 # ETSI EN 319 412-5 — QcStatements OIDs
 QC_COMPLIANCE_OID = "0.4.0.1862.1.1"  # id-etsi-qcs-QcCompliance
 QC_TYPE_OID = "0.4.0.1862.1.6"  # id-etsi-qcs-QcType
-QC_TYPE_ESEAL_OID = "0.4.0.1862.1.6.2"  # id-etsi-qct-eseal
+QC_TYPE_ESIGN_OID = "0.4.0.1862.1.6.1"  # id-etsi-qct-esign (natural persons)
+QC_TYPE_ESEAL_OID = "0.4.0.1862.1.6.2"  # id-etsi-qct-eseal (legal persons)
 
 # ETSI EN 319 412-1 §5.1.4 — organizationIdentifier scheme prefixes
 ORG_ID_PREFIXES = {
@@ -477,11 +478,14 @@ def issue_access_certificate(
         qc_compliance_oid = _der_tlv(0x06, _encode_oid(QC_COMPLIANCE_OID))
         qc_der += _der_tlv(0x30, qc_compliance_oid)
 
-        # Add QcType: id-etsi-qct-eseal (0.4.0.1862.1.6.2) for legal persons
-        # SEQUENCE { OID 0.4.0.1862.1.6, SEQUENCE { OID 0.4.0.1862.1.6.2 } }
+        # Add QcType: eSign (0.4.0.1862.1.6.1) for natural persons,
+        # eSeal (0.4.0.1862.1.6.2) for legal persons.
+        # SEQUENCE { OID 0.4.0.1862.1.6, SEQUENCE { OID <qct> } }
+        is_natural = entity.legal_entity.entity_type == "natural_person"
+        qct_oid = QC_TYPE_ESIGN_OID if is_natural else QC_TYPE_ESEAL_OID
         qc_type_oid = _der_tlv(0x06, _encode_oid(QC_TYPE_OID))
-        qc_type_eseal = _der_tlv(0x06, _encode_oid(QC_TYPE_ESEAL_OID))
-        qc_type_value = _der_tlv(0x30, qc_type_eseal)  # SEQUENCE { eseal OID }
+        qc_type_qct = _der_tlv(0x06, _encode_oid(qct_oid))
+        qc_type_value = _der_tlv(0x30, qc_type_qct)  # SEQUENCE { qct OID }
         qc_der += _der_tlv(0x30, qc_type_oid + qc_type_value)
 
     qc_value = _der_tlv(0x30, qc_der) if qc_der else None  # outer SEQUENCE
