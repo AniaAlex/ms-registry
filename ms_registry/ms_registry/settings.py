@@ -21,9 +21,6 @@ DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
-# Base URL for the registry (used for callbacks, etc.)
-SITE_URL = os.environ.get("SITE_URL", "http://localhost:8000")
-
 
 # Application definition
 

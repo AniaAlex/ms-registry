@@ -405,6 +405,30 @@ def get_policy_oid(entity: RegisteredEntity) -> str:
     return POLICY_OIDS["NCP-n-eudiwrp" if is_natural else "NCP-l-eudiwrp"]
 
 
+def build_certificate_policies_extension(
+    policy_oid: str, cps_uri: str | None = None
+) -> x509.Extension:
+    """
+    Build the Certificate Policies extension (ETSI TS 119 411-8 GEN-6.6.1-06).
+
+    When a CPS URI is provided it is added as a policy qualifier. cryptography's
+    PolicyInformation accepts a plain str qualifier and interprets it as a CPS
+    URI, so no PolicyQualifierInfo wrapper is needed.
+    """
+    policy_qualifiers = [cps_uri] if cps_uri else None
+    return x509.Extension(
+        oid=x509.ExtensionOID.CERTIFICATE_POLICIES,
+        critical=False,
+        value=x509.CertificatePolicies(
+            [
+                x509.PolicyInformation(
+                    x509.ObjectIdentifier(policy_oid), policy_qualifiers
+                ),
+            ]
+        ),
+    )
+
+
 def issue_access_certificate(
     entity_id: str,
     csr: x509.CertificateSigningRequest,
@@ -496,10 +520,6 @@ def issue_access_certificate(
 
     # Certificate Policies with optional CPS URI (ETSI TS 119 411-8 GEN-6.6.1-06)
     cps_uri = getattr(settings, "CA_CPS_URI", None)
-    if cps_uri:
-        policy_qualifiers = [cps_uri]  # CPS URI qualifier
-    else:
-        policy_qualifiers = None
 
     extensions = [
         x509.Extension(
@@ -507,17 +527,7 @@ def issue_access_certificate(
             critical=False,
             value=x509.SubjectAlternativeName(san_entries),
         ),
-        x509.Extension(
-            oid=x509.ExtensionOID.CERTIFICATE_POLICIES,
-            critical=False,
-            value=x509.CertificatePolicies(
-                [
-                    x509.PolicyInformation(
-                        x509.ObjectIdentifier(policy_oid), policy_qualifiers
-                    ),
-                ]
-            ),
-        ),
+        build_certificate_policies_extension(policy_oid, cps_uri),
     ]
 
     # Add qcStatements only for qualified certificates (QEAA providers, etc.)
