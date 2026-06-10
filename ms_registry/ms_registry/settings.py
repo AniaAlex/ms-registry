@@ -289,17 +289,17 @@ CA_PROFILES = {
             },
             # ETSI EN 319 411-1 §6.6.1 / WP4 access cert policy — the WRPAC is
             # used to authenticate the entity to the Wallet Unit (clientAuth).
+            # WRPACs are not website authentication certificates (GEN-6.6.1-01
+            # NOTE), so serverAuth must not be asserted.
             #
-            # serverAuth is added as an interop workaround, NOT a policy
-            # requirement: go-trust verifies presented chains with Go's
-            # crypto/x509 default (KeyUsages unset → serverAuth required), so a
-            # clientAuth-only leaf is rejected with "incompatible key usage".
-            # Including serverAuth lets the cert pass that verifier while
-            # remaining clientAuth per policy. Remove once go-trust sets
-            # KeyUsages=ExtKeyUsageAny on its Verify calls.
+            # NOTE: go-trust verifies presented chains with Go's crypto/x509
+            # default (KeyUsages unset → serverAuth required), so a
+            # clientAuth-only leaf may be rejected there with "incompatible key
+            # usage" until go-trust sets KeyUsages=ExtKeyUsageAny on its Verify
+            # calls.
             "extended_key_usage": {
                 "critical": False,
-                "value": ["clientAuth", "serverAuth"],
+                "value": ["clientAuth"],
             },
         },
         "subject": False,  # Use subject from CSR or issuance call

@@ -350,7 +350,11 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     san_entries: list[x509.GeneralName] = []
 
-    # Entity URI (primary identifier in the registry)
+    # Entity URI (primary identifier in the registry).
+    # TODO: this is registry_uri, the Registrar's national registry API URL,
+    # not the entity's own domain. The SAN should carry a support_uri (the
+    # entity's own domain) instead — switch to support_uris once entities have
+    # them populated.
     if entity.registry_uri:
         san_entries.append(x509.UniformResourceIdentifier(entity.registry_uri))
 
