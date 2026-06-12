@@ -59,7 +59,8 @@ def _build_cert() -> str:
         .add_extension(
             x509.SubjectAlternativeName(
                 [
-                    x509.UniformResourceIdentifier("https://example.se/"),
+                    x509.DNSName("service.example.se"),
+                    x509.UniformResourceIdentifier("https://service.example.se:8008/"),
                     x509.RFC822Name("contact@example.se"),
                 ]
             ),
@@ -119,5 +120,7 @@ def test_decode_extensions_include_eku_and_san():
     assert any("TLS Web Server Authentication" in line for line in eku_lines)
 
     san_lines = by_name["Subject Alternative Name"]["lines"]
-    assert "URI: https://example.se/" in san_lines
+    # domain_uri -> dNSName (host only); instance_uri -> URI (keeps port)
+    assert "DNS: service.example.se" in san_lines
+    assert "URI: https://service.example.se:8008/" in san_lines
     assert "email: contact@example.se" in san_lines
