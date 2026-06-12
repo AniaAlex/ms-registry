@@ -17,6 +17,7 @@ from certificates.ca_integration import (
     format_org_identifier,
     get_entity_for_issuance,
     get_policy_oid,
+    issue_access_certificate,
     revoke_entity_certificates,
     validate_csr_subject,
 )
@@ -25,6 +26,7 @@ from core.models import Identifier, RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
+from django.core.management import call_command
 from django.utils import timezone
 from legal_entities.models import (
     LegalEntity,
@@ -685,3 +687,92 @@ def test_revoke_sets_custom_reason():
 
     cert.refresh_from_db()
     assert cert.revocation_reason == "certificateHold"
+
+
+# ---------------------------------------------------------------------------
+# issue_access_certificate — end-to-end issuance through the eudiwrp profile.
+# These tests sign a real certificate and assert the CA-set extensions
+# (EKU, keyUsage, basicConstraints, certificate policy) match the profile,
+# so a silent change to CA_PROFILES["eudiwrp"] cannot pass unnoticed.
+# ---------------------------------------------------------------------------
+
+OID_EKU_CLIENT_AUTH = x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH
+OID_EKU_SERVER_AUTH = x509.oid.ExtendedKeyUsageOID.SERVER_AUTH
+
+
+def _create_access_ca():
+    """Create the 'SE Access CA' django-ca CertificateAuthority used by
+    issue_access_certificate (mirrors `make init-ca`)."""
+    # call_command bypasses the CLI's argparse `type=` converters: init_ca
+    # expects the elliptic curve as its name string but the algorithm as a
+    # parsed hashes object, so pass each in the form the command consumes.
+    call_command(
+        "init_ca",
+        "SE Access CA",
+        "CN=SE Access Certificate Authority,O=EUDI Wallet Registry,C=SE",
+        key_type="EC",
+        elliptic_curve="secp256r1",
+        algorithm=hashes.SHA384(),
+        path_length=0,
+        verbosity=0,
+    )
+
+
+def _issue_for(entity):
+    """Issue a real certificate for `entity` and return the loaded x509 cert."""
+    _attach_identifier(entity.legal_entity)
+    subject = build_subject_from_entity(entity)
+    csr = _make_csr(subject)
+    access_cert = issue_access_certificate(str(entity.id), csr)
+    return x509.load_pem_x509_certificate(access_cert.certificate_pem.encode())
+
+
+@pytest.mark.django_db
+def test_issued_cert_eku_is_clientauth_and_serverauth():
+    # Pins the eudiwrp profile EKU. serverAuth is a deliberate go-trust interop
+    # workaround; if it is removed, this test must be updated in lockstep.
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+
+    cert = _issue_for(entity)
+
+    eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    assert set(eku) == {OID_EKU_CLIENT_AUTH, OID_EKU_SERVER_AUTH}
+
+
+@pytest.mark.django_db
+def test_issued_cert_key_usage_is_digital_signature_critical():
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+
+    cert = _issue_for(entity)
+
+    ext = cert.extensions.get_extension_for_class(x509.KeyUsage)
+    assert ext.critical is True
+    assert ext.value.digital_signature is True
+    assert ext.value.key_cert_sign is False
+
+
+@pytest.mark.django_db
+def test_issued_cert_basic_constraints_ca_false():
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+
+    cert = _issue_for(entity)
+
+    bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+    assert bc.critical is True
+    assert bc.value.ca is False
+
+
+@pytest.mark.django_db
+def test_issued_cert_has_eudiwrp_policy_oid():
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+
+    cert = _issue_for(entity)
+
+    policies = cert.extensions.get_extension_for_class(x509.CertificatePolicies).value
+    oids = {p.policy_identifier.dotted_string for p in policies}
+    # Legal person, non-qualified → NCP-l-eudiwrp
+    assert POLICY_OIDS["NCP-l-eudiwrp"] in oids
