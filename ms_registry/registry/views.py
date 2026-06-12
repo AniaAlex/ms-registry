@@ -171,6 +171,8 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
                     "identifier_type": request.data.get("le_identifier_type"),
                     "identifier_value": request.data.get("le_identifier_value"),
                     "email": request.data.get("le_email"),
+                    "phone": request.data.get("le_phone"),
+                    "info_uri": request.data.get("le_info_uri"),
                 }.items()
                 if v is not None
             }

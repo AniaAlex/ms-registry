@@ -31,6 +31,9 @@ def test_form_post_legal_person_redirects_to_success(auth_client):
         "entity_type": "legal_person",
         "legal_name": "Acme",
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "LEI",
+        "identifier_value": "5493001KSF2Z4PTCYX31",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_302_FOUND
@@ -46,6 +49,9 @@ def test_form_post_natural_person_redirects_to_success(auth_client):
         "given_name": "Anna",
         "family_name": "Svensson",
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "SERIAL_NUMBER",
+        "identifier_value": "19900101-1234",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_302_FOUND

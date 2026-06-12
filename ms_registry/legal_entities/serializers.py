@@ -245,6 +245,24 @@ class LegalEntityCreateSerializer(serializers.Serializer):
                     {"family_name": "Family name is required for natural persons."}
                 )
 
+        # At least one contact method is required (obligatory at registration,
+        # even though email/phone/info_uri are individually optional on the model).
+        if not any([data.get("email"), data.get("phone"), data.get("info_uri")]):
+            raise serializers.ValidationError(
+                {"email": "At least one of email, phone, or info_uri must be provided."}
+            )
+
+        # A primary identifier is obligatory at registration (TS5 identifier [1..*]),
+        # even though LegalEntity.primary_identifier is nullable on the model.
+        if not (data.get("identifier_type") and data.get("identifier_value")):
+            raise serializers.ValidationError(
+                {
+                    "identifier_value": (
+                        "A primary identifier (type and value) is required."
+                    )
+                }
+            )
+
         return data
 
     def create(self, validated_data):

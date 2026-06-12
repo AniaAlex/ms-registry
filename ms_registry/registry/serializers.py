@@ -125,17 +125,42 @@ class EntityEntitlementSerializer(serializers.ModelSerializer):
 class RegisteredEntitySerializer(serializers.ModelSerializer):
     """Serializer for creating and listing registered entities"""
 
-    # Accept entitlements as a list of entitlement type values
+    # Accept entitlements as a list of entitlement type values [1..*]
     entitlements = serializers.ListField(
         child=serializers.ChoiceField(choices=EntitlementType.choices),
         write_only=True,
-        required=False,
+        required=True,
+        min_length=1,
         help_text="List of entitlement types (e.g., Service_Provider, PID_Provider)",
     )
     # For reading, return the full entitlement objects
     entity_entitlements = EntityEntitlementSerializer(
         source="entitlements", many=True, read_only=True
     )
+
+    # domain_uri is optional at the model level (blank/null) but obligatory at
+    # registration time, since it is the SAN dNSName base for access certificates
+    # and a registered entity must be representable as a valid TS5 WalletRelyingParty.
+    domain_uri = serializers.URLField(
+        max_length=2048,
+        required=True,
+        help_text="URL of the entity's own domain/service (used for certificate SANs)",
+    )
+
+    # Support URIs [1..*] — required by TS5 but not a field on RegisteredEntity;
+    # accepted here as input and materialized into EntitySupportURI rows.
+    support_uris = serializers.ListField(
+        child=serializers.URLField(),
+        write_only=True,
+        required=True,
+        min_length=1,
+        help_text="Support URIs for the entity (at least one required)",
+    )
+    # For reading, return the stored support URIs
+    entity_support_uris = serializers.SerializerMethodField()
+
+    def get_entity_support_uris(self, obj):
+        return [s.support_uri for s in obj.support_uris.all()]
 
     class Meta:
         model = RegisteredEntity
@@ -156,6 +181,8 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             "updated_at",
             "entitlements",  # write-only input
             "entity_entitlements",  # read-only output
+            "support_uris",  # write-only input
+            "entity_support_uris",  # read-only output
         ]
         read_only_fields = [
             "id",
@@ -188,6 +215,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Create RegisteredEntity and associated EntityEntitlements"""
         entitlement_types = validated_data.pop("entitlements", [])
+        support_uri_list = validated_data.pop("support_uris", [])
 
         # Create the registered entity
         registered_entity = RegisteredEntity.objects.create(**validated_data)
@@ -203,11 +231,20 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
                 entitlement_type=entitlement_type,
             )
 
+        # Create support URIs [1..*]
+        for idx, uri in enumerate(support_uri_list):
+            EntitySupportURI.objects.create(
+                registered_entity=registered_entity,
+                support_uri=uri,
+                is_primary=(idx == 0),
+            )
+
         return registered_entity
 
     def update(self, instance, validated_data):
         """Update RegisteredEntity and associated EntityEntitlements"""
         entitlement_types = validated_data.pop("entitlements", None)
+        support_uri_list = validated_data.pop("support_uris", None)
 
         # Update entity fields
         for attr, value in validated_data.items():
@@ -228,6 +265,16 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
                     registered_entity=instance,
                     entitlement_uri=entitlement_uri,
                     entitlement_type=entitlement_type,
+                )
+
+        # Replace support URIs if provided
+        if support_uri_list is not None:
+            instance.support_uris.all().delete()
+            for idx, uri in enumerate(support_uri_list):
+                EntitySupportURI.objects.create(
+                    registered_entity=instance,
+                    support_uri=uri,
+                    is_primary=(idx == 0),
                 )
 
         return instance
@@ -318,8 +365,7 @@ class WalletRelyingPartySerializer(serializers.Serializer):
     # Domain URI (entity's own service domain)
     domain_uri = serializers.URLField(
         max_length=2048,
-        required=False,
-        allow_null=True,
+        required=True,
         help_text="URL of the entity's own domain/service (used for certificate SANs)",
     )
 

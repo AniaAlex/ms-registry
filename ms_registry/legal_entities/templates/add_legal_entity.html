@@ -146,11 +146,12 @@
 
         <!-- Primary Identifier -->
         <fieldset>
-            <legend>Primary Identifier</legend>
+            <legend>Primary Identifier *</legend>
+            <p class="form-help">A primary identifier (type and value) is required.</p>
 
             <div class="form-group">
-                <label for="identifier_type">Identifier Type</label>
-                <select name="identifier_type" id="identifier_type" class="form-control">
+                <label for="identifier_type">Identifier Type *</label>
+                <select name="identifier_type" id="identifier_type" class="form-control" required>
                     <option value="">-- Select Type --</option>
                     {% for value, label in identifier_types %}
                     <option value="{{ value }}" {% if form_data.identifier_type == value %}selected{% endif %}>{{ label }}</option>
@@ -159,8 +160,8 @@
             </div>
 
             <div class="form-group">
-                <label for="identifier_value">Identifier Value</label>
-                <input type="text" name="identifier_value" id="identifier_value" class="form-control"
+                <label for="identifier_value">Identifier Value *</label>
+                <input type="text" name="identifier_value" id="identifier_value" class="form-control" required
                        placeholder="The identifier value (e.g., VAT number, LEI)"
                        value="{{ form_data.identifier_value|default:'' }}">
             </div>
@@ -184,7 +185,8 @@
 
         <!-- Contact Information -->
         <fieldset>
-            <legend>Contact Information</legend>
+            <legend>Contact Information *</legend>
+            <p class="form-help">At least one contact method (email, phone, or information URI) is required.</p>
 
             <div class="form-group">
                 <label for="email">Email</label>

@@ -20,6 +20,9 @@ def test_create_legal_person_entity(authenticated_api_client):
         "entity_type": "legal_person",
         "legal_name": "Acme",
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "LEI",
+        "identifier_value": "5493001KSF2Z4PTCYX31",
     }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
@@ -36,6 +39,9 @@ def test_create_legal_person_entity_multi_word_name(authenticated_api_client):
         "entity_type": "legal_person",
         "legal_name": "Acme Corporation",
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "LEI",
+        "identifier_value": "5493001KSF2Z4PTCYX31",
     }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
@@ -56,6 +62,9 @@ def test_create_legal_person_entity_punctuated_name(
         "entity_type": "legal_person",
         "legal_name": legal_name,
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "LEI",
+        "identifier_value": "5493001KSF2Z4PTCYX31",
     }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
@@ -70,6 +79,9 @@ def test_create_natural_person_entity(authenticated_api_client):
         "given_name": "Anna",
         "family_name": "Svensson",
         "country_code": "SE",
+        "email": "contact@example.com",
+        "identifier_type": "SERIAL_NUMBER",
+        "identifier_value": "19900101-1234",
     }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
@@ -89,6 +101,7 @@ def test_create_legal_entity_with_identifier(authenticated_api_client):
         "identifier_type": "LEI",
         "identifier_value": "ABCDE12345",
         "issuing_authority": "GLEIF",
+        "email": "contact@example.com",
     }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
@@ -132,7 +145,38 @@ def test_create_natural_person_missing_family_name(authenticated_api_client):
 @pytest.mark.django_db
 def test_create_legal_entity_missing_country_code(authenticated_api_client):
     url = reverse("legal_entities:legal-entity-create")
-    data = {"entity_type": "legal_person", "legal_name": "Acme"}
+    data = {
+        "entity_type": "legal_person",
+        "legal_name": "Acme",
+        "email": "contact@example.com",
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_create_legal_entity_missing_contact_info(authenticated_api_client):
+    url = reverse("legal_entities:legal-entity-create")
+    data = {
+        "entity_type": "legal_person",
+        "legal_name": "Acme",
+        "country_code": "SE",
+        "identifier_type": "LEI",
+        "identifier_value": "5493001KSF2Z4PTCYX31",
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_create_legal_entity_missing_identifier(authenticated_api_client):
+    url = reverse("legal_entities:legal-entity-create")
+    data = {
+        "entity_type": "legal_person",
+        "legal_name": "Acme",
+        "country_code": "SE",
+        "email": "contact@example.com",
+    }
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
