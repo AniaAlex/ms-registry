@@ -30,6 +30,39 @@ def test_create_legal_person_entity(authenticated_api_client):
 
 
 @pytest.mark.django_db
+def test_create_legal_person_entity_multi_word_name(authenticated_api_client):
+    url = reverse("legal_entities:legal-entity-create")
+    data = {
+        "entity_type": "legal_person",
+        "legal_name": "Acme Corporation",
+        "country_code": "SE",
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+    entity = LegalEntity.objects.first()
+    assert entity.legal_person.legal_name == "Acme Corporation"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "legal_name",
+    ["AT&T", "3M", "Smith & Co.", "Acme Corp.", "Volvo Group AB"],
+)
+def test_create_legal_person_entity_punctuated_name(
+    authenticated_api_client, legal_name
+):
+    url = reverse("legal_entities:legal-entity-create")
+    data = {
+        "entity_type": "legal_person",
+        "legal_name": legal_name,
+        "country_code": "SE",
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+    assert LegalEntity.objects.first().legal_person.legal_name == legal_name
+
+
+@pytest.mark.django_db
 def test_create_natural_person_entity(authenticated_api_client):
     url = reverse("legal_entities:legal-entity-create")
     data = {
@@ -109,7 +142,7 @@ def test_create_legal_entity_invalid_legal_name(authenticated_api_client):
     url = reverse("legal_entities:legal-entity-create")
     data = {
         "entity_type": "legal_person",
-        "legal_name": "Acme123",
+        "legal_name": "Acme @ Corp!",
         "country_code": "SE",
     }
     response = authenticated_api_client.post(url, data, format="json")
