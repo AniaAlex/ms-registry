@@ -130,13 +130,30 @@ class RegisteredEntity(BaseModel):
         ),
     )
 
-    # domainURI: the URL of the service/application the entity actually operates.
-    # Used as the SAN dNSName base when issuing access certificates.
+    # domainURI: the domain/host of the service the entity operates.
+    # Used as the SAN dNSName when issuing access certificates. A dNSName
+    # carries only the host (no scheme/port/path), so only the hostname of
+    # this value ends up in the certificate.
     domain_uri = models.URLField(
         max_length=2048,
         blank=True,
         null=True,
-        help_text="URL of the entity's own domain/service (used for certificate SANs)",
+        help_text="Domain/host of the entity's service (SAN dNSName for certificates)",
+    )
+
+    # instanceURI: the full service endpoint of this specific registered
+    # instance, including scheme, host, port and path. Unlike domain_uri, this
+    # is carried verbatim in the SAN as a uniformResourceIdentifier, which (in
+    # contrast to dNSName) preserves the port — so co-hosted instances that
+    # differ only by port (e.g. host:8008 vs host:7003) remain distinguishable.
+    instance_uri = models.URLField(
+        max_length=2048,
+        blank=True,
+        null=True,
+        help_text=(
+            "Full service endpoint of this instance, incl. port "
+            "(SAN uniformResourceIdentifier for certificates)"
+        ),
     )
 
     # registryURI: URI for national registry API (provided by Registrar).

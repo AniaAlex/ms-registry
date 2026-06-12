@@ -84,6 +84,7 @@ def test_form_post_register_entity_renders_success_template(auth_client):
         "entity_role": "relying_party",
         "trade_name": "Test Service",
         "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
         "support_uris": "https://support.example.com",
         "entitlements": "Service_Provider",
     }
@@ -103,6 +104,7 @@ def test_form_post_domain_uri_is_saved(auth_client):
         "supervisory_authority": str(authority.id),
         "entity_role": "relying_party",
         "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
         "support_uris": "https://support.example.com",
         "entitlements": "Service_Provider",
     }
@@ -187,6 +189,7 @@ def test_form_post_inline_legal_entity_creation(auth_client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
         "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
         "support_uris": "https://support.example.com",
         "entitlements": "Service_Provider",
     }
@@ -227,6 +230,7 @@ def test_form_post_inline_supervisory_authority_creation(auth_client):
         "entity_role": "relying_party",
         "trade_name": "New Service",
         "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
         "support_uris": "https://support.example.com",
         "entitlements": "Service_Provider",
     }

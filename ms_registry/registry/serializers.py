@@ -144,7 +144,20 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
     domain_uri = serializers.URLField(
         max_length=2048,
         required=True,
-        help_text="URL of the entity's own domain/service (used for certificate SANs)",
+        help_text="Domain/host of the entity's service (SAN dNSName for certificates)",
+    )
+
+    # instance_uri is optional at the model level (blank/null) but obligatory at
+    # registration time: it is the full per-instance endpoint (incl. port) that
+    # becomes the SAN uniformResourceIdentifier and uniquely locates this
+    # instance among others sharing the same domain.
+    instance_uri = serializers.URLField(
+        max_length=2048,
+        required=True,
+        help_text=(
+            "Full service endpoint of this instance, incl. port "
+            "(SAN uniformResourceIdentifier for certificates)"
+        ),
     )
 
     # Support URIs [1..*] — required by TS5 but not a field on RegisteredEntity;
@@ -171,6 +184,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             "entity_role",
             "trade_name",
             "domain_uri",
+            "instance_uri",
             "is_psb",
             "is_intermediary",
             "registry_uri",
@@ -211,6 +225,43 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("At least one entitlement is required.")
         return value
+
+    def validate(self, attrs):
+        """Reject a domain_uri already registered to a *different* legal entity.
+
+        Cheap guard against domain impersonation: a single legal entity may
+        reuse its own service domain across several registrations (e.g. one
+        per role), but two distinct legal entities must not both claim the
+        same domain, since domain_uri is the SAN dNSName base for access
+        certificates. This is an exact-match, first-come check and is NOT a
+        substitute for proving domain control (DNS/HTTP challenge) — see the
+        follow-up ticket for that.
+        """
+        domain_uri = attrs.get("domain_uri")
+        legal_entity = attrs.get("legal_entity")
+        # On partial update, fall back to the stored values.
+        if self.instance is not None:
+            if domain_uri is None:
+                domain_uri = self.instance.domain_uri
+            if legal_entity is None:
+                legal_entity = self.instance.legal_entity
+
+        if domain_uri and legal_entity is not None:
+            clash = RegisteredEntity.objects.filter(domain_uri=domain_uri).exclude(
+                legal_entity=legal_entity
+            )
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {
+                        "domain_uri": (
+                            "This domain URI is already registered to a "
+                            "different legal entity."
+                        )
+                    }
+                )
+        return attrs
 
     def create(self, validated_data):
         """Create RegisteredEntity and associated EntityEntitlements"""

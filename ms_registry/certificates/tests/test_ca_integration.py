@@ -377,15 +377,49 @@ def test_validate_csr_subject_serial_number_mismatch_natural_person():
 
 
 @pytest.mark.django_db
-def test_build_san_includes_registry_uri():
-    entity = RegisteredEntityFactory(registry_uri="https://registry.example.com/e/1")
+def test_build_san_includes_instance_uri_with_port():
+    """instance_uri is carried as a URI SAN, preserving the port."""
+    entity = RegisteredEntityFactory(
+        domain_uri=None, instance_uri="https://service.example.com:8008/"
+    )
     entity.legal_entity.email = None
     entity.legal_entity.save()
 
     san = build_san_from_entity(entity)
 
     uris = [e for e in san if isinstance(e, x509.UniformResourceIdentifier)]
-    assert any(u.value == "https://registry.example.com/e/1" for u in uris)
+    assert any(u.value == "https://service.example.com:8008/" for u in uris)
+
+
+@pytest.mark.django_db
+def test_build_san_excludes_registry_uri():
+    """registry_uri is the registry's API URL, not the entity's endpoint, and
+    must not appear in the SAN (instance_uri replaced it)."""
+    entity = RegisteredEntityFactory(
+        registry_uri="https://registry.example.com/e/1",
+        domain_uri=None,
+        instance_uri="https://service.example.com:8008/",
+    )
+
+    san = build_san_from_entity(entity)
+
+    uris = [e for e in san if isinstance(e, x509.UniformResourceIdentifier)]
+    assert all(u.value != "https://registry.example.com/e/1" for u in uris)
+
+
+@pytest.mark.django_db
+def test_build_san_domain_uri_is_dnsname_host_only():
+    """domain_uri becomes a dNSName carrying only the host (no scheme/port)."""
+    entity = RegisteredEntityFactory(
+        domain_uri="https://service.example.com:8008/path", instance_uri=""
+    )
+    entity.legal_entity.email = None
+    entity.legal_entity.save()
+
+    san = build_san_from_entity(entity)
+
+    dns_names = [e for e in san if isinstance(e, x509.DNSName)]
+    assert [d.value for d in dns_names] == ["service.example.com"]
 
 
 @pytest.mark.django_db
@@ -415,7 +449,7 @@ def test_build_san_includes_phone_as_othername():
 
 @pytest.mark.django_db
 def test_build_san_includes_support_uris():
-    entity = RegisteredEntityFactory(registry_uri="")
+    entity = RegisteredEntityFactory(registry_uri="", domain_uri=None, instance_uri="")
     entity.legal_entity.email = None
     entity.legal_entity.save()
     EntitySupportURIFactory(
@@ -430,7 +464,7 @@ def test_build_san_includes_support_uris():
 
 @pytest.mark.django_db
 def test_build_san_empty_when_no_contact():
-    entity = RegisteredEntityFactory(registry_uri="")
+    entity = RegisteredEntityFactory(registry_uri="", domain_uri=None, instance_uri="")
     entity.legal_entity.email = None
     entity.legal_entity.phone = None
     entity.legal_entity.save()
@@ -572,19 +606,31 @@ def test_get_entity_for_issuance_suspended_raises_409():
 
 
 @pytest.mark.django_db
-def test_get_entity_for_issuance_no_contact_raises_400():
+def test_get_entity_for_issuance_missing_domain_uri_raises_400():
     entity = RegisteredEntityFactory(
         registration_status=RegistrationStatus.ACTIVE,
-        registry_uri="",
+        domain_uri=None,
     )
-    entity.legal_entity.email = None
-    entity.legal_entity.phone = None
-    entity.legal_entity.save()
 
     with pytest.raises(CertificateIssuanceError) as exc_info:
         get_entity_for_issuance(str(entity.id))
 
     assert exc_info.value.http_status == 400
+    assert "domain_uri" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_get_entity_for_issuance_missing_instance_uri_raises_400():
+    entity = RegisteredEntityFactory(
+        registration_status=RegistrationStatus.ACTIVE,
+        instance_uri="",
+    )
+
+    with pytest.raises(CertificateIssuanceError) as exc_info:
+        get_entity_for_issuance(str(entity.id))
+
+    assert exc_info.value.http_status == 400
+    assert "instance_uri" in str(exc_info.value)
 
 
 @pytest.mark.django_db

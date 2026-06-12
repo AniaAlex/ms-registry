@@ -34,6 +34,10 @@
       <dt>Domain URI</dt>
       <dd><a href="{{ entity.domain_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.domain_uri }}</a></dd>
       {% endif %}
+      {% if entity.instance_uri %}
+      <dt>Instance URI</dt>
+      <dd><a href="{{ entity.instance_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.instance_uri }}</a></dd>
+      {% endif %}
       <dt>Supervisory Authority</dt>
       <dd>{{ entity.supervisory_authority }}</dd>
       <dt>Registry URI</dt>

@@ -20,6 +20,7 @@ References:
 import hashlib
 import logging
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from certificates.models import EntityAccessCertificate
 from core.models import RegistrationStatus
@@ -159,18 +160,24 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             http_status=409,
         )
 
-    # GEN-6.6.1-07: SAN must contain at least one of URI, email, or phone.
-    # All three are encoded in the SAN (phone via otherName/id-at-telephoneNumber).
-    has_san_contact = (
-        entity.registry_uri
-        or entity.legal_entity.email
-        or entity.legal_entity.phone
-        or list(entity.support_uris.all())
-    )
-    if not has_san_contact:
+    # domain_uri and instance_uri are the entity's certificate SAN entries
+    # (dNSName and uniformResourceIdentifier respectively) and both are
+    # mandatory to issue an access certificate. Their presence also satisfies
+    # ETSI TS 119 411-8 GEN-6.6.1-07 (SAN must contain at least one URI).
+    # Refuse issuance if either is missing.
+    missing = [
+        name
+        for name, value in (
+            ("domain_uri", entity.domain_uri),
+            ("instance_uri", entity.instance_uri),
+        )
+        if not value
+    ]
+    if missing:
         raise CertificateIssuanceError(
-            "Entity has no contact information for the certificate SAN "
-            "(registry_uri, email, phone, or support URI required — GEN-6.6.1-07).",
+            "Entity is missing required certificate SAN field(s): "
+            f"{', '.join(missing)}. Both domain_uri and instance_uri must be "
+            "set before an access certificate can be issued.",
             http_status=400,
         )
 
@@ -355,21 +362,32 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     Build Subject Alternative Name entries from registry data.
 
     Per ETSI TS 119 411-8 GEN-6.6.1-07, SAN must contain at least one of:
-    - URI: registry_uri / support_uris (helpdesk/support website)
+    - URI: instance_uri (entity's own endpoint) / support_uris (helpdesk)
     - rfc822Name: contact email
     - otherName (id-at-telephoneNumber OID 2.5.4.20): contact phone
+
+    domain_uri is carried as a dNSName (host only — no scheme/port/path).
+    instance_uri is carried as a uniformResourceIdentifier, which preserves
+    the port and therefore distinguishes instances co-hosted on one domain.
 
     Entitlement OIDs (ETSI TS 119 475) go in qcStatements, NOT in SAN.
     """
     san_entries: list[x509.GeneralName] = []
 
-    # Entity URI (primary identifier in the registry).
-    # TODO: this is registry_uri, the Registrar's national registry API URL,
-    # not the entity's own domain. The SAN should carry a support_uri (the
-    # entity's own domain) instead — switch to support_uris once entities have
-    # them populated.
-    if entity.registry_uri:
-        san_entries.append(x509.UniformResourceIdentifier(entity.registry_uri))
+    # Domain/host as dNSName. A dNSName carries only the hostname, so parse it
+    # out of domain_uri (which may be a full URL); the port/path are dropped
+    # here on purpose and preserved by instance_uri below.
+    if entity.domain_uri:
+        host = urlparse(entity.domain_uri).hostname
+        if host:
+            san_entries.append(x509.DNSName(host))
+
+    # Full per-instance endpoint as a uniformResourceIdentifier. This is the
+    # entity's own service URL incl. port, and uniquely locates this instance
+    # among others sharing the same domain. (Replaces registry_uri here, which
+    # is the Registrar's national registry API URL, not the entity's endpoint.)
+    if entity.instance_uri:
+        san_entries.append(x509.UniformResourceIdentifier(entity.instance_uri))
 
     # Support/contact URIs
     for support_uri in entity.support_uris.all():
