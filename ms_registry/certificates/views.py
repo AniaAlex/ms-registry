@@ -6,17 +6,13 @@ GET  /certificates/cnf/<entity_id>/
     active registered entity. The CA or the entity uses this data to build and
     sign the X.509 access certificate.
 
-POST /certificates/upload/<entity_id>/
-    Accepts a PEM-encoded X.509 access certificate, validates it against the
-    registered entity data (ETSI TS 119 411-8), and stores the certificate
-    in EntityAccessCertificate.
-
 POST /certificates/issue/<entity_id>/
     Accepts a CSR, validates the entity, and issues a signed access certificate
     using the integrated Access CA (django-ca).
 
-GET/POST /certificates/upload/<entity_id>/view/
-    HTML form equivalent of the upload endpoint.
+GET/POST /certificates/issue/<entity_id>/view/
+    HTML form equivalent of the issue endpoint: submit a CSR and the
+    integrated Access CA generates the access certificate.
 """
 
 import hashlib
@@ -25,7 +21,6 @@ import time
 import jwt as pyjwt
 from certificates.models import EntityAccessCertificate, EntitySigningCertificate
 from certificates.serializers import (
-    AccessCertificateUploadSerializer,
     CSRSubmissionSerializer,
     SigningCertificateUploadSerializer,
 )
@@ -242,146 +237,6 @@ def _get_entity_for_upload(entity_id):
     )
 
 
-def _store_certificate(entity, cert, certificate_pem: str) -> EntityAccessCertificate:
-    """
-    Persist the certificate record atomically.
-    Marks any existing current certificate for the entity as no longer current.
-    """
-    cert_der = cert.public_bytes(serialization.Encoding.DER)
-    fingerprint = hashlib.sha256(cert_der).hexdigest()
-    serial = format(cert.serial_number, "x").upper()
-
-    # TODO: Add a proper CT log implementation, e.g. using the python-ct library
-    # from certificates.ct_log import create_ct_log_entry
-    # from datetime import datetime, timezone
-    # log_id, timestamp_ms, sct_bytes = create_ct_log_entry(cert_der)
-    # ct_timestamp = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
-
-    with transaction.atomic():
-        EntityAccessCertificate.objects.filter(
-            registered_entity=entity, is_current=True
-        ).update(is_current=False)
-
-        return EntityAccessCertificate.objects.create(
-            registered_entity=entity,
-            certificate_serial=serial,
-            certificate_fingerprint_sha256=fingerprint,
-            issuer_dn=cert.issuer.rfc4514_string(),
-            subject_dn=cert.subject.rfc4514_string(),
-            not_before=cert.not_valid_before_utc,
-            not_after=cert.not_valid_after_utc,
-            # TODO: ct_log_id=log_id,
-            # TODO: ct_log_timestamp=ct_timestamp,
-            # TODO: ct_sct=sct_bytes,
-            is_current=True,
-            certificate_pem=certificate_pem,
-        )
-
-
-# ── JSON API ──────────────────────────────────────────────────────────────────
-
-
-class AccessCertificateUploadView(APIView):
-    """
-    POST /certificates/upload/<entity_id>/
-
-    Accepts a PEM-encoded X.509 access certificate, validates it against the
-    registered entity data per ETSI TS 119 411-8, creates a simplified RFC 9162
-    CT log entry, and stores the record in EntityAccessCertificate.
-
-    Request body (JSON):
-        { "certificate_pem": "-----BEGIN CERTIFICATE-----\\n..." }
-
-    Responses:
-        201  Certificate accepted; returns stored record fields.
-        400  Validation error; returns error details.
-        404  Entity not found.
-        409  Entity is not active.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    @extend_schema(
-        summary="Upload access certificate for an entity (simplified flow)",
-        description=(
-            "Validates the PEM certificate against registry data "
-            "(ETSI TS 119 411-8) and stores the certificate. "
-            "Only active entities are accepted."
-        ),
-        request={
-            "application/json": {
-                "type": "object",
-                "properties": {"certificate_pem": {"type": "string"}},
-                "required": ["certificate_pem"],
-            }
-        },
-        responses={
-            201: {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "certificate_serial": {"type": "string"},
-                    "certificate_fingerprint_sha256": {"type": "string"},
-                    "subject_dn": {"type": "string"},
-                    "issuer_dn": {"type": "string"},
-                    "not_before": {"type": "string"},
-                    "not_after": {"type": "string"},
-                },
-            },
-            400: {"description": "Validation error"},
-            404: {"description": "Entity not found"},
-            409: {"description": "Entity is not active"},
-        },
-    )
-    def post(self, request, entity_id, *args, **kwargs):
-        try:
-            entity = _get_entity_for_upload(entity_id)
-        except RegisteredEntity.DoesNotExist:
-            return Response(
-                {"detail": "Entity not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if entity.registration_status != RegistrationStatus.ACTIVE:
-            return Response(
-                {
-                    "detail": (
-                        f"Entity registration status is "
-                        f"'{entity.registration_status}', not 'active'."
-                    )
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        serializer = AccessCertificateUploadSerializer(
-            data=request.data,
-            context={"entity": entity},
-        )
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        cert = serializer.validated_data["certificate_pem"]
-        certificate_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
-        cert_record = _store_certificate(entity, cert, certificate_pem)
-
-        return Response(
-            {
-                "id": str(cert_record.id),
-                "certificate_serial": cert_record.certificate_serial,
-                "certificate_fingerprint_sha256": (
-                    cert_record.certificate_fingerprint_sha256
-                ),
-                "subject_dn": cert_record.subject_dn,
-                "issuer_dn": cert_record.issuer_dn,
-                "not_before": cert_record.not_before.isoformat(),
-                "not_after": cert_record.not_after.isoformat(),
-                # TODO: "ct_log_id": cert_record.ct_log_id,
-                # TODO: "ct_log_timestamp": cert_record.ct_log_timestamp.isoformat(),
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
 # ── Certificate Issuance (Integrated Access CA) ───────────────────────────────
 
 
@@ -544,6 +399,14 @@ class AccessCertificateDetailPageView(JWTLoginRequiredMixin, View):
             .first()
         )
 
+        # Decode the full X.509 structure (all fields + extensions) from the
+        # stored PEM so the page can show everything, not just the DB columns.
+        decoded = None
+        if certificate and certificate.certificate_pem:
+            from certificates.cert_decoder import decode_certificate
+
+            decoded = decode_certificate(certificate.certificate_pem)
+
         return render(
             request,
             "certificate_detail.html",
@@ -551,6 +414,7 @@ class AccessCertificateDetailPageView(JWTLoginRequiredMixin, View):
                 "entity_name": entity.display_name,
                 "entity_id": str(entity.id),
                 "certificate": certificate,
+                "decoded": decoded,
             },
         )
 
@@ -558,10 +422,16 @@ class AccessCertificateDetailPageView(JWTLoginRequiredMixin, View):
 # ── HTML page view ────────────────────────────────────────────────────────────
 
 
-class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
+class IssueCertificatePageView(JWTLoginRequiredMixin, View):
     """
-    GET  /certificates/upload/<entity_id>/view/  – render upload form
-    POST /certificates/upload/<entity_id>/view/  – process upload, show result
+    GET  /certificates/issue/<entity_id>/view/  – render CSR submission form
+    POST /certificates/issue/<entity_id>/view/  – issue an access certificate
+                                                   from the CSR, show result
+
+    HTML form equivalent of IssueCertificateView. Reuses the same CSR
+    validation (CSRSubmissionSerializer) and issuance logic
+    (issue_access_certificate) as the JSON API endpoint, so the certificate is
+    generated by the integrated Access CA rather than uploaded.
     """
 
     def _base_context(self, entity):
@@ -573,11 +443,11 @@ class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
         except RegisteredEntity.DoesNotExist:
             return render(
                 request,
-                "upload_certificate.html",
+                "issue_certificate.html",
                 {"error": "Entity not found."},
                 status=404,
             )
-        return render(request, "upload_certificate.html", self._base_context(entity))
+        return render(request, "issue_certificate.html", self._base_context(entity))
 
     def post(self, request, entity_id):
         try:
@@ -585,7 +455,7 @@ class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
         except RegisteredEntity.DoesNotExist:
             return render(
                 request,
-                "upload_certificate.html",
+                "issue_certificate.html",
                 {"error": "Entity not found."},
                 status=404,
             )
@@ -596,34 +466,47 @@ class AccessCertificateUploadPageView(JWTLoginRequiredMixin, View):
                 f"Entity registration status is '{entity.registration_status}', "
                 f"not 'active'."
             )
-            return render(request, "upload_certificate.html", ctx, status=409)
+            return render(request, "issue_certificate.html", ctx, status=409)
 
-        pem_value = request.POST.get("certificate_pem", "")
-        serializer = AccessCertificateUploadSerializer(
-            data={"certificate_pem": pem_value},
+        csr_value = request.POST.get("csr_pem", "")
+        serializer = CSRSubmissionSerializer(
+            data={"csr_pem": csr_value},
             context={"entity": entity},
         )
 
         ctx = self._base_context(entity)
-        ctx["pem_value"] = pem_value
+        ctx["csr_value"] = csr_value
 
         if not serializer.is_valid():
-            pem_errors = serializer.errors.get("certificate_pem", [])
-            # flatten nested lists / single strings
+            # Errors may sit under "csr_pem" (field) or "non_field_errors"
+            # (entity eligibility, raised by the serializer's validate()).
             flat_errors = []
-            for e in pem_errors:
-                if isinstance(e, list):
-                    flat_errors.extend(e)
-                else:
-                    flat_errors.append(str(e))
-            ctx["errors"] = flat_errors
-            return render(request, "upload_certificate.html", ctx, status=400)
+            for key in ("csr_pem", "non_field_errors"):
+                for e in serializer.errors.get(key, []):
+                    if isinstance(e, list):
+                        flat_errors.extend(str(x) for x in e)
+                    else:
+                        flat_errors.append(str(e))
+            ctx["errors"] = flat_errors or ["Invalid CSR."]
+            return render(request, "issue_certificate.html", ctx, status=400)
 
-        cert = serializer.validated_data["certificate_pem"]
-        certificate_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
-        cert_record = _store_certificate(entity, cert, certificate_pem)
+        # Reuse the same issuance path as the JSON IssueCertificateView.
+        from certificates.ca_integration import (
+            CertificateIssuanceError,
+            issue_access_certificate,
+        )
+
+        try:
+            cert_record = issue_access_certificate(
+                entity_id=str(entity_id),
+                csr=serializer.validated_data["csr"],
+            )
+        except CertificateIssuanceError as e:
+            ctx["errors"] = [str(e)]
+            return render(request, "issue_certificate.html", ctx, status=e.http_status)
+
         ctx["certificate"] = cert_record
-        return render(request, "upload_certificate.html", ctx, status=201)
+        return render(request, "issue_certificate.html", ctx, status=201)
 
 
 # ── Signing Certificate helpers ───────────────────────────────────────────────

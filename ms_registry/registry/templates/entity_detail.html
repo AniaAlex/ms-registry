@@ -51,7 +51,7 @@
         {% if has_valid_cert %}
           <a href="{% url 'certificates:detail-page' entity.id %}" class="btn btn-sm btn-secondary">Show Certificate</a>
         {% else %}
-          <a href="{% url 'certificates:upload-page' entity.id %}" class="btn btn-sm btn-primary">Upload Certificate</a>
+          <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
         {% endif %}
       </dd>
     </dl>

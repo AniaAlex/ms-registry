@@ -590,6 +590,7 @@ def test_get_entity_for_issuance_no_contact_raises_400():
 @pytest.mark.django_db
 def test_get_entity_for_issuance_active_with_email_succeeds():
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+    _attach_identifier(entity.legal_entity)  # GEN-6.6.1-05 (legal person)
     entity.legal_entity.email = "contact@example.com"
     entity.legal_entity.save()
 
@@ -604,6 +605,7 @@ def test_get_entity_for_issuance_active_with_registry_uri_succeeds():
         registration_status=RegistrationStatus.ACTIVE,
         registry_uri="https://registry.example.com/e/99",
     )
+    _attach_identifier(entity.legal_entity)  # GEN-6.6.1-05 (legal person)
     entity.legal_entity.email = None
     entity.legal_entity.save()
 
@@ -618,6 +620,7 @@ def test_get_entity_for_issuance_active_with_support_uri_succeeds():
         registration_status=RegistrationStatus.ACTIVE,
         registry_uri="",
     )
+    _attach_identifier(entity.legal_entity)  # GEN-6.6.1-05 (legal person)
     entity.legal_entity.email = None
     entity.legal_entity.save()
     EntitySupportURIFactory(registered_entity=entity)
@@ -625,6 +628,22 @@ def test_get_entity_for_issuance_active_with_support_uri_succeeds():
     result = get_entity_for_issuance(str(entity.id))
 
     assert result.id == entity.id
+
+
+@pytest.mark.django_db
+def test_get_entity_for_issuance_legal_person_without_identifier_raises_400():
+    # GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons, so a
+    # legal-person entity with no registry primary_identifier is not eligible.
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+    entity.legal_entity.email = "contact@example.com"
+    entity.legal_entity.save()
+    assert entity.legal_entity.primary_identifier is None
+
+    with pytest.raises(CertificateIssuanceError) as exc_info:
+        get_entity_for_issuance(str(entity.id))
+
+    assert exc_info.value.http_status == 400
+    assert "GEN-6.6.1-05" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

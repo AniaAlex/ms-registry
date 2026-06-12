@@ -174,6 +174,19 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             http_status=400,
         )
 
+    # GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons.
+    # Without a registry primary_identifier, build_subject_from_entity would
+    # omit it and the issued certificate would be non-conformant.
+    if (
+        entity.legal_entity.entity_type == "legal_person"
+        and entity.legal_entity.primary_identifier is None
+    ):
+        raise CertificateIssuanceError(
+            "Legal person has no primary identifier; organizationIdentifier is "
+            "mandatory for the access certificate (GEN-6.6.1-05).",
+            http_status=400,
+        )
+
     return entity
 
 
