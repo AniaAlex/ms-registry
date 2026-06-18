@@ -272,15 +272,33 @@ def test_issue_returns_409_on_race_condition_entity_inactive(authenticated_api_c
 
 
 @pytest.mark.django_db
-def test_issue_error_response_contains_detail(authenticated_api_client):
+def test_issue_4xx_error_detail_is_shown(authenticated_api_client):
+    """Client errors (4xx) are validation feedback and shown verbatim."""
     entity = _make_active_entity()
     EntityEntitlementFactory(registered_entity=entity)
-    msg = "No usable CA found."
+    msg = "CSR subject validation failed: Country mismatch."
 
-    with _patch_issue(side_effect=CertificateIssuanceError(msg)):
+    with _patch_issue(side_effect=CertificateIssuanceError(msg, http_status=400)):
         response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
 
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.data["detail"] == msg
+
+
+@pytest.mark.django_db
+def test_issue_5xx_error_detail_is_masked(authenticated_api_client):
+    """Server errors (5xx) may carry internal detail, so the user gets a
+    generic message and the raw error is not leaked."""
+    entity = _make_active_entity()
+    EntityEntitlementFactory(registered_entity=entity)
+    internal = "Certificate signing failed: django_ca KeyBackend traceback xyz"
+
+    with _patch_issue(side_effect=CertificateIssuanceError(internal)):
+        response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert internal not in response.data["detail"]
+    assert "server error" in response.data["detail"].lower()
 
 
 # ---------------------------------------------------------------------------

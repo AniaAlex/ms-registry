@@ -389,6 +389,24 @@ def _encode_oid(dotted: str) -> bytes:
     return bytes(body)
 
 
+def domain_uri_host(domain_uri: str | None) -> str | None:
+    """
+    Extract the hostname that domain_uri contributes to the certificate SAN.
+
+    The access certificate carries domain_uri as a dNSName containing only the
+    host — no scheme, port or path (see build_san_from_entity). urlparse lower-
+    cases the host, so this is the canonical identity the certificate asserts.
+
+    This is the single source of truth for "which host does this registration
+    claim", and MUST be used by the domain-impersonation guard so the guard
+    compares exactly what the certificate encodes. Returns None if no host can
+    be parsed.
+    """
+    if not domain_uri:
+        return None
+    return urlparse(domain_uri).hostname
+
+
 def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     Build Subject Alternative Name entries from registry data.
@@ -410,7 +428,7 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     # out of domain_uri (which may be a full URL); the port/path are dropped
     # here on purpose and preserved by instance_uri below.
     if entity.domain_uri:
-        host = urlparse(entity.domain_uri).hostname
+        host = domain_uri_host(entity.domain_uri)
         if host:
             san_entries.append(x509.DNSName(host))
 

@@ -16,6 +16,7 @@ GET/POST /certificates/issue/<entity_id>/view/
 """
 
 import hashlib
+import logging
 import time
 
 import jwt as pyjwt
@@ -38,6 +39,31 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
+
+
+def _user_facing_issuance_error(error, entity_id) -> str:
+    """User-safe message for a CertificateIssuanceError.
+
+    4xx errors are validation feedback (subject/key mismatch, eligibility) and
+    are safe to show as-is. 5xx errors may carry internal django-ca/crypto
+    detail, so the full error is logged server-side and the user sees a generic
+    message — avoids leaking implementation details.
+    """
+    if getattr(error, "http_status", 500) >= 500:
+        logger.error(
+            "Certificate issuance failed for entity %s: %s",
+            entity_id,
+            error,
+            exc_info=True,
+        )
+        return (
+            "Certificate issuance failed due to a server error. "
+            "Please contact the operator."
+        )
+    return str(error)
+
 
 _ISSUER_ENTITLEMENT_TYPES = {
     EntitlementType.PID_PROVIDER,
@@ -345,7 +371,8 @@ class IssueCertificateView(APIView):
                 csr=serializer.validated_data["csr"],
             )
         except CertificateIssuanceError as e:
-            return Response({"detail": str(e)}, status=e.http_status)
+            detail = _user_facing_issuance_error(e, entity_id)
+            return Response({"detail": detail}, status=e.http_status)
 
         # 4. Return certificate
         return Response(
@@ -502,7 +529,7 @@ class IssueCertificatePageView(JWTLoginRequiredMixin, View):
                 csr=serializer.validated_data["csr"],
             )
         except CertificateIssuanceError as e:
-            ctx["errors"] = [str(e)]
+            ctx["errors"] = [_user_facing_issuance_error(e, entity_id)]
             return render(request, "issue_certificate.html", ctx, status=e.http_status)
 
         ctx["certificate"] = cert_record

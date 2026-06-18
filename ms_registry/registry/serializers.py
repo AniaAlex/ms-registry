@@ -227,16 +227,25 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        """Reject a domain_uri already registered to a *different* legal entity.
+        """Reject a domain whose host is already registered to a *different*
+        legal entity.
 
         Cheap guard against domain impersonation: a single legal entity may
         reuse its own service domain across several registrations (e.g. one
         per role), but two distinct legal entities must not both claim the
         same domain, since domain_uri is the SAN dNSName base for access
-        certificates. This is an exact-match, first-come check and is NOT a
-        substitute for proving domain control (DNS/HTTP challenge) — see the
-        follow-up ticket for that.
+        certificates.
+
+        The comparison is on the *hostname* (via domain_uri_host) — the exact
+        value the certificate carries as a dNSName — NOT the full URL string.
+        Comparing full URLs would let a second entity bypass the guard with a
+        different scheme/port/path (e.g. https://example.com vs
+        https://example.com:8008/path) while still minting the same dNSName.
+        This is a first-come check and is NOT a substitute for proving domain
+        control (DNS/HTTP challenge) — see the follow-up ticket for that.
         """
+        from certificates.ca_integration import domain_uri_host
+
         domain_uri = attrs.get("domain_uri")
         legal_entity = attrs.get("legal_entity")
         # On partial update, fall back to the stored values.
@@ -246,18 +255,26 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
             if legal_entity is None:
                 legal_entity = self.instance.legal_entity
 
-        if domain_uri and legal_entity is not None:
-            clash = RegisteredEntity.objects.filter(domain_uri=domain_uri).exclude(
-                legal_entity=legal_entity
+        host = domain_uri_host(domain_uri)
+        if host and legal_entity is not None:
+            candidates = (
+                RegisteredEntity.objects.exclude(legal_entity=legal_entity)
+                .exclude(domain_uri="")
+                .exclude(domain_uri__isnull=True)
             )
             if self.instance is not None:
-                clash = clash.exclude(pk=self.instance.pk)
-            if clash.exists():
+                candidates = candidates.exclude(pk=self.instance.pk)
+            # domain_uri is stored as a full URL, so the host match cannot be a
+            # DB filter — compare parsed hosts (registry size makes this cheap).
+            if any(
+                domain_uri_host(c.domain_uri) == host
+                for c in candidates.only("domain_uri")
+            ):
                 raise serializers.ValidationError(
                     {
                         "domain_uri": (
-                            "This domain URI is already registered to a "
-                            "different legal entity."
+                            "This domain (host '%s') is already registered to "
+                            "a different legal entity." % host
                         )
                     }
                 )

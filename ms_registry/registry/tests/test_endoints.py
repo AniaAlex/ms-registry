@@ -261,6 +261,49 @@ def test_domain_uri_rejected_for_different_legal_entity(authenticated_api_client
 
 
 @pytest.mark.django_db
+def test_domain_uri_clash_detected_across_scheme_port_path(authenticated_api_client):
+    """The guard compares the host, so a different legal entity cannot bypass
+    it by varying scheme/port/path while minting the same dNSName."""
+    RegisteredEntityFactory(domain_uri="https://service.example.com")
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        # same host, different scheme/port/path → same SAN dNSName
+        "domain_uri": "http://service.example.com:8008/path",
+        "instance_uri": "https://service.example.com:9000/",
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority": str(authority.id),
+        "entitlements": ["Service_Provider"],
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "domain_uri" in response.data["errors"]
+
+
+@pytest.mark.django_db
+def test_domain_uri_different_host_allowed(authenticated_api_client):
+    """A genuinely different host is not a clash."""
+    RegisteredEntityFactory(domain_uri="https://service.example.com")
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "domain_uri": "https://other.example.com",
+        "instance_uri": "https://other.example.com:8008/",
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority": str(authority.id),
+        "entitlements": ["Service_Provider"],
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
 def test_domain_uri_reusable_by_same_legal_entity(authenticated_api_client):
     """The same legal entity may reuse its domain_uri across registrations."""
     legal_entity = LegalEntityFactory()
