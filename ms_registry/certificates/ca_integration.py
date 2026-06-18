@@ -26,6 +26,7 @@ from certificates.models import EntityAccessCertificate
 from core.models import RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -327,6 +328,37 @@ def validate_csr_subject(
     return errors
 
 
+def validate_csr_key_algorithm(
+    csr: x509.CertificateSigningRequest,
+) -> str | None:
+    """
+    Reject CSRs whose subject key is not EC on the P-256 curve.
+
+    The EUDI Wallet / OpenID4VP profile pins ES256 (ECDSA over P-256) for
+    request-object signing and key binding, so the access certificate's subject
+    key must be EC P-256. The CA signs with ECDSA regardless of the subject key,
+    so without this check an RSA CSR is silently signed into a non-conformant
+    leaf. See ETSI TS 119 312 / ARF for the algorithm requirements.
+
+    Returns an error string, or None if the key is acceptable.
+    """
+    public_key = csr.public_key()
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        algo = type(public_key).__name__.replace("PublicKey", "")
+        return (
+            f"Unsupported key algorithm: CSR uses {algo}, but access "
+            f"certificates require EC P-256 (secp256r1) per the EUDI Wallet "
+            f"ES256 profile."
+        )
+    curve = public_key.curve.name
+    if curve != ec.SECP256R1.name:
+        return (
+            f"Unsupported EC curve: CSR uses '{curve}', but access "
+            f"certificates require P-256 (secp256r1)."
+        )
+    return None
+
+
 def _der_tlv(tag: int, content: bytes) -> bytes:
     """DER tag-length-value with correct short/long-form length encoding."""
     n = len(content)
@@ -464,6 +496,52 @@ def build_certificate_policies_extension(
     )
 
 
+def build_qc_statements_value(
+    entity: RegisteredEntity, is_qualified: bool
+) -> bytes | None:
+    """
+    Build the DER value of the qcStatements extension (OID 1.3.6.1.5.5.7.1.3).
+
+    qcStatements is a single ``SEQUENCE OF QCStatement`` carrying, in order:
+
+    - ``QcCompliance`` + ``QcType`` (qualified certificates only,
+      ETSI EN 319 412-5).
+    - One entitlement statement per registered entitlement
+      (ETSI TS 119 475), each encoded as ``SEQUENCE { statementId OID }``.
+      Entitlements are encoded for every access-cert type, including
+      non-qualified ones (e.g. Service_Provider).
+
+    Returns the DER-encoded extension value, or ``None`` when the entity has
+    neither qualified statements nor any recognised entitlement (so the
+    extension is omitted entirely).
+    """
+    qc_der = b""
+
+    # QcCompliance + QcType for qualified certificates (EN 319 412-5).
+    if is_qualified:
+        qc_compliance_oid = _der_tlv(0x06, _encode_oid(QC_COMPLIANCE_OID))
+        qc_der += _der_tlv(0x30, qc_compliance_oid)
+
+        # QcType: eSign (natural persons) / eSeal (legal persons).
+        # SEQUENCE { OID id-etsi-qcs-QcType, SEQUENCE { OID <qct> } }
+        is_natural = entity.legal_entity.entity_type == "natural_person"
+        qct_oid = QC_TYPE_ESIGN_OID if is_natural else QC_TYPE_ESEAL_OID
+        qc_type_oid = _der_tlv(0x06, _encode_oid(QC_TYPE_OID))
+        qc_type_qct = _der_tlv(0x06, _encode_oid(qct_oid))
+        qc_type_value = _der_tlv(0x30, qc_type_qct)  # SEQUENCE { qct OID }
+        qc_der += _der_tlv(0x30, qc_type_oid + qc_type_value)
+
+    # Entitlement OIDs (TS 119 475) — one QCStatement per entitlement. Uses the
+    # same entitlement set as requires_qualified_policy() so the qualified flag
+    # and the encoded entitlements stay consistent.
+    for entitlement in entity.entitlements.all():
+        oid_str = ENTITLEMENT_OIDS.get(entitlement.entitlement_type)
+        if oid_str:
+            qc_der += _der_tlv(0x30, _der_tlv(0x06, _encode_oid(oid_str)))
+
+    return _der_tlv(0x30, qc_der) if qc_der else None  # outer SEQUENCE
+
+
 def issue_access_certificate(
     entity_id: str,
     csr: x509.CertificateSigningRequest,
@@ -517,37 +595,22 @@ def issue_access_certificate(
             http_status=400,
         )
 
+    # 4. Validate CSR key algorithm (EUDI Wallet ES256 profile → EC P-256)
+    key_error = validate_csr_key_algorithm(csr)
+    if key_error:
+        raise CertificateIssuanceError(key_error, http_status=400)
+
     # 5. Build certificate extensions from registry data
     # Note: Subject DN comes from the CSR - we only add authoritative extensions
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
     is_qualified = requires_qualified_policy(entity)
 
-    # Build qcStatements extension (ETSI EN 319 412-5)
-    # Only for qualified certificates: QcCompliance + QcType
-    # Note: Entitlement OIDs are stored in the registry, NOT in the certificate
+    # qcStatements (ETSI EN 319 412-5 + ETSI TS 119 475): qualified statements
+    # for qualified certs plus one entitlement statement per registered
+    # entitlement. See build_qc_statements_value() for the encoding.
     QC_STATEMENTS_OID = x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3")
-
-    # Encode qcStatements as raw DER (only for qualified certs)
-    qc_der = b""
-
-    # Add QcCompliance for qualified certificates (id-etsi-qcs-QcCompliance)
-    # SEQUENCE { OID 0.4.0.1862.1.1 } — indicates EU qualified certificate
-    if is_qualified:
-        qc_compliance_oid = _der_tlv(0x06, _encode_oid(QC_COMPLIANCE_OID))
-        qc_der += _der_tlv(0x30, qc_compliance_oid)
-
-        # Add QcType: eSign (0.4.0.1862.1.6.1) for natural persons,
-        # eSeal (0.4.0.1862.1.6.2) for legal persons.
-        # SEQUENCE { OID 0.4.0.1862.1.6, SEQUENCE { OID <qct> } }
-        is_natural = entity.legal_entity.entity_type == "natural_person"
-        qct_oid = QC_TYPE_ESIGN_OID if is_natural else QC_TYPE_ESEAL_OID
-        qc_type_oid = _der_tlv(0x06, _encode_oid(QC_TYPE_OID))
-        qc_type_qct = _der_tlv(0x06, _encode_oid(qct_oid))
-        qc_type_value = _der_tlv(0x30, qc_type_qct)  # SEQUENCE { qct OID }
-        qc_der += _der_tlv(0x30, qc_type_oid + qc_type_value)
-
-    qc_value = _der_tlv(0x30, qc_der) if qc_der else None  # outer SEQUENCE
+    qc_value = build_qc_statements_value(entity, is_qualified)
 
     # 6. Build extensions as cryptography x509.Extension objects.
     # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only
@@ -565,7 +628,8 @@ def issue_access_certificate(
         build_certificate_policies_extension(policy_oid, cps_uri),
     ]
 
-    # Add qcStatements only for qualified certificates (QEAA providers, etc.)
+    # Add qcStatements whenever there is content: entitlement OIDs (any
+    # access-cert type) and/or QcCompliance+QcType (qualified certificates).
     if qc_value:
         extensions.append(
             x509.Extension(

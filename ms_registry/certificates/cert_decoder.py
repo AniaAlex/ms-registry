@@ -102,6 +102,60 @@ def _format_general_name(gn: x509.GeneralName) -> str:
     return str(gn)
 
 
+# qcStatements (ETSI EN 319 412-5 / TS 119 475) is carried as an opaque
+# UnrecognizedExtension. These small DER helpers pull out each QCStatement's
+# statementId OID so it can be shown numerically instead of as a hex blob.
+_QC_STATEMENTS_OID = "1.3.6.1.5.5.7.1.3"
+
+
+def _read_tlv(data: bytes, i: int) -> tuple[int, bytes, int]:
+    """Read one DER TLV at offset i. Returns (tag, content, next_offset)."""
+    tag = data[i]
+    length = data[i + 1]
+    i += 2
+    if length & 0x80:
+        n = length & 0x7F
+        length = int.from_bytes(data[i : i + n], "big")
+        i += n
+    return tag, data[i : i + length], i + length
+
+
+def _decode_oid(body: bytes) -> str:
+    """Decode a DER OID body to its dotted-decimal string."""
+    subids, val = [], 0
+    for b in body:
+        val = (val << 7) | (b & 0x7F)
+        if not (b & 0x80):
+            subids.append(val)
+            val = 0
+    first = subids[0]
+    if first < 40:
+        arcs = [0, first]
+    elif first < 80:
+        arcs = [1, first - 40]
+    else:
+        arcs = [2, first - 80]
+    arcs.extend(subids[1:])
+    return ".".join(str(a) for a in arcs)
+
+
+def _format_qc_statements(der: bytes) -> list[str]:
+    """Render qcStatements as one dotted-OID line per QCStatement."""
+    try:
+        tag, content, _ = _read_tlv(der, 0)  # outer SEQUENCE OF QCStatement
+        if tag != 0x30:
+            return [f"raw: {_hex(der)}"]
+        out, i = [], 0
+        while i < len(content):
+            _, stmt, i = _read_tlv(content, i)  # QCStatement SEQUENCE
+            oid_tag, oid_body, _ = _read_tlv(stmt, 0)  # statementId OID
+            if oid_tag == 0x06:
+                out.append(_decode_oid(oid_body))
+        return out or [f"raw: {_hex(der)}"]
+    except (IndexError, ValueError):
+        return [f"raw: {_hex(der)}"]
+
+
 def _format_extension_value(value) -> list[str]:  # noqa: C901 — type dispatch
     """Return a list of human-readable lines for an extension's value."""
     if isinstance(value, x509.BasicConstraints):
@@ -173,6 +227,8 @@ def _format_extension_value(value) -> list[str]:  # noqa: C901 — type dispatch
         return out
 
     if isinstance(value, x509.UnrecognizedExtension):
+        if value.oid.dotted_string == _QC_STATEMENTS_OID:
+            return _format_qc_statements(value.value)
         return [f"raw: {_hex(value.value)}"]
 
     return [str(value)]

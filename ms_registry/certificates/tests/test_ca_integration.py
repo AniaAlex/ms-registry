@@ -7,25 +7,30 @@ issue_access_certificate (CA signing) is covered in test_issue.py.
 
 import pytest
 from certificates.ca_integration import (
+    ENTITLEMENT_OIDS,
     POLICY_OIDS,
+    QC_COMPLIANCE_OID,
     CertificateIssuanceError,
     _der_tlv,
     _der_utf8string,
     _encode_oid,
+    build_qc_statements_value,
     build_san_from_entity,
     build_subject_from_entity,
     format_org_identifier,
     get_entity_for_issuance,
     get_policy_oid,
     issue_access_certificate,
+    requires_qualified_policy,
     revoke_entity_certificates,
+    validate_csr_key_algorithm,
     validate_csr_subject,
 )
 from certificates.models import EntityAccessCertificate
-from core.models import Identifier, RegistrationStatus
+from core.models import EntitlementType, Identifier, RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from django.core.management import call_command
 from django.utils import timezone
 from legal_entities.models import (
@@ -35,6 +40,7 @@ from legal_entities.models import (
 )
 from participant.tests.factories import ParticipantFactory
 from registry.tests.factories import (
+    EntityEntitlementFactory,
     EntitySupportURIFactory,
     RegisteredEntityFactory,
 )
@@ -841,3 +847,140 @@ def test_issued_cert_has_eudiwrp_policy_oid():
     oids = {p.policy_identifier.dotted_string for p in policies}
     # Legal person, non-qualified → NCP-l-eudiwrp
     assert POLICY_OIDS["NCP-l-eudiwrp"] in oids
+
+
+# ---------------------------------------------------------------------------
+# build_qc_statements_value — entitlement OIDs (ETSI TS 119 475) in qcStatements
+# ---------------------------------------------------------------------------
+
+QC_STATEMENTS_OID_STR = "1.3.6.1.5.5.7.1.3"
+
+
+@pytest.mark.django_db
+def test_qc_statements_none_when_no_entitlements_and_not_qualified():
+    """No entitlements + non-qualified → extension omitted entirely."""
+    entity = RegisteredEntityFactory()
+
+    assert build_qc_statements_value(entity, is_qualified=False) is None
+
+
+@pytest.mark.django_db
+def test_qc_statements_encodes_entitlement_oid_for_non_qualified():
+    """A non-qualified entitlement (Service_Provider) is still encoded, and no
+    QcCompliance statement is added."""
+    entity = RegisteredEntityFactory()
+    EntityEntitlementFactory(
+        registered_entity=entity, entitlement_type=EntitlementType.SERVICE_PROVIDER
+    )
+
+    qc_value = build_qc_statements_value(entity, is_qualified=False)
+
+    assert qc_value is not None
+    assert _encode_oid(ENTITLEMENT_OIDS["Service_Provider"]) in qc_value
+    # not qualified → QcCompliance absent
+    assert _encode_oid(QC_COMPLIANCE_OID) not in qc_value
+
+
+@pytest.mark.django_db
+def test_qc_statements_qctype_is_esign_for_natural_person():
+    """A qualified natural person gets QcType eSign (not eSeal)."""
+    from certificates.ca_integration import QC_TYPE_ESEAL_OID, QC_TYPE_ESIGN_OID
+
+    entity = _make_natural_person_entity()
+    EntityEntitlementFactory(
+        registered_entity=entity, entitlement_type=EntitlementType.QEAA_PROVIDER
+    )
+
+    qc_value = build_qc_statements_value(entity, is_qualified=True)
+
+    assert _encode_oid(QC_TYPE_ESIGN_OID) in qc_value
+    assert _encode_oid(QC_TYPE_ESEAL_OID) not in qc_value
+
+
+@pytest.mark.django_db
+def test_qc_statements_includes_qccompliance_and_entitlement_when_qualified():
+    """A qualified entitlement (QEAA) yields QcCompliance plus its TS 119 475
+    entitlement OID in the same qcStatements value."""
+    entity = RegisteredEntityFactory()
+    EntityEntitlementFactory(
+        registered_entity=entity, entitlement_type=EntitlementType.QEAA_PROVIDER
+    )
+
+    qc_value = build_qc_statements_value(
+        entity, is_qualified=requires_qualified_policy(entity)
+    )
+
+    assert qc_value is not None
+    assert _encode_oid(QC_COMPLIANCE_OID) in qc_value
+    assert _encode_oid(ENTITLEMENT_OIDS["QEAA_Provider"]) in qc_value
+
+
+@pytest.mark.django_db
+def test_issued_cert_has_qc_statements_with_entitlement_oid():
+    """End-to-end: an issued cert carries the qcStatements extension and the
+    entity's entitlement OID is present in its DER value."""
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+    EntityEntitlementFactory(
+        registered_entity=entity, entitlement_type=EntitlementType.SERVICE_PROVIDER
+    )
+
+    cert = _issue_for(entity)
+
+    ext = cert.extensions.get_extension_for_oid(
+        x509.ObjectIdentifier(QC_STATEMENTS_OID_STR)
+    )
+    assert _encode_oid(ENTITLEMENT_OIDS["Service_Provider"]) in ext.value.value
+
+
+# ---------------------------------------------------------------------------
+# validate_csr_key_algorithm — EUDI Wallet ES256 profile requires EC P-256
+# ---------------------------------------------------------------------------
+
+
+def _csr_with_key(private_key) -> x509.CertificateSigningRequest:
+    name = x509.Name([x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, "key-test")])
+    return (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(name)
+        .sign(private_key, hashes.SHA256())
+    )
+
+
+def test_validate_csr_key_accepts_ec_p256():
+    csr = _csr_with_key(ec.generate_private_key(ec.SECP256R1()))
+    assert validate_csr_key_algorithm(csr) is None
+
+
+def test_validate_csr_key_rejects_rsa():
+    csr = _csr_with_key(rsa.generate_private_key(public_exponent=65537, key_size=2048))
+    err = validate_csr_key_algorithm(csr)
+    assert err is not None
+    assert "RSA" in err and "P-256" in err
+
+
+def test_validate_csr_key_rejects_wrong_ec_curve():
+    csr = _csr_with_key(ec.generate_private_key(ec.SECP384R1()))
+    err = validate_csr_key_algorithm(csr)
+    assert err is not None
+    assert "secp384r1" in err
+
+
+@pytest.mark.django_db
+def test_issue_rejects_rsa_csr_with_400():
+    _create_access_ca()
+    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
+    _attach_identifier(entity.legal_entity)
+    subject = build_subject_from_entity(entity)
+    # CSR with the right subject but an RSA key
+    attrs = [x509.NameAttribute(_OID_MAP[k], v) for k, v in subject.items()]
+    rsa_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    rsa_csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(x509.Name(attrs))
+        .sign(rsa_key, hashes.SHA256())
+    )
+
+    with pytest.raises(CertificateIssuanceError) as exc:
+        issue_access_certificate(str(entity.id), rsa_csr)
+    assert exc.value.http_status == 400
