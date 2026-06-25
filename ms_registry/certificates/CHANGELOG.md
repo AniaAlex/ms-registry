@@ -1,5 +1,28 @@
 # Certificates Module Changelog
 
+## 2026-06-25
+
+### Fixed — WRPAC keyUsage conformance (ETSI TS 119 411-8 §5.5 / EN 319 412-2/-3)
+
+**`settings.py` — `CA_PROFILES["eudiwrp"]`**
+- `key_usage` changed from `["digital_signature"]` to
+  `["content_commitment", "digital_signature"]`. TS 119 411-8 §5.5 frames the
+  WRPAC as supporting advanced electronic signatures (natural persons) / seals
+  (legal persons); the inherited EN 319 412-2/-3 profile requires keyUsage
+  Type A, B or F for certs validating commitment to signed content
+  (EN 319 412-2 Table 1, NAT-4.3.2-2). We use Type B — contentCommitment
+  (nonRepudiation, bit 1) + digitalSignature (bit 0) — keeping the transient
+  request-object/transport authentication semantics alongside the mandated
+  seal/signature commitment.
+- Removed the `extended_key_usage` (`clientAuth`/`serverAuth`) entirely.
+  TS 119 411-8 GEN-6.6.1-01 + NOTE exclude the website-authentication cert
+  profile, so the WRPAC carries no TLS EKU. KNOWN ISSUE: this breaks go-trust,
+  whose verifier requires `serverAuth` (Go crypto/x509 default); go-trust must
+  set `KeyUsages=ExtKeyUsageAny` on its Verify calls to accept an EKU-less leaf.
+
+**`core/management/commands/generate_access_certificates_help_function.py`**
+- Dev-tool cert: `KeyUsage` now `content_commitment=True, digital_signature=True`.
+
 ## 2026-04-16
 
 ### Added — WRPAC attribute coverage (CIR (EU) 2025/848 Annex I, ETSI TS 119 411-8 §6.6.1)

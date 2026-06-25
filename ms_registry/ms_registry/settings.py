@@ -283,24 +283,26 @@ CA_PROFILES = {
     "eudiwrp": {
         "description": "EUDI Wallet Relying Party Access Certificate (WRPAC)",
         "extensions": {
+            # ETSI TS 119 411-8 §5.5 frames the WRPAC as supporting advanced
+            # electronic signatures (natural persons, §5.5.1) / advanced
+            # electronic seals (legal persons, §5.5.2). The profile inherits
+            # ETSI EN 319 412-2/-3: a certificate validating commitment to
+            # signed content shall use keyUsage Type A, B or F (EN 319 412-2
+            # Table 1, NAT-4.3.2-2). We use Type B — contentCommitment
+            # (nonRepudiation, bit 1) plus digitalSignature (bit 0) — to keep
+            # the transient request-object/transport authentication semantics
+            # alongside the seal/signature commitment the spec mandates.
             "key_usage": {
                 "critical": True,
-                "value": ["digital_signature"],
+                "value": ["content_commitment", "digital_signature"],
             },
-            # ETSI EN 319 411-1 §6.6.1 / WP4 access cert policy — the WRPAC is
-            # used to authenticate the entity to the Wallet Unit (clientAuth).
-            #
-            # serverAuth is added as an interop workaround, NOT a policy
-            # requirement: go-trust verifies presented chains with Go's
-            # crypto/x509 default (KeyUsages unset → serverAuth required), so a
-            # clientAuth-only leaf is rejected with "incompatible key usage".
-            # Including serverAuth lets the cert pass that verifier while
-            # remaining clientAuth per policy. Remove once go-trust sets
-            # KeyUsages=ExtKeyUsageAny on its Verify calls.
-            "extended_key_usage": {
-                "critical": False,
-                "value": ["clientAuth", "serverAuth"],
-            },
+            # No extendedKeyUsage: TS 119 411-8 GEN-6.6.1-01 + NOTE explicitly
+            # exclude the website-authentication certificate profile, so the
+            # WRPAC carries no TLS EKU (clientAuth/serverAuth). This is known to
+            # break go-trust, whose verifier uses Go crypto/x509 defaults
+            # (KeyUsages unset → serverAuth required) and rejects an EKU-less
+            # leaf with "incompatible key usage"; go-trust must set
+            # KeyUsages=ExtKeyUsageAny on its Verify calls to accept it.
         },
         "subject": False,  # Use subject from CSR or issuance call
     },

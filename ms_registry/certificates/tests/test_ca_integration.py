@@ -767,9 +767,6 @@ def test_revoke_sets_custom_reason():
 # so a silent change to CA_PROFILES["eudiwrp"] cannot pass unnoticed.
 # ---------------------------------------------------------------------------
 
-OID_EKU_CLIENT_AUTH = x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH
-OID_EKU_SERVER_AUTH = x509.oid.ExtendedKeyUsageOID.SERVER_AUTH
-
 
 def _create_access_ca():
     """Create the 'SE Access CA' django-ca CertificateAuthority used by
@@ -799,20 +796,23 @@ def _issue_for(entity):
 
 
 @pytest.mark.django_db
-def test_issued_cert_eku_is_clientauth_and_serverauth():
-    # Pins the eudiwrp profile EKU. serverAuth is a deliberate go-trust interop
-    # workaround; if it is removed, this test must be updated in lockstep.
+def test_issued_cert_has_no_eku():
+    # TS 119 411-8 GEN-6.6.1-01 NOTE excludes the website-authentication cert
+    # profile, so the WRPAC carries no extendedKeyUsage (no clientAuth/serverAuth).
     _create_access_ca()
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
 
     cert = _issue_for(entity)
 
-    eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
-    assert set(eku) == {OID_EKU_CLIENT_AUTH, OID_EKU_SERVER_AUTH}
+    with pytest.raises(x509.ExtensionNotFound):
+        cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
 
 
 @pytest.mark.django_db
-def test_issued_cert_key_usage_is_digital_signature_critical():
+def test_issued_cert_key_usage_is_content_commitment_and_digital_signature():
+    # WRPAC = electronic signature/seal cert (TS 119 411-8 §5.5); keyUsage
+    # Type B = contentCommitment + digitalSignature (EN 319 412-2 Table 1,
+    # NAT-4.3.2-2).
     _create_access_ca()
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
 
@@ -820,6 +820,7 @@ def test_issued_cert_key_usage_is_digital_signature_critical():
 
     ext = cert.extensions.get_extension_for_class(x509.KeyUsage)
     assert ext.critical is True
+    assert ext.value.content_commitment is True
     assert ext.value.digital_signature is True
     assert ext.value.key_cert_sign is False
 
