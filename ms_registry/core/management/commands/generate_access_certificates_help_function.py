@@ -178,11 +178,11 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
         )
         .add_extension(
             # WRPAC = electronic signature/seal cert (ETSI TS 119 411-8 §5.5);
-            # keyUsage Type B = contentCommitment + digitalSignature
+            # keyUsage Type A = contentCommitment only
             # (EN 319 412-2 Table 1, NAT-4.3.2-2). No EKU — website-auth
             # profile is excluded by TS 119 411-8 GEN-6.6.1-01 NOTE.
             x509.KeyUsage(
-                digital_signature=True,
+                digital_signature=False,
                 content_commitment=True,
                 key_encipherment=False,
                 data_encipherment=False,

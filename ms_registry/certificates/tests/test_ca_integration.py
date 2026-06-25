@@ -809,10 +809,9 @@ def test_issued_cert_has_no_eku():
 
 
 @pytest.mark.django_db
-def test_issued_cert_key_usage_is_content_commitment_and_digital_signature():
+def test_issued_cert_key_usage_is_content_commitment_only():
     # WRPAC = electronic signature/seal cert (TS 119 411-8 §5.5); keyUsage
-    # Type B = contentCommitment + digitalSignature (EN 319 412-2 Table 1,
-    # NAT-4.3.2-2).
+    # Type A = contentCommitment only (EN 319 412-2 Table 1, NAT-4.3.2-2).
     _create_access_ca()
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
 
@@ -821,7 +820,7 @@ def test_issued_cert_key_usage_is_content_commitment_and_digital_signature():
     ext = cert.extensions.get_extension_for_class(x509.KeyUsage)
     assert ext.critical is True
     assert ext.value.content_commitment is True
-    assert ext.value.digital_signature is True
+    assert ext.value.digital_signature is False
     assert ext.value.key_cert_sign is False
 
 

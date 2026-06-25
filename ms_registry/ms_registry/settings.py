@@ -288,13 +288,11 @@ CA_PROFILES = {
             # electronic seals (legal persons, §5.5.2). The profile inherits
             # ETSI EN 319 412-2/-3: a certificate validating commitment to
             # signed content shall use keyUsage Type A, B or F (EN 319 412-2
-            # Table 1, NAT-4.3.2-2). We use Type B — contentCommitment
-            # (nonRepudiation, bit 1) plus digitalSignature (bit 0) — to keep
-            # the transient request-object/transport authentication semantics
-            # alongside the seal/signature commitment the spec mandates.
+            # Table 1, NAT-4.3.2-2). We use Type A — contentCommitment
+            # (nonRepudiation, bit 1) only — for pure seal/signature commitment.
             "key_usage": {
                 "critical": True,
-                "value": ["content_commitment", "digital_signature"],
+                "value": ["content_commitment"],
             },
             # No extendedKeyUsage: TS 119 411-8 GEN-6.6.1-01 + NOTE explicitly
             # exclude the website-authentication certificate profile, so the
