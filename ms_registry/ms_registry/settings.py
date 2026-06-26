@@ -309,6 +309,14 @@ CA_PROFILES = {
 # Default profile for certificate issuance
 CA_DEFAULT_PROFILE = "eudiwrp"
 
+# Run django-ca tasks (OCSP responder key generation, CRL caching) in-process
+# instead of dispatching them to Celery. CA_USE_CELERY defaults to True whenever
+# Celery is importable, but this project runs no Celery worker or broker, so the
+# default makes `regenerate_ocsp_keys` (and other tasks) try to reach a broker on
+# localhost and fail with "Connection refused". Synchronous execution is correct
+# here.
+CA_USE_CELERY = False
+
 # Enable OCSP responder
 CA_ENABLE_OCSP = True
 
