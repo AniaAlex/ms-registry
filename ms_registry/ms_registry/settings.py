@@ -277,6 +277,19 @@ CA_CPS_URI = os.environ.get("CA_CPS_URI", None)
 # Django-ca uses this to build CRL/OCSP/CA Issuer URLs in certificates
 CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", "localhost:8000")
 
+# Public base URL under which this service's django-ca revocation endpoints
+# (CRL, OCSP, CA Issuers) are reachable by relying parties — including the
+# scheme and any reverse-proxy path prefix (e.g. "/api" from the uWSGI mount).
+#
+# django-ca bakes the AIA/CRL Distribution Points URLs into the CA's stored
+# config at creation time using a HARDCODED "http://" scheme and the path from
+# reverse(); because init_ca runs as a management command (no WSGI script name),
+# that path also lacks the "/api" prefix the proxy expects. The result is dead
+# "http://host/ca/..." URLs on every issued certificate. We therefore build
+# these extensions explicitly at issuance time from this setting instead of
+# relying on the CA's stored URLs. See certificates.ca_integration.
+CA_PUBLIC_BASE_URL = os.environ.get("CA_PUBLIC_BASE_URL", "http://localhost:8000")
+
 # Certificate profiles for EUDI Wallet Access Certificates
 # Note: basic_constraints is not configurable in profiles (set automatically)
 CA_PROFILES = {

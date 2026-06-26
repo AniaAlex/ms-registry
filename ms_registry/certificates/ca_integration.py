@@ -27,6 +27,7 @@ from core.models import RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import AuthorityInformationAccessOID
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -513,6 +514,66 @@ def build_certificate_policies_extension(
     )
 
 
+def build_revocation_extensions(base_url: str, ca_serial: str) -> list[x509.Extension]:
+    """
+    Build the AIA and CRL Distribution Points extensions for an issued certificate.
+
+    django-ca normally injects these from the CA's stored configuration, but that
+    config is frozen at CA-creation time with a hardcoded ``http://`` scheme and a
+    path that omits the reverse-proxy prefix (because ``init_ca`` runs as a
+    management command with no WSGI script name). Both make the baked-in URLs
+    unreachable. We instead build them here from CA_PUBLIC_BASE_URL so every
+    issued certificate points at the endpoints relying parties can actually reach.
+
+    Passing these explicitly to ``create_cert`` overrides the CA defaults:
+    django-ca keeps a caller-supplied CRL Distribution Points extension verbatim,
+    and merges AIA such that a caller-supplied OCSP + CA Issuers pair wins outright
+    (see django_ca.profiles._add_crl_distribution_points /
+    _update_authority_information_access).
+
+    The path segments mirror django_ca.urls: ``ca/issuer/<serial>.der``,
+    ``ca/ocsp/<serial>/cert/`` and ``ca/crl/<serial>/``. base_url carries the
+    scheme, host and any proxy prefix (e.g. ``https://host/api``); ca_serial is
+    the uppercase hex serial as stored by django-ca.
+    """
+    base = base_url.rstrip("/")
+    issuer_url = f"{base}/ca/issuer/{ca_serial}.der"
+    ocsp_url = f"{base}/ca/ocsp/{ca_serial}/cert/"
+    crl_url = f"{base}/ca/crl/{ca_serial}/"
+
+    aia = x509.Extension(
+        oid=x509.ExtensionOID.AUTHORITY_INFORMATION_ACCESS,
+        critical=False,
+        value=x509.AuthorityInformationAccess(
+            [
+                x509.AccessDescription(
+                    AuthorityInformationAccessOID.OCSP,
+                    x509.UniformResourceIdentifier(ocsp_url),
+                ),
+                x509.AccessDescription(
+                    AuthorityInformationAccessOID.CA_ISSUERS,
+                    x509.UniformResourceIdentifier(issuer_url),
+                ),
+            ]
+        ),
+    )
+    crl_dp = x509.Extension(
+        oid=x509.ExtensionOID.CRL_DISTRIBUTION_POINTS,
+        critical=False,
+        value=x509.CRLDistributionPoints(
+            [
+                x509.DistributionPoint(
+                    full_name=[x509.UniformResourceIdentifier(crl_url)],
+                    relative_name=None,
+                    reasons=None,
+                    crl_issuer=None,
+                )
+            ]
+        ),
+    )
+    return [aia, crl_dp]
+
+
 def build_qc_statements_value(
     entity: RegisteredEntity, is_qualified: bool
 ) -> bytes | None:
@@ -644,6 +705,14 @@ def issue_access_certificate(
         ),
         build_certificate_policies_extension(policy_oid, cps_uri),
     ]
+
+    # AIA + CRL Distribution Points built from CA_PUBLIC_BASE_URL rather than the
+    # CA's stored (http://, prefix-less) defaults, so the revocation/issuer URLs
+    # in the leaf are actually reachable. These override the CA defaults at
+    # signing time (see build_revocation_extensions).
+    ca_public_base_url = getattr(settings, "CA_PUBLIC_BASE_URL", None)
+    if ca_public_base_url:
+        extensions.extend(build_revocation_extensions(ca_public_base_url, ca.serial))
 
     # Add qcStatements whenever there is content: entitlement OIDs (any
     # access-cert type) and/or QcCompliance+QcType (qualified certificates).

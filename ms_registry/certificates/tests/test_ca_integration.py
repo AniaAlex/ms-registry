@@ -15,6 +15,7 @@ from certificates.ca_integration import (
     _der_utf8string,
     _encode_oid,
     build_qc_statements_value,
+    build_revocation_extensions,
     build_san_from_entity,
     build_subject_from_entity,
     format_org_identifier,
@@ -31,6 +32,7 @@ from core.models import EntitlementType, Identifier, RegistrationStatus
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.x509.oid import AuthorityInformationAccessOID
 from django.core.management import call_command
 from django.utils import timezone
 from legal_entities.models import (
@@ -490,6 +492,58 @@ def test_build_san_phone_utf8_encoded():
     other = next(e for e in san if isinstance(e, x509.OtherName))
 
     assert other.value == b"\x0c\x03+46"
+
+
+# ---------------------------------------------------------------------------
+# build_revocation_extensions
+# ---------------------------------------------------------------------------
+
+SERIAL = "3E66396A29072B73D470B9F40427A96B45FE44F5"
+
+
+def _aia_map(ext):
+    return {ad.access_method: ad.access_location.value for ad in ext.value}
+
+
+def test_build_revocation_extensions_uses_base_url_and_serial():
+    """URLs carry the configured scheme/host/prefix and the CA serial."""
+    base = "https://trust-dev-1.iam.sunet.se/api"
+    aia, crl_dp = build_revocation_extensions(base, SERIAL)
+
+    aia_urls = _aia_map(aia)
+    assert (
+        aia_urls[AuthorityInformationAccessOID.OCSP] == f"{base}/ca/ocsp/{SERIAL}/cert/"
+    )
+    assert (
+        aia_urls[AuthorityInformationAccessOID.CA_ISSUERS]
+        == f"{base}/ca/issuer/{SERIAL}.der"
+    )
+
+    crl_url = crl_dp.value[0].full_name[0].value
+    assert crl_url == f"{base}/ca/crl/{SERIAL}/"
+
+
+def test_build_revocation_extensions_oids_and_criticality():
+    """Correct extension OIDs, both non-critical, AIA has OCSP + CA Issuers."""
+    aia, crl_dp = build_revocation_extensions("https://h/api", SERIAL)
+
+    assert aia.oid == x509.ExtensionOID.AUTHORITY_INFORMATION_ACCESS
+    assert crl_dp.oid == x509.ExtensionOID.CRL_DISTRIBUTION_POINTS
+    assert aia.critical is False
+    assert crl_dp.critical is False
+    assert set(_aia_map(aia)) == {
+        AuthorityInformationAccessOID.OCSP,
+        AuthorityInformationAccessOID.CA_ISSUERS,
+    }
+
+
+def test_build_revocation_extensions_strips_trailing_slash():
+    """A trailing slash on the base URL does not produce a double slash."""
+    aia, _ = build_revocation_extensions("https://h/api/", SERIAL)
+    assert (
+        _aia_map(aia)[AuthorityInformationAccessOID.OCSP]
+        == f"https://h/api/ca/ocsp/{SERIAL}/cert/"
+    )
 
 
 # _der_tlv / _der_utf8string / _encode_oid
