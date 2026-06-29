@@ -296,24 +296,18 @@ CA_PROFILES = {
     "eudiwrp": {
         "description": "EUDI Wallet Relying Party Access Certificate (WRPAC)",
         "extensions": {
-            # ETSI TS 119 411-8 §5.5 frames the WRPAC as supporting advanced
-            # electronic signatures (natural persons, §5.5.1) / advanced
-            # electronic seals (legal persons, §5.5.2). The profile inherits
-            # ETSI EN 319 412-2/-3: a certificate validating commitment to
-            # signed content shall use keyUsage Type A, B or F (EN 319 412-2
-            # Table 1, NAT-4.3.2-2). We use Type A — contentCommitment
-            # (nonRepudiation, bit 1) only — for pure seal/signature commitment.
             "key_usage": {
                 "critical": True,
-                "value": ["content_commitment"],
+                "value": ["digital_signature"],
             },
-            # No extendedKeyUsage: TS 119 411-8 GEN-6.6.1-01 + NOTE explicitly
-            # exclude the website-authentication certificate profile, so the
-            # WRPAC carries no TLS EKU (clientAuth/serverAuth). This is known to
-            # break go-trust, whose verifier uses Go crypto/x509 defaults
-            # (KeyUsages unset → serverAuth required) and rejects an EKU-less
-            # leaf with "incompatible key usage"; go-trust must set
-            # KeyUsages=ExtKeyUsageAny on its Verify calls to accept it.
+            # The access cert authenticates the relying party — CIR 2025/848 Art. 2 /
+            # TS 119 411-8 Intro.
+            # Authentication = the digitalSignature bit — RFC 5280 §4.2.1.3
+            # ("entity authentication service").
+            "extended_key_usage": {
+                "critical": False,
+                "value": ["clientAuth"],
+            },
         },
         "subject": False,  # Use subject from CSR or issuance call
     },

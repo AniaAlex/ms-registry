@@ -849,23 +849,22 @@ def _issue_for(entity):
     return x509.load_pem_x509_certificate(access_cert.certificate_pem.encode())
 
 
+OID_EKU_CLIENT_AUTH = x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH
+
+
 @pytest.mark.django_db
-def test_issued_cert_has_no_eku():
-    # TS 119 411-8 GEN-6.6.1-01 NOTE excludes the website-authentication cert
-    # profile, so the WRPAC carries no extendedKeyUsage (no clientAuth/serverAuth).
+def test_issued_cert_eku_is_clientauth():
     _create_access_ca()
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
 
     cert = _issue_for(entity)
 
-    with pytest.raises(x509.ExtensionNotFound):
-        cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+    eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    assert set(eku) == {OID_EKU_CLIENT_AUTH}
 
 
 @pytest.mark.django_db
-def test_issued_cert_key_usage_is_content_commitment_only():
-    # WRPAC = electronic signature/seal cert (TS 119 411-8 §5.5); keyUsage
-    # Type A = contentCommitment only (EN 319 412-2 Table 1, NAT-4.3.2-2).
+def test_issued_cert_key_usage_is_digital_signature_critical():
     _create_access_ca()
     entity = RegisteredEntityFactory(registration_status=RegistrationStatus.ACTIVE)
 
@@ -873,8 +872,8 @@ def test_issued_cert_key_usage_is_content_commitment_only():
 
     ext = cert.extensions.get_extension_for_class(x509.KeyUsage)
     assert ext.critical is True
-    assert ext.value.content_commitment is True
-    assert ext.value.digital_signature is False
+    assert ext.value.digital_signature is True
+    assert ext.value.content_commitment is False
     assert ext.value.key_cert_sign is False
 
 
