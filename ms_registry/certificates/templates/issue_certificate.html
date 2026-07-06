@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Upload Access Certificate{% endblock %}
+{% block title %}Generate Access Certificate{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="upload-container">
         <div class="upload-header">
-            <h2>Upload Access Certificate</h2>
+            <h2>Generate Access Certificate</h2>
             {% if entity_name %}
             <p>Entity: <strong>{{ entity_name }}</strong></p>
             {% endif %}
@@ -22,8 +22,8 @@
         {% if certificate %}
         {# ── Success state ── #}
         <div class="alert alert-success">
-            <h4>Certificate Accepted</h4>
-            <p>The certificate has been validated and stored.</p>
+            <h4>Certificate Issued</h4>
+            <p>The Access CA validated the CSR and issued a certificate.</p>
         </div>
         <div class="cert-details">
             <h3>Certificate Details</h3>
@@ -35,6 +35,23 @@
                 <tr><th>Not Before</th><td>{{ certificate.not_before }}</td></tr>
                 <tr><th>Not After</th><td>{{ certificate.not_after }}</td></tr>
             </table>
+        </div>
+        <div class="cert-details">
+            <h3>Certificate PEM</h3>
+            <textarea
+                id="issued_pem"
+                class="form-control pem-textarea"
+                rows="14"
+                readonly
+            >{{ certificate.certificate_pem }}</textarea>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="copyPem()">Copy PEM</button>
+                <a
+                    class="btn btn-secondary"
+                    download="access-certificate-{{ certificate.certificate_serial }}.pem"
+                    href="data:application/x-pem-file;charset=utf-8,{{ certificate.certificate_pem|urlencode }}"
+                >Download PEM</a>
+            </div>
         </div>
         <div class="actions">
             <a href="{% url 'home' %}" class="btn btn-primary">Back to Registry</a>
@@ -56,23 +73,25 @@
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
-                <label for="certificate_pem">
-                    Certificate PEM
+                <label for="csr_pem">
+                    Certificate Signing Request (CSR) PEM
                     <span class="form-help">
-                        Paste the PEM-encoded X.509 access certificate
-                        (including <code>-----BEGIN CERTIFICATE-----</code> header/footer).
+                        Paste the PEM-encoded CSR
+                        (including <code>-----BEGIN CERTIFICATE REQUEST-----</code> header/footer).
+                        The Access CA derives the certificate extensions from the
+                        entity's registry data; the CSR subject must match the registry.
                     </span>
                 </label>
                 <textarea
-                    id="certificate_pem"
-                    name="certificate_pem"
+                    id="csr_pem"
+                    name="csr_pem"
                     class="form-control pem-textarea"
                     rows="14"
-                    placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-                >{{ pem_value }}</textarea>
+                    placeholder="-----BEGIN CERTIFICATE REQUEST-----&#10;...&#10;-----END CERTIFICATE REQUEST-----"
+                >{{ csr_value }}</textarea>
             </div>
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Upload Certificate</button>
+                <button type="submit" class="btn btn-primary">Generate Certificate</button>
                 <a href="{% url 'home' %}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
@@ -99,6 +118,7 @@
         font-size: 0.8rem;
         background: #f8f9fa;
         resize: vertical;
+        width: 100%;
     }
     .cert-details {
         margin-top: 1.5rem;
@@ -137,4 +157,15 @@
         margin-top: 1.5rem;
     }
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function copyPem() {
+        var el = document.getElementById("issued_pem");
+        if (!el) { return; }
+        el.select();
+        navigator.clipboard.writeText(el.value);
+    }
+</script>
 {% endblock %}

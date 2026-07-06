@@ -29,6 +29,10 @@ class RegisteredEntityFactory(factory.django.DjangoModelFactory):
     registry_uri = factory.Sequence(
         lambda n: f"https://registry.example.com/entities/{n}"
     )
+    domain_uri = factory.Sequence(lambda n: f"https://service{n}.example.com")
+    instance_uri = factory.Sequence(
+        lambda n: f"https://service{n}.example.com:{8000 + n}/"
+    )
     supervisory_authority = factory.SubFactory(SupervisoryAuthorityFactory)
 
 

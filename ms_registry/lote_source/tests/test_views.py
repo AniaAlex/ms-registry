@@ -35,8 +35,8 @@ from .factories import (
 PID_URL = "lote_source:pid-providers"
 PUBEAA_URL = "lote_source:pubeaa-providers"
 
-STATUS_NOTIFIED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/notified"
-STATUS_WITHDRAWN = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn"
+STATUS_NOTIFIED = "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/notified"
+STATUS_WITHDRAWN = "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/withdrawn"
 LOTE_TYPE_PID = "http://uri.etsi.org/19602/LoTEType/EUPIDProvidersList"
 LOTE_TYPE_PUBEAA = "http://uri.etsi.org/19602/LoTEType/EUPubEAAProvidersList"
 SVC_TYPE_PID = "http://uri.etsi.org/19602/SvcType/PIDProvider"

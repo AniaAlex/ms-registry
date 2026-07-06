@@ -264,8 +264,31 @@ CA_DEFAULT_SUBJECT = [
 # Certificate validity (days)
 CA_DEFAULT_EXPIRES = 365  # 1 year for entity certificates
 
-# OCSP and CRL URLs (set based on deployment URL)
+# Signature hash algorithm for issued certificates.
+# WP4 access certificate policy specifies ecdsa-with-SHA384 (django-ca
+# defaults to SHA-512). Applies to EC/RSA CAs.
+CA_DEFAULT_SIGNATURE_HASH_ALGORITHM = "SHA-384"
+
+# Certificate Practice Statement (CPS) URI — included in certificate policies
+# Per ETSI TS 119 411-8 GEN-6.6.1-06
+CA_CPS_URI = os.environ.get("CA_CPS_URI", None)
+
+# OCSP and CRL URLs hostname
+# Django-ca uses this to build CRL/OCSP/CA Issuer URLs in certificates
 CA_DEFAULT_HOSTNAME = os.environ.get("CA_HOSTNAME", "localhost:8000")
+
+# Public base URL under which this service's django-ca revocation endpoints
+# (CRL, OCSP, CA Issuers) are reachable by relying parties — including the
+# scheme and any reverse-proxy path prefix (e.g. "/api" from the uWSGI mount).
+#
+# django-ca bakes the AIA/CRL Distribution Points URLs into the CA's stored
+# config at creation time using a HARDCODED "http://" scheme and the path from
+# reverse(); because init_ca runs as a management command (no WSGI script name),
+# that path also lacks the "/api" prefix the proxy expects. The result is dead
+# "http://host/ca/..." URLs on every issued certificate. We therefore build
+# these extensions explicitly at issuance time from this setting instead of
+# relying on the CA's stored URLs. See certificates.ca_integration.
+CA_PUBLIC_BASE_URL = os.environ.get("CA_PUBLIC_BASE_URL", "http://localhost:8000")
 
 # Certificate profiles for EUDI Wallet Access Certificates
 # Note: basic_constraints is not configurable in profiles (set automatically)
@@ -277,6 +300,14 @@ CA_PROFILES = {
                 "critical": True,
                 "value": ["digital_signature"],
             },
+            # The access cert authenticates the relying party — CIR 2025/848 Art. 2 /
+            # TS 119 411-8 Intro.
+            # Authentication = the digitalSignature bit — RFC 5280 §4.2.1.3
+            # ("entity authentication service").
+            "extended_key_usage": {
+                "critical": False,
+                "value": ["clientAuth"],
+            },
         },
         "subject": False,  # Use subject from CSR or issuance call
     },
@@ -284,6 +315,14 @@ CA_PROFILES = {
 
 # Default profile for certificate issuance
 CA_DEFAULT_PROFILE = "eudiwrp"
+
+# Run django-ca tasks (OCSP responder key generation, CRL caching) in-process
+# instead of dispatching them to Celery. CA_USE_CELERY defaults to True whenever
+# Celery is importable, but this project runs no Celery worker or broker, so the
+# default makes `regenerate_ocsp_keys` (and other tasks) try to reach a broker on
+# localhost and fail with "Connection refused". Synchronous execution is correct
+# here.
+CA_USE_CELERY = False
 
 # Enable OCSP responder
 CA_ENABLE_OCSP = True

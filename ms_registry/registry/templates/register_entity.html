@@ -173,7 +173,7 @@
 
                 <!-- Primary Identifier -->
                 <div class="form-group">
-                    <label for="le_identifier_type">Identifier Type</label>
+                    <label for="le_identifier_type">Identifier Type *</label>
                     <select name="le_identifier_type" id="le_identifier_type" class="form-control">
                         <option value="">-- Select Type --</option>
                         {% for value, label in identifier_types %}
@@ -183,18 +183,35 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="le_identifier_value">Identifier Value</label>
+                    <label for="le_identifier_value">Identifier Value *</label>
                     <input type="text" name="le_identifier_value" id="le_identifier_value" class="form-control"
                            placeholder="The identifier value (e.g., VAT number, LEI)"
                            value="{{ le_form_data.identifier_value|default:'' }}">
+                    <small class="form-help">A primary identifier (type and value) is required.</small>
                 </div>
 
                 <!-- Contact Information -->
+                <p class="form-help">At least one contact method (email, phone, or information URI) is required.</p>
+
                 <div class="form-group">
                     <label for="le_email">Email</label>
                     <input type="email" name="le_email" id="le_email" class="form-control"
                            placeholder="contact@example.com"
                            value="{{ le_form_data.email|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="le_phone">Phone</label>
+                    <input type="tel" name="le_phone" id="le_phone" class="form-control"
+                           placeholder="+46 8 123 4567"
+                           value="{{ le_form_data.phone|default:'' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="le_info_uri">Information URI</label>
+                    <input type="url" name="le_info_uri" id="le_info_uri" class="form-control"
+                           placeholder="https://www.example.com/"
+                           value="{{ le_form_data.info_uri|default:'' }}">
                 </div>
             </div>
             
@@ -205,13 +222,33 @@
             </div>
 
             <div class="form-group">
-                <label for="domain_uri">Domain URI</label>
-                <input type="url" name="domain_uri" id="domain_uri" class="form-control"
+                <label for="domain_uri">Domain URI *</label>
+                <input type="url" name="domain_uri" id="domain_uri" class="form-control" required
                        placeholder="https://service.example.com"
                        value="{{ form_data.domain_uri|default:'' }}">
-                <small class="form-help">URL of the entity's own service domain (used for certificate SANs).</small>
+                <small class="form-help">Domain/host of the entity's service. Goes into the certificate SAN as a dNSName (host only — port and path are not included here).</small>
             </div>
 
+            <div class="form-group">
+                <label for="instance_uri">Instance URI *</label>
+                <input type="url" name="instance_uri" id="instance_uri" class="form-control" required
+                       placeholder="https://service.example.com:8008/"
+                       value="{{ form_data.instance_uri|default:'' }}">
+                <small class="form-help">Full endpoint of this specific instance, including port. Goes into the certificate SAN as a URI (preserves the port, so instances sharing a domain stay distinguishable). May be the same as the Domain URI.</small>
+            </div>
+
+        </fieldset>
+
+        <fieldset>
+            <legend>Support URIs *</legend>
+            <p class="form-help">At least one support URI is required (e.g., the entity's website, support page, or contact form).</p>
+
+            <div class="form-group">
+                <label for="support_uri">Support URI *</label>
+                <input type="url" name="support_uris" id="support_uri" class="form-control" required
+                       placeholder="https://support.example.com"
+                       value="{{ form_data.support_uris|default:'' }}">
+            </div>
         </fieldset>
         
         <fieldset>

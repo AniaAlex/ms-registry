@@ -19,6 +19,66 @@
         </div>
 
         {% elif certificate %}
+
+        {% if decoded %}
+        <h3 class="section-title">General</h3>
+        <table class="detail-table">
+            <tr><th>Version</th><td>{{ decoded.version }}</td></tr>
+            <tr><th>Serial</th><td><code>{{ decoded.serial_hex }}</code></td></tr>
+            <tr><th>Signature Algorithm</th><td>{{ decoded.signature_algorithm }}</td></tr>
+            <tr><th>SHA-256 Fingerprint</th><td><code>{{ decoded.fingerprint_sha256 }}</code></td></tr>
+            <tr><th>SHA-1 Fingerprint</th><td><code>{{ decoded.fingerprint_sha1 }}</code></td></tr>
+            <tr><th>Not Before</th><td>{{ decoded.not_before|date:"Y-m-d H:i:s e" }}</td></tr>
+            <tr><th>Not After</th><td>{{ decoded.not_after|date:"Y-m-d H:i:s e" }}</td></tr>
+        </table>
+
+        <h3 class="section-title">Subject</h3>
+        <table class="detail-table">
+            {% for a in decoded.subject_attrs %}
+            <tr><th>{{ a.name }} <span class="oid">{{ a.oid }}</span></th><td><code>{{ a.value }}</code></td></tr>
+            {% endfor %}
+        </table>
+
+        <h3 class="section-title">Issuer</h3>
+        <table class="detail-table">
+            {% for a in decoded.issuer_attrs %}
+            <tr><th>{{ a.name }} <span class="oid">{{ a.oid }}</span></th><td><code>{{ a.value }}</code></td></tr>
+            {% endfor %}
+        </table>
+
+        <h3 class="section-title">Public Key</h3>
+        <table class="detail-table">
+            <tr><th>Algorithm</th><td>{{ decoded.public_key.type }}</td></tr>
+            {% if decoded.public_key.details %}
+            <tr><th>Parameters</th><td>{{ decoded.public_key.details }}</td></tr>
+            {% endif %}
+            {% if decoded.public_key.hex %}
+            <tr><th>Key</th><td><code class="wrap">{{ decoded.public_key.hex }}</code></td></tr>
+            {% endif %}
+        </table>
+
+        <h3 class="section-title">Extensions</h3>
+        <table class="detail-table">
+            {% for ext in decoded.extensions %}
+            <tr>
+                <th>
+                    {{ ext.name }}
+                    <span class="oid">{{ ext.oid }}</span>
+                    {% if ext.critical %}<span class="badge-critical">critical</span>{% endif %}
+                </th>
+                <td>
+                    {% for line in ext.lines %}
+                    <div class="ext-line"><code>{{ line }}</code></div>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        {# PEM could not be decoded — fall back to stored DB fields #}
+        <div class="alert alert-danger">
+            <p>Could not decode the stored certificate PEM. Showing stored fields only.</p>
+        </div>
         <table class="detail-table">
             <tr><th>Serial</th><td><code>{{ certificate.certificate_serial }}</code></td></tr>
             <tr><th>SHA-256</th><td><code>{{ certificate.certificate_fingerprint_sha256 }}</code></td></tr>
@@ -27,6 +87,7 @@
             <tr><th>Not Before</th><td>{{ certificate.not_before|date:"Y-m-d H:i:s e" }}</td></tr>
             <tr><th>Not After</th><td>{{ certificate.not_after|date:"Y-m-d H:i:s e" }}</td></tr>
         </table>
+        {% endif %}
 
         {% if certificate.certificate_pem %}
         <div class="pem-block">
@@ -89,6 +150,37 @@
     .detail-table code {
         word-break: break-all;
         font-size: 0.78rem;
+    }
+    .section-title {
+        margin: 1.75rem 0 0.5rem;
+        font-size: 1rem;
+        color: #003399;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 0.25rem;
+    }
+    .detail-table th .oid {
+        display: block;
+        font-weight: 400;
+        font-size: 0.7rem;
+        color: #adb5bd;
+        font-family: monospace;
+    }
+    .badge-critical {
+        display: inline-block;
+        margin-top: 0.25rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #842029;
+        background: #f8d7da;
+        border-radius: 3px;
+        padding: 0.05rem 0.35rem;
+    }
+    .ext-line {
+        margin-bottom: 0.15rem;
+    }
+    .detail-table code.wrap {
+        white-space: pre-wrap;
     }
     .pem-block {
         margin-top: 1.5rem;

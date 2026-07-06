@@ -47,6 +47,7 @@ def _wrp_payload(**overrides):
         "country_code": "DE",
         "entitlements": ["https://uri.etsi.org/19475/Entitlement/Service_Provider"],
         "support_uris": ["https://example.com/support"],
+        "domain_uri": "https://example.com",
         "supervisory_authority_name": "BfDI",
         "supervisory_authority_country": "DE",
     }

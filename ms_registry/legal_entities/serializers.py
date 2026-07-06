@@ -16,12 +16,28 @@ from .models import (
 )
 
 LETTERS_ONLY_RE = re.compile(r"^[A-Za-z]+$")
+# Legal/company names: letters, digits and common punctuation (& . , - ' ( ) /),
+# made of words separated by single spaces. Allows e.g. "Acme Corp.",
+# "AT&T", "3M", "Smith & Co.", "L'Oréal", "Müller GmbH".
+LEGAL_NAME_RE = re.compile(
+    r"^[\w&.,'()/-]+(?: [\w&.,'()/-]+)*$",
+    re.UNICODE,
+)
 
 
 def validate_letters_only(value, field_name):
     if value and not LETTERS_ONLY_RE.match(value):
         raise serializers.ValidationError(
             f"{field_name} must contain only letters (A-Z, a-z)."
+        )
+    return value
+
+
+def validate_legal_name_value(value, field_name):
+    if value and not LEGAL_NAME_RE.match(value):
+        raise serializers.ValidationError(
+            f"{field_name} contains invalid characters or formatting "
+            "(use words separated by single spaces, no leading/trailing spaces)."
         )
     return value
 
@@ -41,6 +57,9 @@ class PhysicalAddressSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+# TODO: legal_name validation lives only at the serializer level, so anything
+# bypassing it (factories, admin, direct ORM writes) is unconstrained. Push the
+# LEGAL_NAME_RE rule down to the model field (validators=...) for full coverage.
 class LegalPersonSerializer(serializers.ModelSerializer):
     class Meta:
         model = LegalPerson
@@ -55,7 +74,7 @@ class LegalPersonSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def validate_legal_name(self, value):
-        return validate_letters_only(value, "Legal name")
+        return validate_legal_name_value(value, "Legal name")
 
 
 class NaturalPersonSerializer(serializers.ModelSerializer):
@@ -199,7 +218,7 @@ class LegalEntityCreateSerializer(serializers.Serializer):
     )
 
     def validate_legal_name(self, value):
-        return validate_letters_only(value, "Legal name")
+        return validate_legal_name_value(value, "Legal name")
 
     def validate_given_name(self, value):
         return validate_letters_only(value, "Given name")
@@ -225,6 +244,24 @@ class LegalEntityCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"family_name": "Family name is required for natural persons."}
                 )
+
+        # At least one contact method is required (obligatory at registration,
+        # even though email/phone/info_uri are individually optional on the model).
+        if not any([data.get("email"), data.get("phone"), data.get("info_uri")]):
+            raise serializers.ValidationError(
+                {"email": "At least one of email, phone, or info_uri must be provided."}
+            )
+
+        # A primary identifier is obligatory at registration (TS5 identifier [1..*]),
+        # even though LegalEntity.primary_identifier is nullable on the model.
+        if not (data.get("identifier_type") and data.get("identifier_value")):
+            raise serializers.ValidationError(
+                {
+                    "identifier_value": (
+                        "A primary identifier (type and value) is required."
+                    )
+                }
+            )
 
         return data
 

@@ -109,6 +109,7 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "domain_uri",
+                    "instance_uri",
                     "registry_uri",
                     "supervisory_authority",
                     "registration_status",

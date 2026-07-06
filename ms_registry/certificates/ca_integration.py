@@ -20,11 +20,14 @@ References:
 import hashlib
 import logging
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from certificates.models import EntityAccessCertificate
 from core.models import RegistrationStatus
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import AuthorityInformationAccessOID
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -36,7 +39,6 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # ETSI TS 119 475 Annex A — Entitlement OIDs
 # ──────────────────────────────────────────────────────────────────────────────
-
 ENTITLEMENT_OIDS = {
     "Service_Provider": "0.4.0.19475.1.1",
     "QEAA_Provider": "0.4.0.19475.1.2",
@@ -57,6 +59,20 @@ POLICY_OIDS = {
     "QCP-n-eudiwrp": "0.4.0.194118.1.3",  # Qualified, natural person
     "QCP-l-eudiwrp": "0.4.0.194118.1.4",  # Qualified, legal person
 }
+
+# Entitlements that require Qualified Certificate Policy (QCP-*)
+# Per ETSI TS 119 475 and eIDAS Article 45a
+QUALIFIED_ENTITLEMENTS = {
+    "QEAA_Provider",  # Qualified EAA Provider
+    "QCert_for_ESeal_Provider",
+    "QCert_for_ESig_Provider",
+}
+
+# ETSI EN 319 412-5 — QcStatements OIDs
+QC_COMPLIANCE_OID = "0.4.0.1862.1.1"  # id-etsi-qcs-QcCompliance
+QC_TYPE_OID = "0.4.0.1862.1.6"  # id-etsi-qcs-QcType
+QC_TYPE_ESIGN_OID = "0.4.0.1862.1.6.1"  # id-etsi-qct-esign (natural persons)
+QC_TYPE_ESEAL_OID = "0.4.0.1862.1.6.2"  # id-etsi-qct-eseal (legal persons)
 
 # ETSI EN 319 412-1 §5.1.4 — organizationIdentifier scheme prefixes
 ORG_ID_PREFIXES = {
@@ -145,18 +161,37 @@ def get_entity_for_issuance(entity_id: str) -> RegisteredEntity:
             http_status=409,
         )
 
-    # GEN-6.6.1-07: SAN must contain at least one of URI, email, or phone.
-    # All three are encoded in the SAN (phone via otherName/id-at-telephoneNumber).
-    has_san_contact = (
-        entity.registry_uri
-        or entity.legal_entity.email
-        or entity.legal_entity.phone
-        or list(entity.support_uris.all())
-    )
-    if not has_san_contact:
+    # domain_uri and instance_uri are the entity's certificate SAN entries
+    # (dNSName and uniformResourceIdentifier respectively) and both are
+    # mandatory to issue an access certificate. Their presence also satisfies
+    # ETSI TS 119 411-8 GEN-6.6.1-07 (SAN must contain at least one URI).
+    # Refuse issuance if either is missing.
+    missing = [
+        name
+        for name, value in (
+            ("domain_uri", entity.domain_uri),
+            ("instance_uri", entity.instance_uri),
+        )
+        if not value
+    ]
+    if missing:
         raise CertificateIssuanceError(
-            "Entity has no contact information for the certificate SAN "
-            "(registry_uri, email, phone, or support URI required — GEN-6.6.1-07).",
+            "Entity is missing required certificate SAN field(s): "
+            f"{', '.join(missing)}. Both domain_uri and instance_uri must be "
+            "set before an access certificate can be issued.",
+            http_status=400,
+        )
+
+    # GEN-6.6.1-05: organizationIdentifier is mandatory for legal persons.
+    # Without a registry primary_identifier, build_subject_from_entity would
+    # omit it and the issued certificate would be non-conformant.
+    if (
+        entity.legal_entity.entity_type == "legal_person"
+        and entity.legal_entity.primary_identifier is None
+    ):
+        raise CertificateIssuanceError(
+            "Legal person has no primary identifier; organizationIdentifier is "
+            "mandatory for the access certificate (GEN-6.6.1-05).",
             http_status=400,
         )
 
@@ -293,6 +328,37 @@ def validate_csr_subject(
     return errors
 
 
+def validate_csr_key_algorithm(
+    csr: x509.CertificateSigningRequest,
+) -> str | None:
+    """
+    Reject CSRs whose subject key is not EC on the P-256 curve.
+
+    The EUDI Wallet / OpenID4VP profile pins ES256 (ECDSA over P-256) for
+    request-object signing and key binding, so the access certificate's subject
+    key must be EC P-256. The CA signs with ECDSA regardless of the subject key,
+    so without this check an RSA CSR is silently signed into a non-conformant
+    leaf. See ETSI TS 119 312 / ARF for the algorithm requirements.
+
+    Returns an error string, or None if the key is acceptable.
+    """
+    public_key = csr.public_key()
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        algo = type(public_key).__name__.replace("PublicKey", "")
+        return (
+            f"Unsupported key algorithm: CSR uses {algo}, but access "
+            f"certificates require EC P-256 (secp256r1) per the EUDI Wallet "
+            f"ES256 profile."
+        )
+    curve = public_key.curve.name
+    if curve != ec.SECP256R1.name:
+        return (
+            f"Unsupported EC curve: CSR uses '{curve}', but access "
+            f"certificates require P-256 (secp256r1)."
+        )
+    return None
+
+
 def _der_tlv(tag: int, content: bytes) -> bytes:
     """DER tag-length-value with correct short/long-form length encoding."""
     n = len(content)
@@ -323,22 +389,55 @@ def _encode_oid(dotted: str) -> bytes:
     return bytes(body)
 
 
+def domain_uri_host(domain_uri: str | None) -> str | None:
+    """
+    Extract the hostname that domain_uri contributes to the certificate SAN.
+
+    The access certificate carries domain_uri as a dNSName containing only the
+    host — no scheme, port or path (see build_san_from_entity). urlparse lower-
+    cases the host, so this is the canonical identity the certificate asserts.
+
+    This is the single source of truth for "which host does this registration
+    claim", and MUST be used by the domain-impersonation guard so the guard
+    compares exactly what the certificate encodes. Returns None if no host can
+    be parsed.
+    """
+    if not domain_uri:
+        return None
+    return urlparse(domain_uri).hostname
+
+
 def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     """
     Build Subject Alternative Name entries from registry data.
 
     Per ETSI TS 119 411-8 GEN-6.6.1-07, SAN must contain at least one of:
-    - URI: registry_uri / support_uris (helpdesk/support website)
+    - URI: instance_uri (entity's own endpoint) / support_uris (helpdesk)
     - rfc822Name: contact email
     - otherName (id-at-telephoneNumber OID 2.5.4.20): contact phone
+
+    domain_uri is carried as a dNSName (host only — no scheme/port/path).
+    instance_uri is carried as a uniformResourceIdentifier, which preserves
+    the port and therefore distinguishes instances co-hosted on one domain.
 
     Entitlement OIDs (ETSI TS 119 475) go in qcStatements, NOT in SAN.
     """
     san_entries: list[x509.GeneralName] = []
 
-    # Entity URI (primary identifier in the registry)
-    if entity.registry_uri:
-        san_entries.append(x509.UniformResourceIdentifier(entity.registry_uri))
+    # Domain/host as dNSName. A dNSName carries only the hostname, so parse it
+    # out of domain_uri (which may be a full URL); the port/path are dropped
+    # here on purpose and preserved by instance_uri below.
+    if entity.domain_uri:
+        host = domain_uri_host(entity.domain_uri)
+        if host:
+            san_entries.append(x509.DNSName(host))
+
+    # Full per-instance endpoint as a uniformResourceIdentifier. This is the
+    # entity's own service URL incl. port, and uniquely locates this instance
+    # among others sharing the same domain. (Replaces registry_uri here, which
+    # is the Registrar's national registry API URL, not the entity's endpoint.)
+    if entity.instance_uri:
+        san_entries.append(x509.UniformResourceIdentifier(entity.instance_uri))
 
     # Support/contact URIs
     for support_uri in entity.support_uris.all():
@@ -361,16 +460,164 @@ def build_san_from_entity(entity: RegisteredEntity) -> list[x509.GeneralName]:
     return san_entries
 
 
+def requires_qualified_policy(entity: RegisteredEntity) -> bool:
+    """
+    Check if entity has entitlements requiring a Qualified Certificate Policy.
+
+    QEAA providers and qualified certificate providers need QCP-* policies.
+    """
+    entity_entitlements = {e.entitlement_type for e in entity.entitlements.all()}
+    return bool(entity_entitlements & QUALIFIED_ENTITLEMENTS)
+
+
 def get_policy_oid(entity: RegisteredEntity) -> str:
     """
-    Determine certificate policy OID based on entity type.
+    Determine certificate policy OID based on entity type and entitlements.
 
-    Natural person → NCP-n-eudiwrp
-    Legal person → NCP-l-eudiwrp
+    Qualified entitlements (QEAA, etc.):
+        Natural person → QCP-n-eudiwrp
+        Legal person → QCP-l-eudiwrp
+
+    Non-qualified (Service Provider, PID Provider, etc.):
+        Natural person → NCP-n-eudiwrp
+        Legal person → NCP-l-eudiwrp
     """
-    if entity.legal_entity.entity_type == "natural_person":
-        return POLICY_OIDS["NCP-n-eudiwrp"]
-    return POLICY_OIDS["NCP-l-eudiwrp"]
+    is_qualified = requires_qualified_policy(entity)
+    is_natural = entity.legal_entity.entity_type == "natural_person"
+
+    if is_qualified:
+        return POLICY_OIDS["QCP-n-eudiwrp" if is_natural else "QCP-l-eudiwrp"]
+    return POLICY_OIDS["NCP-n-eudiwrp" if is_natural else "NCP-l-eudiwrp"]
+
+
+def build_certificate_policies_extension(
+    policy_oid: str, cps_uri: str | None = None
+) -> x509.Extension:
+    """
+    Build the Certificate Policies extension (ETSI TS 119 411-8 GEN-6.6.1-06).
+
+    When a CPS URI is provided it is added as a policy qualifier. cryptography's
+    PolicyInformation accepts a plain str qualifier and interprets it as a CPS
+    URI, so no PolicyQualifierInfo wrapper is needed.
+    """
+    policy_qualifiers = [cps_uri] if cps_uri else None
+    return x509.Extension(
+        oid=x509.ExtensionOID.CERTIFICATE_POLICIES,
+        critical=False,
+        value=x509.CertificatePolicies(
+            [
+                x509.PolicyInformation(
+                    x509.ObjectIdentifier(policy_oid), policy_qualifiers
+                ),
+            ]
+        ),
+    )
+
+
+def build_revocation_extensions(base_url: str, ca_serial: str) -> list[x509.Extension]:
+    """
+    Build the AIA and CRL Distribution Points extensions for an issued certificate.
+
+    django-ca normally injects these from the CA's stored configuration, but that
+    config is frozen at CA-creation time with a hardcoded ``http://`` scheme and a
+    path that omits the reverse-proxy prefix (because ``init_ca`` runs as a
+    management command with no WSGI script name). Both make the baked-in URLs
+    unreachable. We instead build them here from CA_PUBLIC_BASE_URL so every
+    issued certificate points at the endpoints relying parties can actually reach.
+
+    Passing these explicitly to ``create_cert`` overrides the CA defaults:
+    django-ca keeps a caller-supplied CRL Distribution Points extension verbatim,
+    and merges AIA such that a caller-supplied OCSP + CA Issuers pair wins outright
+    (see django_ca.profiles._add_crl_distribution_points /
+    _update_authority_information_access).
+
+    The path segments mirror django_ca.urls: ``ca/issuer/<serial>.der``,
+    ``ca/ocsp/<serial>/cert/`` and ``ca/crl/<serial>/``. base_url carries the
+    scheme, host and any proxy prefix (e.g. ``https://host/api``); ca_serial is
+    the uppercase hex serial as stored by django-ca.
+    """
+    base = base_url.rstrip("/")
+    issuer_url = f"{base}/ca/issuer/{ca_serial}.der"
+    ocsp_url = f"{base}/ca/ocsp/{ca_serial}/cert/"
+    crl_url = f"{base}/ca/crl/{ca_serial}/"
+
+    aia = x509.Extension(
+        oid=x509.ExtensionOID.AUTHORITY_INFORMATION_ACCESS,
+        critical=False,
+        value=x509.AuthorityInformationAccess(
+            [
+                x509.AccessDescription(
+                    AuthorityInformationAccessOID.OCSP,
+                    x509.UniformResourceIdentifier(ocsp_url),
+                ),
+                x509.AccessDescription(
+                    AuthorityInformationAccessOID.CA_ISSUERS,
+                    x509.UniformResourceIdentifier(issuer_url),
+                ),
+            ]
+        ),
+    )
+    crl_dp = x509.Extension(
+        oid=x509.ExtensionOID.CRL_DISTRIBUTION_POINTS,
+        critical=False,
+        value=x509.CRLDistributionPoints(
+            [
+                x509.DistributionPoint(
+                    full_name=[x509.UniformResourceIdentifier(crl_url)],
+                    relative_name=None,
+                    reasons=None,
+                    crl_issuer=None,
+                )
+            ]
+        ),
+    )
+    return [aia, crl_dp]
+
+
+def build_qc_statements_value(
+    entity: RegisteredEntity, is_qualified: bool
+) -> bytes | None:
+    """
+    Build the DER value of the qcStatements extension (OID 1.3.6.1.5.5.7.1.3).
+
+    qcStatements is a single ``SEQUENCE OF QCStatement`` carrying, in order:
+
+    - ``QcCompliance`` + ``QcType`` (qualified certificates only,
+      ETSI EN 319 412-5).
+    - One entitlement statement per registered entitlement
+      (ETSI TS 119 475), each encoded as ``SEQUENCE { statementId OID }``.
+      Entitlements are encoded for every access-cert type, including
+      non-qualified ones (e.g. Service_Provider).
+
+    Returns the DER-encoded extension value, or ``None`` when the entity has
+    neither qualified statements nor any recognised entitlement (so the
+    extension is omitted entirely).
+    """
+    qc_der = b""
+
+    # QcCompliance + QcType for qualified certificates (EN 319 412-5).
+    if is_qualified:
+        qc_compliance_oid = _der_tlv(0x06, _encode_oid(QC_COMPLIANCE_OID))
+        qc_der += _der_tlv(0x30, qc_compliance_oid)
+
+        # QcType: eSign (natural persons) / eSeal (legal persons).
+        # SEQUENCE { OID id-etsi-qcs-QcType, SEQUENCE { OID <qct> } }
+        is_natural = entity.legal_entity.entity_type == "natural_person"
+        qct_oid = QC_TYPE_ESIGN_OID if is_natural else QC_TYPE_ESEAL_OID
+        qc_type_oid = _der_tlv(0x06, _encode_oid(QC_TYPE_OID))
+        qc_type_qct = _der_tlv(0x06, _encode_oid(qct_oid))
+        qc_type_value = _der_tlv(0x30, qc_type_qct)  # SEQUENCE { qct OID }
+        qc_der += _der_tlv(0x30, qc_type_oid + qc_type_value)
+
+    # Entitlement OIDs (TS 119 475) — one QCStatement per entitlement. Uses the
+    # same entitlement set as requires_qualified_policy() so the qualified flag
+    # and the encoded entitlements stay consistent.
+    for entitlement in entity.entitlements.all():
+        oid_str = ENTITLEMENT_OIDS.get(entitlement.entitlement_type)
+        if oid_str:
+            qc_der += _der_tlv(0x30, _der_tlv(0x06, _encode_oid(oid_str)))
+
+    return _der_tlv(0x30, qc_der) if qc_der else None  # outer SEQUENCE
 
 
 def issue_access_certificate(
@@ -426,54 +673,50 @@ def issue_access_certificate(
             http_status=400,
         )
 
+    # 4. Validate CSR key algorithm (EUDI Wallet ES256 profile → EC P-256)
+    key_error = validate_csr_key_algorithm(csr)
+    if key_error:
+        raise CertificateIssuanceError(key_error, http_status=400)
+
     # 5. Build certificate extensions from registry data
     # Note: Subject DN comes from the CSR - we only add authoritative extensions
     san_entries = build_san_from_entity(entity)
     policy_oid = get_policy_oid(entity)
+    is_qualified = requires_qualified_policy(entity)
 
-    # Build qcStatements value: sequence of entitlement OIDs per ETSI TS 119 475
-    # Each entitlement is encoded as a qcStatement: SEQUENCE { statementId OID }
-    # OID for id-etsi-qcs (1.3.6.1.5.5.7.1) — qcStatements extension OID
+    # qcStatements (ETSI EN 319 412-5 + ETSI TS 119 475): qualified statements
+    # for qualified certs plus one entitlement statement per registered
+    # entitlement. See build_qc_statements_value() for the encoding.
     QC_STATEMENTS_OID = x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3")
-    entitlement_oids = []
-    for e in entity.entitlements.all():
-        if e.entitlement_type not in ENTITLEMENT_OIDS:
-            raise CertificateIssuanceError(
-                f"No qcStatement OID defined for entitlement"
-                f" type '{e.entitlement_type}'.",
-                http_status=500,
-            )
-        entitlement_oids.append(ENTITLEMENT_OIDS[e.entitlement_type])
-
-    # Encode qcStatements as raw DER: SEQUENCE of SEQUENCE { OID }
-    qc_der = b""
-    for oid_str in entitlement_oids:
-        oid_tlv = _der_tlv(0x06, _encode_oid(oid_str))
-        qc_der += _der_tlv(0x30, oid_tlv)  # SEQUENCE { OID }
-    qc_value = _der_tlv(0x30, qc_der)  # outer SEQUENCE
+    qc_value = build_qc_statements_value(entity, is_qualified)
 
     # 6. Build extensions as cryptography x509.Extension objects.
     # BasicConstraints and KeyUsage are handled by the eudiwrp profile — only
     # pass extensions that carry per-entity data.
+
+    # Certificate Policies with optional CPS URI (ETSI TS 119 411-8 GEN-6.6.1-06)
+    cps_uri = getattr(settings, "CA_CPS_URI", None)
+
     extensions = [
         x509.Extension(
             oid=x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME,
             critical=False,
             value=x509.SubjectAlternativeName(san_entries),
         ),
-        x509.Extension(
-            oid=x509.ExtensionOID.CERTIFICATE_POLICIES,
-            critical=False,
-            value=x509.CertificatePolicies(
-                [
-                    x509.PolicyInformation(x509.ObjectIdentifier(policy_oid), None),
-                ]
-            ),
-        ),
+        build_certificate_policies_extension(policy_oid, cps_uri),
     ]
 
-    # Add qcStatements only if entity has entitlements
-    if qc_value and entitlement_oids:
+    # AIA + CRL Distribution Points built from CA_PUBLIC_BASE_URL rather than the
+    # CA's stored (http://, prefix-less) defaults, so the revocation/issuer URLs
+    # in the leaf are actually reachable. These override the CA defaults at
+    # signing time (see build_revocation_extensions).
+    ca_public_base_url = getattr(settings, "CA_PUBLIC_BASE_URL", None)
+    if ca_public_base_url:
+        extensions.extend(build_revocation_extensions(ca_public_base_url, ca.serial))
+
+    # Add qcStatements whenever there is content: entitlement OIDs (any
+    # access-cert type) and/or QcCompliance+QcType (qualified certificates).
+    if qc_value:
         extensions.append(
             x509.Extension(
                 oid=QC_STATEMENTS_OID,
@@ -501,6 +744,10 @@ def issue_access_certificate(
                 csr=csr,
                 subject=csr.subject,
                 not_after=not_after,
+                # WP4 access certificate policy mandates ecdsa-with-SHA384.
+                # The CA's stored default may differ (e.g. SHA-512), so pin it
+                # per issuance.
+                algorithm=hashes.SHA384(),
                 extensions=extensions,
                 profile=get_profile(profile_name),
                 allow_unrecognized_extensions=True,

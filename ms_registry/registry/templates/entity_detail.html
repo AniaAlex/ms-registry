@@ -34,6 +34,10 @@
       <dt>Domain URI</dt>
       <dd><a href="{{ entity.domain_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.domain_uri }}</a></dd>
       {% endif %}
+      {% if entity.instance_uri %}
+      <dt>Instance URI</dt>
+      <dd><a href="{{ entity.instance_uri }}" target="_blank" rel="noopener noreferrer">{{ entity.instance_uri }}</a></dd>
+      {% endif %}
       <dt>Supervisory Authority</dt>
       <dd>{{ entity.supervisory_authority }}</dd>
       <dt>Registry URI</dt>
@@ -51,7 +55,7 @@
         {% if has_valid_cert %}
           <a href="{% url 'certificates:detail-page' entity.id %}" class="btn btn-sm btn-secondary">Show Certificate</a>
         {% else %}
-          <a href="{% url 'certificates:upload-page' entity.id %}" class="btn btn-sm btn-primary">Upload Certificate</a>
+          <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
         {% endif %}
       </dd>
     </dl>

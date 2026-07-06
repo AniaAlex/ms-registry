@@ -35,6 +35,10 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_BROKER_URL = "memory://"
 CELERY_BACKEND = "memory"
 
+# Run django-ca background tasks (CRL/OCSP key generation) synchronously in
+# tests so CA creation doesn't try to reach a Celery broker.
+CA_USE_CELERY = False
+
 SILENCED_SYSTEM_CHECKS = [
     "debug_toolbar.W001",  # Debug toolbar excluded in tests
 ]

@@ -190,6 +190,14 @@ def generate_certificate_from_cnf(cnf: dict) -> tuple[str, str]:
             ),
             critical=True,
         )
+        # The access cert authenticates the relying party — CIR 2025/848 Art. 2 /
+        # TS 119 411-8 Intro.
+        # Authentication = the digitalSignature bit — RFC 5280 §4.2.1.3
+        # ("entity authentication service").
+        .add_extension(
+            x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]),
+            critical=False,
+        )
         .add_extension(
             x509.CertificatePolicies(
                 [x509.PolicyInformation(policy_oid, policy_qualifiers=None)]

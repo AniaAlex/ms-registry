@@ -83,6 +83,10 @@ def test_form_post_register_entity_renders_success_template(auth_client):
         "supervisory_authority": str(authority.id),
         "entity_role": "relying_party",
         "trade_name": "Test Service",
+        "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": "https://support.example.com",
+        "entitlements": "Service_Provider",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
@@ -100,6 +104,9 @@ def test_form_post_domain_uri_is_saved(auth_client):
         "supervisory_authority": str(authority.id),
         "entity_role": "relying_party",
         "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": "https://support.example.com",
+        "entitlements": "Service_Provider",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
@@ -108,7 +115,7 @@ def test_form_post_domain_uri_is_saved(auth_client):
 
 
 @pytest.mark.django_db
-def test_form_post_domain_uri_optional(auth_client):
+def test_form_post_domain_uri_required(auth_client):
     legal_entity = LegalEntityFactory()
     authority = SupervisoryAuthorityFactory()
     url = reverse("registry:entity-list-create")
@@ -116,11 +123,13 @@ def test_form_post_domain_uri_optional(auth_client):
         "legal_entity": str(legal_entity.id),
         "supervisory_authority": str(authority.id),
         "entity_role": "relying_party",
+        "support_uris": "https://support.example.com",
+        "entitlements": "Service_Provider",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
-    assert response.status_code == status.HTTP_201_CREATED
-    entity = RegisteredEntity.objects.get()
-    assert entity.domain_uri is None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "domain_uri" in response.context["errors"]
+    assert RegisteredEntity.objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -173,9 +182,16 @@ def test_form_post_inline_legal_entity_creation(auth_client):
         "le_entity_type": "legal_person",
         "le_legal_name": "NewCorp",
         "le_country_code": "SE",
+        "le_email": "contact@newcorp.se",
+        "le_identifier_type": "LEI",
+        "le_identifier_value": "5493001KSF2Z4PTCYX31",
         "supervisory_authority": str(authority.id),
         "entity_role": "relying_party",
         "trade_name": "New Service",
+        "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": "https://support.example.com",
+        "entitlements": "Service_Provider",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
@@ -213,6 +229,10 @@ def test_form_post_inline_supervisory_authority_creation(auth_client):
         "sa_email": "dpa@de.de",
         "entity_role": "relying_party",
         "trade_name": "New Service",
+        "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": "https://support.example.com",
+        "entitlements": "Service_Provider",
     }
     response = auth_client.post(url, data, HTTP_ACCEPT="text/html")
     assert response.status_code == status.HTTP_201_CREATED
