@@ -67,8 +67,8 @@ _LOTE_TYPE_PUBEAA = "http://uri.etsi.org/19602/LoTEType/EUPubEAAProvidersList"
 _SVC_TYPE_PID = "http://uri.etsi.org/19602/SvcType/PIDProvider"
 _SVC_TYPE_PUBEAA = "http://uri.etsi.org/19602/SvcType/PubEAAProvider"
 
-_STATUS_NOTIFIED = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/notified"
-_STATUS_WITHDRAWN = "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/withdrawn"
+_STATUS_NOTIFIED = "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/notified"
+_STATUS_WITHDRAWN = "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/withdrawn"
 
 _NEXT_UPDATE_DAYS = 180
 
