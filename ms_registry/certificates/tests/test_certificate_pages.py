@@ -24,10 +24,15 @@ from registry.tests.factories import (
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 
-def _make_active_entity(**kwargs):
-    return RegisteredEntityFactory(
-        registration_status=RegistrationStatus.ACTIVE, **kwargs
-    )
+def _make_entity(operator, **kwargs):
+    """Create an entity operated by ``operator`` (active by default).
+
+    Certificate pages are scoped to an entity's operators, so the authenticated
+    participant must be an operator to reach the page logic.
+    """
+    kwargs.setdefault("registration_status", RegistrationStatus.ACTIVE)
+    kwargs.setdefault("operators", [operator])
+    return RegisteredEntityFactory(**kwargs)
 
 
 def _issue_page_url(entity_id):
@@ -67,7 +72,7 @@ def _make_cert_record(entity, **kwargs):
 
 @pytest.mark.django_db
 def test_issue_page_get_returns_200(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     response = authenticated_api_client.get(_issue_page_url(entity.id))
     assert response.status_code == 200
     assert b"Generate Access Certificate" in response.content
@@ -75,7 +80,7 @@ def test_issue_page_get_returns_200(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_page_get_shows_entity_name(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     response = authenticated_api_client.get(_issue_page_url(entity.id))
     assert entity.display_name.encode() in response.content
 
@@ -91,7 +96,7 @@ def test_issue_page_post_success_shows_cert_details(authenticated_api_client):
     # The page reuses the JSON issue endpoint's issuance path; mock the CA
     # signing (covered by test_issue / test_ca_integration) and assert the
     # page renders the issued certificate.
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     now = datetime.now(timezone.utc)
     cert_record = EntityAccessCertificate(
@@ -121,7 +126,7 @@ def test_issue_page_post_success_shows_cert_details(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_page_post_shows_validation_errors(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     response = authenticated_api_client.post(
         _issue_page_url(entity.id),
@@ -133,7 +138,10 @@ def test_issue_page_post_shows_validation_errors(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_page_post_409_for_pending_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.PENDING,
+    )
     response = authenticated_api_client.post(
         _issue_page_url(entity.id),
         {"csr_pem": _make_csr_pem()},
@@ -169,7 +177,7 @@ def _self_signed_pem() -> str:
 
 @pytest.mark.django_db
 def test_detail_page_returns_200_for_valid_cert(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     _make_cert_record(entity)
     response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
@@ -179,7 +187,7 @@ def test_detail_page_returns_200_for_valid_cert(authenticated_api_client):
 @pytest.mark.django_db
 def test_detail_page_decodes_full_certificate(authenticated_api_client):
     # When a PEM is stored, the page decodes and shows all fields/extensions.
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     _make_cert_record(entity, certificate_pem=_self_signed_pem())
     response = authenticated_api_client.get(_detail_page_url(entity.id))
     body = response.content
@@ -199,7 +207,7 @@ def test_detail_page_returns_404_for_unknown_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_detail_page_shows_no_cert_message_when_none_stored(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     response = authenticated_api_client.get(_detail_page_url(entity.id))
     assert response.status_code == 200
     assert b"No active certificate found" in response.content
@@ -211,7 +219,7 @@ def test_detail_page_excludes_not_yet_valid_cert(authenticated_api_client):
     A certificate whose not_before is in the future must not be shown —
     the query filters not_before__lte=now in addition to not_after__gt=now.
     """
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     future = datetime.now(tz=timezone.utc) + timedelta(days=1)
     _make_cert_record(entity, not_before=future)
     response = authenticated_api_client.get(_detail_page_url(entity.id))
@@ -221,7 +229,7 @@ def test_detail_page_excludes_not_yet_valid_cert(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_detail_page_excludes_expired_cert(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     past = datetime.now(tz=timezone.utc) - timedelta(days=1)
     _make_cert_record(
         entity,
@@ -235,7 +243,7 @@ def test_detail_page_excludes_expired_cert(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_detail_page_excludes_revoked_cert(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     _make_cert_record(
         entity,
         revoked_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),

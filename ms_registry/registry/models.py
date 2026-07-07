@@ -93,10 +93,14 @@ class RegisteredEntity(BaseModel):
     legal_entity = models.ForeignKey(
         LegalEntity, on_delete=models.CASCADE, related_name="registered_entities"
     )
-    participant = models.ForeignKey(
+    operators = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
         related_name="registered_entities",
+        help_text=(
+            "Operators responsible for this entity. Never empty: the "
+            "registering user is added on creation, and additional operators "
+            "may be added afterwards."
+        ),
     )
 
     # Entity role in the ecosystem (ARF Topic 27)

@@ -1,5 +1,11 @@
 from certificates.models import EntityAccessCertificate
-from core.models import CredentialFormat, EntitlementType, EntityType, IdentifierType
+from core.models import (
+    CredentialFormat,
+    EntitlementType,
+    EntityType,
+    IdentifierType,
+    RegistrationStatus,
+)
 from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -20,7 +26,8 @@ from . import models, serializers
 
 class HomeView(JWTLoginRequiredMixin, TemplateView):
     """
-    Home page view that lists all registered entities.
+    Home page view that lists the registered entities the logged-in operator
+    is responsible for (i.e. the entities they are an operator of).
     """
 
     template_name = "home.html"
@@ -28,7 +35,7 @@ class HomeView(JWTLoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["entities"] = (
-            models.RegisteredEntity.objects.select_related(
+            self.request.user.registered_entities.select_related(
                 "legal_entity", "supervisory_authority"
             )
             .annotate(
@@ -58,10 +65,13 @@ class EntityDetailView(JWTLoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Scoped to the requesting operator: the detail page exposes an entity's
+        # full record and is the UI entry point for managing it, so only its
+        # operators may view it. 404 (not 403) avoids leaking entity IDs.
         entity = get_object_or_404(
-            models.RegisteredEntity.objects.select_related(
-                "legal_entity", "supervisory_authority"
-            ).prefetch_related(
+            models.RegisteredEntity.objects.filter(operators=self.request.user)
+            .select_related("legal_entity", "supervisory_authority")
+            .prefetch_related(
                 "entitlements",
                 "support_uris",
             ),
@@ -315,12 +325,18 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
         # pointing to this entity's record in the national registry API.
         # Alternatively, the Registrar can update registry_uri in a second step
         # via PATCH /registry/entities/<uuid>/ if a custom URI is required.
-        entity = serializer.save(participant=self.request.user)
+        entity = serializer.save()
+        # The registering user is always the first operator, so the
+        # operators M2M is never empty.
+        entity.operators.add(self.request.user)
         registry_uri = self.request.build_absolute_uri(
             reverse("registry:wrp-detail", kwargs={"pk": entity.pk})
         )
         entity.registry_uri = registry_uri
-        entity.save(update_fields=["registry_uri"])
+        # Entities are activated immediately on registration for now. Once the
+        # notification/approval flow is added, gate activation on that step.
+        entity.registration_status = RegistrationStatus.ACTIVE
+        entity.save(update_fields=["registry_uri", "registration_status"])
 
 
 class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -335,6 +351,13 @@ class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = serializers.RegisteredEntitySerializer
     queryset = models.RegisteredEntity.objects.all()
+
+    def get_queryset(self):
+        # Scope to entities the requesting participant operates: retrieving,
+        # updating or deleting a registered entity must be restricted to its
+        # operators. Non-operators get 404 (via get_object) rather than 403 so
+        # entity IDs are not enumerable.
+        return models.RegisteredEntity.objects.filter(operators=self.request.user)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
@@ -558,7 +581,14 @@ class WalletRelyingPartyView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        registered_entity = serializer.save(participant=request.user)
+        registered_entity = serializer.save()
+        # The registering user is always the first operator, so the
+        # operators M2M is never empty.
+        registered_entity.operators.add(request.user)
+        # Entities are activated immediately on registration for now. Once the
+        # notification/approval flow is added, gate activation on that step.
+        registered_entity.registration_status = RegistrationStatus.ACTIVE
+        registered_entity.save(update_fields=["registration_status"])
 
         return Response(
             serializer.to_representation(registered_entity),
@@ -584,7 +614,10 @@ class WalletRelyingPartyView(generics.GenericAPIView):
             )
 
         try:
-            instance = self.get_queryset().get(id=wrp_id)
+            # Scoped to the requesting operator: only an entity's operators may
+            # update it. GET (list) is intentionally unscoped registry lookup;
+            # mutations are not.
+            instance = self.get_queryset().filter(operators=request.user).get(id=wrp_id)
         except models.RegisteredEntity.DoesNotExist:
             return Response(
                 {"error": f"WalletRelyingParty with id '{wrp_id}' not found"},
@@ -620,7 +653,9 @@ class WalletRelyingPartyView(generics.GenericAPIView):
             )
 
         try:
-            instance = self.get_queryset().get(id=wrp_id)
+            # Scoped to the requesting operator: only an entity's operators may
+            # delete it (see put()).
+            instance = self.get_queryset().filter(operators=request.user).get(id=wrp_id)
         except models.RegisteredEntity.DoesNotExist:
             return Response(
                 {"error": f"WalletRelyingParty with id '{wrp_id}' not found"},

@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 from django.urls import reverse
 from django.utils import timezone
+from participant.tests.factories import ParticipantFactory
 from registry.tests.factories import EntityEntitlementFactory, RegisteredEntityFactory
 from rest_framework import status
 
@@ -31,10 +32,17 @@ def _issue_url(entity_id):
     return reverse("certificates:issue", args=[entity_id])
 
 
-def _make_active_entity(**kwargs):
-    return RegisteredEntityFactory(
-        registration_status=RegistrationStatus.ACTIVE, **kwargs
-    )
+def _make_entity(operator=None, **kwargs):
+    """Create an entity (active by default).
+
+    Pass ``operator`` to make that participant an operator — required for tests
+    that hit the issuance endpoint, since it is scoped to an entity's operators.
+    Omit it for tests that exercise model/signal behaviour directly.
+    """
+    kwargs.setdefault("registration_status", RegistrationStatus.ACTIVE)
+    if operator is not None:
+        kwargs.setdefault("operators", [operator])
+    return RegisteredEntityFactory(**kwargs)
 
 
 def _make_csr_pem() -> str:
@@ -89,7 +97,7 @@ def _patch_issue(return_value=None, side_effect=None):
 
 @pytest.mark.django_db
 def test_issue_returns_201_for_valid_csr(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
@@ -101,7 +109,7 @@ def test_issue_returns_201_for_valid_csr(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_response_contains_expected_fields(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
@@ -124,7 +132,7 @@ def test_issue_response_contains_expected_fields(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_response_values_match_cert_record(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     cert_record = _make_cert_record(entity)
 
@@ -153,6 +161,24 @@ def test_issue_returns_404_for_unknown_entity(authenticated_api_client):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+@pytest.mark.django_db
+def test_issue_returns_404_for_entity_not_operated_by_requester(
+    authenticated_api_client,
+):
+    """A participant must not obtain an access certificate for an entity they do
+    not operate — otherwise they could impersonate it with their own key. The
+    subject DN is public registry data, so the operator scope is the only guard.
+    Returns 404 (not 403) so entity IDs are not enumerable.
+    """
+    other_operator = ParticipantFactory()
+    entity = _make_entity(other_operator)
+    EntityEntitlementFactory(registered_entity=entity)
+
+    response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 # ---------------------------------------------------------------------------
 # CSR validation errors  (serializer rejects before CA is called)
 # ---------------------------------------------------------------------------
@@ -160,7 +186,7 @@ def test_issue_returns_404_for_unknown_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_returns_400_when_csr_pem_missing(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
 
     response = authenticated_api_client.post(_issue_url(entity.id), {}, format="json")
@@ -170,7 +196,7 @@ def test_issue_returns_400_when_csr_pem_missing(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_returns_400_for_non_pem_input(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
 
     response = _post_issue(authenticated_api_client, entity.id, "not-a-csr")
@@ -181,7 +207,7 @@ def test_issue_returns_400_for_non_pem_input(authenticated_api_client):
 @pytest.mark.django_db
 def test_issue_returns_400_for_certificate_pem_instead_of_csr(authenticated_api_client):
     """Submitting a certificate PEM where a CSR is expected must be rejected."""
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     # A PEM block with CERTIFICATE header is not a valid CSR
     fake_cert_pem = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
@@ -197,7 +223,10 @@ def test_issue_returns_400_for_certificate_pem_instead_of_csr(authenticated_api_
 
 @pytest.mark.django_db
 def test_issue_returns_409_for_pending_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.PENDING,
+    )
     EntityEntitlementFactory(registered_entity=entity)
 
     response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
@@ -207,7 +236,10 @@ def test_issue_returns_409_for_pending_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_returns_409_for_suspended_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.SUSPENDED)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.SUSPENDED,
+    )
     EntityEntitlementFactory(registered_entity=entity)
 
     response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
@@ -217,7 +249,7 @@ def test_issue_returns_409_for_suspended_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_returns_400_for_entity_without_entitlements(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     # no entitlements attached
 
     response = _post_issue(authenticated_api_client, entity.id, _make_csr_pem())
@@ -232,7 +264,7 @@ def test_issue_returns_400_for_entity_without_entitlements(authenticated_api_cli
 
 @pytest.mark.django_db
 def test_issue_returns_500_on_ca_signing_failure(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
 
     with _patch_issue(
@@ -245,7 +277,7 @@ def test_issue_returns_500_on_ca_signing_failure(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_issue_returns_500_when_no_ca_configured(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
 
     with _patch_issue(side_effect=CertificateIssuanceError("No usable CA found.")):
@@ -260,7 +292,7 @@ def test_issue_returns_409_on_race_condition_entity_inactive(authenticated_api_c
     If the entity becomes inactive between serializer validation and CA call
     (race condition), CertificateIssuanceError with http_status=409 is returned.
     """
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
 
     with _patch_issue(
@@ -274,7 +306,7 @@ def test_issue_returns_409_on_race_condition_entity_inactive(authenticated_api_c
 @pytest.mark.django_db
 def test_issue_4xx_error_detail_is_shown(authenticated_api_client):
     """Client errors (4xx) are validation feedback and shown verbatim."""
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     msg = "CSR subject validation failed: Country mismatch."
 
@@ -289,7 +321,7 @@ def test_issue_4xx_error_detail_is_shown(authenticated_api_client):
 def test_issue_5xx_error_detail_is_masked(authenticated_api_client):
     """Server errors (5xx) may carry internal detail, so the user gets a
     generic message and the raw error is not leaked."""
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     EntityEntitlementFactory(registered_entity=entity)
     internal = "Certificate signing failed: django_ca KeyBackend traceback xyz"
 
@@ -311,7 +343,7 @@ def test_issue_5xx_error_detail_is_masked(authenticated_api_client):
 
 @pytest.mark.django_db(transaction=True)
 def test_issued_cert_revoked_when_entity_suspended():
-    entity = _make_active_entity()
+    entity = _make_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert = _make_cert_record(entity)
 
@@ -325,7 +357,7 @@ def test_issued_cert_revoked_when_entity_suspended():
 
 @pytest.mark.django_db(transaction=True)
 def test_issued_cert_revoked_when_entity_revoked():
-    entity = _make_active_entity()
+    entity = _make_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert = _make_cert_record(entity)
 
@@ -339,7 +371,7 @@ def test_issued_cert_revoked_when_entity_revoked():
 
 @pytest.mark.django_db(transaction=True)
 def test_cert_not_revoked_when_entity_remains_active():
-    entity = _make_active_entity()
+    entity = _make_entity()
     EntityEntitlementFactory(registered_entity=entity)
     cert = _make_cert_record(entity)
 

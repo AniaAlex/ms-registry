@@ -133,10 +133,15 @@ def test_form_post_domain_uri_required(auth_client):
 
 
 @pytest.mark.django_db
-def test_domain_uri_displayed_in_entity_detail(auth_client):
+def test_domain_uri_displayed_in_entity_detail(auth_client, authenticated_participant):
     from registry.tests.factories import RegisteredEntityFactory
 
-    entity = RegisteredEntityFactory(domain_uri="https://service.example.com")
+    # The detail page is scoped to operators, so auth_client's participant must
+    # operate the entity.
+    entity = RegisteredEntityFactory(
+        domain_uri="https://service.example.com",
+        operators=[authenticated_participant],
+    )
     url = reverse("registry:entity-detail", args=[entity.id])
     response = auth_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -144,10 +149,12 @@ def test_domain_uri_displayed_in_entity_detail(auth_client):
 
 
 @pytest.mark.django_db
-def test_domain_uri_not_displayed_when_absent(auth_client):
+def test_domain_uri_not_displayed_when_absent(auth_client, authenticated_participant):
     from registry.tests.factories import RegisteredEntityFactory
 
-    entity = RegisteredEntityFactory(domain_uri=None)
+    entity = RegisteredEntityFactory(
+        domain_uri=None, operators=[authenticated_participant]
+    )
     url = reverse("registry:entity-detail", args=[entity.id])
     response = auth_client.get(url)
     assert response.status_code == status.HTTP_200_OK

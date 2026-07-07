@@ -113,8 +113,12 @@ class CnfView(APIView):
     # TODO: reconsider the endpoint, probably serializer lookup
     def get(self, request, entity_id, *args, **kwargs):
         try:
+            # Scoped to the requesting operator: the cnf JWT is the authoritative
+            # input the CA trusts to build the access certificate, so only an
+            # entity's own operators may request it.
             entity = (
-                RegisteredEntity.objects.select_related(
+                RegisteredEntity.objects.filter(operators=request.user)
+                .select_related(
                     "legal_entity__legal_person",
                     "legal_entity__natural_person",
                     "legal_entity__primary_identifier",
@@ -246,13 +250,23 @@ class CnfPageView(JWTLoginRequiredMixin, View):
 # ── helpers shared by upload views ────────────────────────────────────────────
 
 
-def _get_entity_for_upload(entity_id):
+def _get_entity_for_upload(entity_id, user):
     """
     Look up a RegisteredEntity with all relations needed for certificate
-    validation.  Returns the entity or raises RegisteredEntity.DoesNotExist.
+    validation, scoped to entities the requesting participant operates.
+
+    Certificate issuance mints an access certificate that authenticates the
+    entity, so it must be restricted to that entity's operators — otherwise any
+    authenticated participant could obtain a certificate impersonating an entity
+    they do not control (the CSR subject fields are public registry data).
+    Non-operators get RegisteredEntity.DoesNotExist (surfaced as 404) so the
+    endpoint does not leak which entity IDs exist.
+
+    Returns the entity or raises RegisteredEntity.DoesNotExist.
     """
     return (
-        RegisteredEntity.objects.select_related(
+        RegisteredEntity.objects.filter(operators=user)
+        .select_related(
             "legal_entity__legal_person",
             "legal_entity__natural_person",
             "legal_entity__primary_identifier",
@@ -331,9 +345,9 @@ class IssueCertificateView(APIView):
         },
     )
     def post(self, request, entity_id, *args, **kwargs):
-        # 1. Get entity
+        # 1. Get entity (scoped to the requesting operator)
         try:
-            entity = _get_entity_for_upload(entity_id)
+            entity = _get_entity_for_upload(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return Response(
                 {"detail": "Entity not found."},
@@ -404,7 +418,7 @@ class AccessCertificateDetailPageView(JWTLoginRequiredMixin, View):
 
     def get(self, request, entity_id):
         try:
-            entity = _get_entity_for_upload(entity_id)
+            entity = _get_entity_for_upload(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return render(
                 request,
@@ -466,7 +480,7 @@ class IssueCertificatePageView(JWTLoginRequiredMixin, View):
 
     def get(self, request, entity_id):
         try:
-            entity = _get_entity_for_upload(entity_id)
+            entity = _get_entity_for_upload(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return render(
                 request,
@@ -478,7 +492,7 @@ class IssueCertificatePageView(JWTLoginRequiredMixin, View):
 
     def post(self, request, entity_id):
         try:
-            entity = _get_entity_for_upload(entity_id)
+            entity = _get_entity_for_upload(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return render(
                 request,
@@ -606,14 +620,18 @@ class SigningCertificateListCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def _get_entity(self, entity_id):
-        return RegisteredEntity.objects.prefetch_related("entitlements").get(
-            id=entity_id
+    def _get_entity(self, entity_id, user):
+        # Scoped to the requesting operator — a signing certificate is bound to
+        # the entity, so only its operators may list or upload one.
+        return (
+            RegisteredEntity.objects.filter(operators=user)
+            .prefetch_related("entitlements")
+            .get(id=entity_id)
         )
 
-    def get(self, request, entity_id):  # noqa: ARG002
+    def get(self, request, entity_id):
         try:
-            entity = self._get_entity(entity_id)
+            entity = self._get_entity(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return Response(
                 {"detail": "Entity not found."}, status=status.HTTP_404_NOT_FOUND
@@ -627,7 +645,7 @@ class SigningCertificateListCreateView(APIView):
 
     def post(self, request, entity_id):
         try:
-            entity = self._get_entity(entity_id)
+            entity = self._get_entity(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return Response(
                 {"detail": "Entity not found."}, status=status.HTTP_404_NOT_FOUND
@@ -659,14 +677,18 @@ class SigningCertificateDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def _get_cert(self, entity_id, cert_id):
+    def _get_cert(self, entity_id, cert_id, user):
+        # Scoped to the requesting operator via the entity's operators M2M, so a
+        # participant can only retrieve or revoke certs of entities they operate.
         return EntitySigningCertificate.objects.select_related("registered_entity").get(
-            id=cert_id, registered_entity__id=entity_id
+            id=cert_id,
+            registered_entity__id=entity_id,
+            registered_entity__operators=user,
         )
 
     def get(self, request, entity_id, cert_id):
         try:
-            cert_record = self._get_cert(entity_id, cert_id)
+            cert_record = self._get_cert(entity_id, cert_id, request.user)
         except EntitySigningCertificate.DoesNotExist:
             return Response(
                 {"detail": "Certificate not found."}, status=status.HTTP_404_NOT_FOUND
@@ -676,7 +698,7 @@ class SigningCertificateDetailView(APIView):
 
     def delete(self, request, entity_id, cert_id):
         try:
-            cert_record = self._get_cert(entity_id, cert_id)
+            cert_record = self._get_cert(entity_id, cert_id, request.user)
         except EntitySigningCertificate.DoesNotExist:
             return Response(
                 {"detail": "Certificate not found."}, status=status.HTTP_404_NOT_FOUND
@@ -712,9 +734,11 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
 
     TEMPLATE = "upload_signing_certificate.html"
 
-    def _get_entity(self, entity_id):
+    def _get_entity(self, entity_id, user):
+        # Scoped to the requesting operator (see IssueCertificateView).
         return (
-            RegisteredEntity.objects.prefetch_related("entitlements")
+            RegisteredEntity.objects.filter(operators=user)
+            .prefetch_related("entitlements")
             .select_related(
                 "legal_entity__legal_person", "legal_entity__natural_person"
             )
@@ -755,7 +779,7 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
 
     def get(self, request, entity_id):
         try:
-            entity = self._get_entity(entity_id)
+            entity = self._get_entity(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return render(
                 request, self.TEMPLATE, {"error": "Entity not found."}, status=404
@@ -775,7 +799,7 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
 
     def post(self, request, entity_id):
         try:
-            entity = self._get_entity(entity_id)
+            entity = self._get_entity(entity_id, request.user)
         except RegisteredEntity.DoesNotExist:
             return render(
                 request, self.TEMPLATE, {"error": "Entity not found."}, status=404

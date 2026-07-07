@@ -41,3 +41,26 @@ def test_token_refresh_invalid_token(api_client):
     url = reverse("participant:token_refresh")
     response = api_client.post(url, {"refresh": str(refresh.access_token)[1:]})
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_logout_clears_cookies_and_redirects(api_client):
+    url = reverse("participant:logout")
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_302_FOUND
+    assert response["Location"] == reverse("participant:login")
+    # Both JWT cookies are expired/cleared.
+    assert response.cookies["access_token"].value == ""
+    assert response.cookies["access_token"]["max-age"] == 0
+    assert response.cookies["refresh_token"].value == ""
+    assert response.cookies["refresh_token"]["max-age"] == 0
+
+
+@pytest.mark.django_db
+def test_dashboard_shows_logout_button(operator_client):
+    response = operator_client.get(reverse("home"))
+    assert response.status_code == status.HTTP_200_OK
+    # The dashboard renders a logout form pointing at the logout endpoint.
+    assert reverse("participant:logout").encode() in response.content
+    assert b"Log out" in response.content
