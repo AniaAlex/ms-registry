@@ -267,6 +267,39 @@ def test_entity_detail_page_allows_operator(authenticated_api_client):
 
 
 @pytest.mark.django_db
+def test_entity_delete_by_operator(authenticated_api_client):
+    """An operator can delete their entity from the dashboard; POST redirects
+    back to home and the entity is gone."""
+    entity = RegisteredEntityFactory(operators=[authenticated_api_client.participant])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.post(url)
+    assert response.status_code == status.HTTP_302_FOUND
+    assert response["Location"] == reverse("home")
+    assert not RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_entity_delete_denied_for_non_operator(authenticated_api_client):
+    """A non-operator gets 404 (not 403, so IDs are not enumerable) and the
+    entity is left untouched."""
+    entity = RegisteredEntityFactory(operators=[ParticipantFactory()])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.post(url)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_entity_delete_rejects_get(authenticated_api_client):
+    """Deletion must be an explicit POST; GET is not allowed."""
+    entity = RegisteredEntityFactory(operators=[authenticated_api_client.participant])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.get(url)
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    assert RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
 def test_wrp_put_denied_for_non_operator(authenticated_api_client):
     entity = RegisteredEntityFactory(
         operators=[ParticipantFactory()], entity_role=EntityRole.RELYING_PARTY

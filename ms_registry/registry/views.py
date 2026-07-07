@@ -11,6 +11,7 @@ from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.views import View
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
@@ -98,6 +99,26 @@ class EntityDetailView(JWTLoginRequiredMixin, TemplateView):
         context["intended_uses"] = intended_uses
         context["credential_formats"] = CredentialFormat.choices
         return context
+
+
+class EntityDeleteView(JWTLoginRequiredMixin, View):
+    """
+    Delete a registered entity from the dashboard (HTML, POST only).
+
+    Scoped to the requesting operator: filtering on operators means a
+    non-operator's POST matches nothing and 404s (rather than 403) so entity
+    IDs are not enumerable. GET is not allowed — deletion must be an explicit
+    POST from the dashboard's delete form (with CSRF), never a bare link that a
+    crawler or prefetch could trigger.
+    """
+
+    def post(self, request, pk):
+        entity = get_object_or_404(
+            models.RegisteredEntity.objects.filter(operators=request.user),
+            pk=pk,
+        )
+        entity.delete()
+        return redirect("home")
 
 
 class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateAPIView):
