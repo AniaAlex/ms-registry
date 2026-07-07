@@ -19,13 +19,24 @@ def copy_participant_to_operators(apps, schema_editor):
 
 def restore_operator_to_participant(apps, schema_editor):
     """Reverse: pick one operator per entity to repopulate the participant FK
-    (re-created by the reverse of RemoveField below)."""
+    (re-created by the reverse of RemoveField below).
+
+    participant is a non-nullable FK, so an entity with no operators cannot be
+    reversed. The "never empty" rule is not DB-enforced (operators could be
+    cleared via admin/ORM after creation), so fail fast with a clear message
+    rather than leaving participant unset and partially applying the rollback.
+    """
     RegisteredEntity = apps.get_model("registry", "RegisteredEntity")
     for entity in RegisteredEntity.objects.all():
         first_operator = entity.operators.first()
-        if first_operator is not None:
-            entity.participant_id = first_operator.pk
-            entity.save(update_fields=["participant"])
+        if first_operator is None:
+            raise RuntimeError(
+                f"Cannot restore participant for RegisteredEntity {entity.pk}: "
+                "no operators are set. Add an operator before reversing this "
+                "migration."
+            )
+        entity.participant_id = first_operator.pk
+        entity.save(update_fields=["participant"])
 
 
 class Migration(migrations.Migration):

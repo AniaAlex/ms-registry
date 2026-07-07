@@ -6,6 +6,7 @@ from core.models import (
     IdentifierType,
     RegistrationStatus,
 )
+from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -325,18 +326,22 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
         # pointing to this entity's record in the national registry API.
         # Alternatively, the Registrar can update registry_uri in a second step
         # via PATCH /registry/entities/<uuid>/ if a custom URI is required.
-        entity = serializer.save()
-        # The registering user is always the first operator, so the
-        # operators M2M is never empty.
-        entity.operators.add(self.request.user)
-        registry_uri = self.request.build_absolute_uri(
-            reverse("registry:wrp-detail", kwargs={"pk": entity.pk})
-        )
-        entity.registry_uri = registry_uri
-        # Entities are activated immediately on registration for now. Once the
-        # notification/approval flow is added, gate activation on that step.
-        entity.registration_status = RegistrationStatus.ACTIVE
-        entity.save(update_fields=["registry_uri", "registration_status"])
+        # Atomic so a failure mid-way can never persist an entity without an
+        # operator — such an entity would be unreachable under operator scoping.
+        with transaction.atomic():
+            entity = serializer.save()
+            # The registering user is always the first operator, so the
+            # operators M2M is never empty.
+            entity.operators.add(self.request.user)
+            registry_uri = self.request.build_absolute_uri(
+                reverse("registry:wrp-detail", kwargs={"pk": entity.pk})
+            )
+            entity.registry_uri = registry_uri
+            # Entities are activated immediately on registration for now. Once
+            # the notification/approval flow is added, gate activation on that
+            # step.
+            entity.registration_status = RegistrationStatus.ACTIVE
+            entity.save(update_fields=["registry_uri", "registration_status"])
 
 
 class RegisteredEntityDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -581,14 +586,18 @@ class WalletRelyingPartyView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        registered_entity = serializer.save()
-        # The registering user is always the first operator, so the
-        # operators M2M is never empty.
-        registered_entity.operators.add(request.user)
-        # Entities are activated immediately on registration for now. Once the
-        # notification/approval flow is added, gate activation on that step.
-        registered_entity.registration_status = RegistrationStatus.ACTIVE
-        registered_entity.save(update_fields=["registration_status"])
+        # Atomic so a failure mid-way can never persist an entity without an
+        # operator — such an entity would be unreachable under operator scoping.
+        with transaction.atomic():
+            registered_entity = serializer.save()
+            # The registering user is always the first operator, so the
+            # operators M2M is never empty.
+            registered_entity.operators.add(request.user)
+            # Entities are activated immediately on registration for now. Once
+            # the notification/approval flow is added, gate activation on that
+            # step.
+            registered_entity.registration_status = RegistrationStatus.ACTIVE
+            registered_entity.save(update_fields=["registration_status"])
 
         return Response(
             serializer.to_representation(registered_entity),

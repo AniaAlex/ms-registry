@@ -209,6 +209,46 @@ def test_wrp_post_entity_is_active_after_registration():
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "bad_domain_uri",
+    [
+        "https://wrp.example.com:8008",  # port
+        "https://wrp.example.com:8008/",  # port + trailing slash
+        "https://wrp.example.com/verifier_1",  # path
+        "https://wrp.example.com/?q=1",  # query
+    ],
+)
+def test_wrp_post_domain_uri_rejects_port_or_path(bad_domain_uri):
+    """The WRP endpoint must apply the same host-only rule as the registry
+    endpoint. build_san_from_entity drops the port/path, so without this a
+    client could submit https://victim.example:8008/foo and obtain a cert for
+    victim.example.
+    """
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    url = reverse("registry:wrp")
+    data = {
+        "legal_entity_identifier": "SE5560360793",
+        "legal_entity_identifier_type": "EUID",
+        "legal_name": "WRP Test AB",
+        "country_code": "SE",
+        "domain_uri": bad_domain_uri,
+        "entitlements": ["https://uri.etsi.org/19475/Entitlement/Service_Provider"],
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority_name": "Swedish DPA",
+        "supervisory_authority_country": "SE",
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "domain_uri" in response.data["errors"]
+    # A partial write must not leave an orphan entity behind.
+    assert not RegisteredEntity.objects.exists()
+
+
+@pytest.mark.django_db
 def test_entity_detail_page_denies_non_operator(authenticated_api_client):
     """The HTML detail page must not disclose an entity a participant does not
     operate. Non-operators get 404 (not 403) so entity IDs are not enumerable.

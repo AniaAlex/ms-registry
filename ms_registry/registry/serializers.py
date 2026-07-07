@@ -16,6 +16,38 @@ from .models import (
 )
 
 
+def validate_domain_uri_host_only(value):
+    """Reject a port or path: only the host survives into the certificate.
+
+    domain_uri becomes the SAN dNSName, which per RFC 5280 is a bare
+    hostname — scheme, port, path, query and fragment are all dropped by
+    build_san_from_entity. Silently discarding them is misleading (a user who
+    enters https://example.com:8008/foo gets a cert for example.com), and worse,
+    a client could submit https://victim.example:8008/foo and obtain a cert for
+    victim.example, so reject anything beyond scheme + host. Use instance_uri
+    for the full endpoint (port/path preserved).
+
+    Returns the value unchanged if valid; raises serializers.ValidationError
+    otherwise. Shared by every serializer that accepts a domain_uri.
+    """
+    if not value:
+        return value
+    parsed = urlparse(value)
+    if parsed.port is not None:
+        raise serializers.ValidationError(
+            "Domain URI must not include a port — only the host is used in "
+            "the certificate. Put the full endpoint (with port) in "
+            "instance_uri instead."
+        )
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise serializers.ValidationError(
+            "Domain URI must not include a path, query or fragment — only "
+            "the host is used in the certificate. Put the full endpoint in "
+            "instance_uri instead."
+        )
+    return value
+
+
 class WRPQueryParameterSerializer(serializers.Serializer):
     """Query parameters for filtering WalletRelyingParty list endpoint."""
 
@@ -221,31 +253,7 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         return value
 
     def validate_domain_uri(self, value):
-        """Reject a port or path: only the host survives into the certificate.
-
-        domain_uri becomes the SAN dNSName, which per RFC 5280 is a bare
-        hostname — scheme, port, path, query and fragment are all dropped by
-        build_san_from_entity. Silently discarding them is misleading (a user
-        who enters https://example.com:8008/foo gets a cert for example.com), so
-        reject anything beyond scheme + host here. Use instance_uri for the full
-        endpoint (port/path preserved).
-        """
-        if not value:
-            return value
-        parsed = urlparse(value)
-        if parsed.port is not None:
-            raise serializers.ValidationError(
-                "Domain URI must not include a port — only the host is used in "
-                "the certificate. Put the full endpoint (with port) in "
-                "instance_uri instead."
-            )
-        if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-            raise serializers.ValidationError(
-                "Domain URI must not include a path, query or fragment — only "
-                "the host is used in the certificate. Put the full endpoint in "
-                "instance_uri instead."
-            )
-        return value
+        return validate_domain_uri_host_only(value)
 
     def validate_entitlements(self, value):
         """Validate that at least one entitlement is provided"""
@@ -511,6 +519,9 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         required=False,
         help_text="Intended use declarations per Annex B WalletRelyingParty [0..*]",
     )
+
+    def validate_domain_uri(self, value):
+        return validate_domain_uri_host_only(value)
 
     def validate(self, data):
         """Validate WalletRelyingParty data"""
