@@ -18,13 +18,15 @@ def copy_participant_to_operators(apps, schema_editor):
 
 
 def restore_operator_to_participant(apps, schema_editor):
-    """Reverse: pick one operator per entity to repopulate the participant FK
-    (re-created by the reverse of RemoveField below).
+    """Reverse: pick one operator per entity to repopulate the participant FK.
 
-    participant is a non-nullable FK, so an entity with no operators cannot be
-    reversed. The "never empty" rule is not DB-enforced (operators could be
-    cleared via admin/ORM after creation), so fail fast with a clear message
-    rather than leaving participant unset and partially applying the rollback.
+    On reverse the FK is first re-added as nullable (reverse of RemoveField
+    below), this fills it in, and the reverse of the AlterField then restores
+    NOT NULL. That final step fails if any row is still NULL, so an entity with
+    no operators cannot be reversed. The "never empty" rule is not DB-enforced
+    (operators could be cleared via admin/ORM after creation), so fail fast with
+    a clear message rather than leaving participant unset and having the NOT NULL
+    restore blow up with an opaque IntegrityError.
     """
     RegisteredEntity = apps.get_model("registry", "RegisteredEntity")
     for entity in RegisteredEntity.objects.all():
@@ -60,18 +62,37 @@ class Migration(migrations.Migration):
                 to=settings.AUTH_USER_MODEL,
             ),
         ),
-        # 2. Copy existing participant -> operators before dropping the FK.
+        # 2. Make participant nullable *before* removing it. This keeps the
+        #    rollback path working: the reverse of the RemoveField below then
+        #    re-adds participant as nullable, which succeeds on a populated
+        #    table (a non-nullable re-add would fail — existing rows have no
+        #    value). The reverse of this AlterField restores NOT NULL, after
+        #    restore_operator_to_participant has filled every row.
+        migrations.AlterField(
+            model_name="registeredentity",
+            name="participant",
+            field=models.ForeignKey(
+                null=True,
+                on_delete=models.CASCADE,
+                related_name="registered_entities",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+        # 3. Copy existing participant -> operators before dropping the FK.
+        #    On reverse this repopulates participant from operators, and must
+        #    run after the nullable re-add (step 4 reverse) but before NOT NULL
+        #    is restored (step 2 reverse) — hence its position here.
         migrations.RunPython(
             copy_participant_to_operators,
             restore_operator_to_participant,
         ),
-        # 3. Drop the now-redundant single-owner FK, freeing up the
+        # 4. Drop the now-redundant single-owner FK, freeing up the
         #    "registered_entities" reverse accessor.
         migrations.RemoveField(
             model_name="registeredentity",
             name="participant",
         ),
-        # 4. Point operators at the final related_name now the FK is gone.
+        # 5. Point operators at the final related_name now the FK is gone.
         migrations.AlterField(
             model_name="registeredentity",
             name="operators",

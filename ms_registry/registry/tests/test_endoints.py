@@ -217,6 +217,10 @@ def test_wrp_post_entity_is_active_after_registration():
         "https://wrp.example.com:99999",  # out-of-range port
         "https://wrp.example.com/verifier_1",  # path
         "https://wrp.example.com/?q=1",  # query
+        "https://user@wrp.example.com",  # userinfo
+        "https://user:pw@wrp.example.com",  # userinfo with password
+        "https://wrp.example.com/p;param",  # path parameters
+        "https://wrp.example.com;param",  # ';param' folded into the host
     ],
 )
 def test_wrp_post_domain_uri_rejects_port_or_path(bad_domain_uri):
@@ -409,6 +413,10 @@ def test_domain_uri_returned_in_response(authenticated_api_client):
         "https://service.example.com:99999",  # out-of-range port
         "https://service.example.com/verifier_1",  # path
         "https://service.example.com/?q=1",  # query
+        "https://user@service.example.com",  # userinfo
+        "https://user:pw@service.example.com",  # userinfo with password
+        "https://service.example.com/p;param",  # path parameters
+        "https://service.example.com;param",  # ';param' folded into the host
     ],
 )
 def test_domain_uri_rejects_port_or_path(authenticated_api_client, bad_domain_uri):

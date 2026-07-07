@@ -58,6 +58,17 @@ def test_logout_clears_cookies_and_redirects(api_client):
 
 
 @pytest.mark.django_db
+def test_logout_requires_csrf_token():
+    """Logout is CSRF-protected: a cross-site POST without a CSRF token is
+    rejected, so it cannot be used to forcibly log a user out."""
+    from django.test import Client
+
+    csrf_client = Client(enforce_csrf_checks=True)
+    response = csrf_client.post(reverse("participant:logout"))
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_protected_page_clears_stale_cookies_for_deleted_user(client):
     """A token can be cryptographically valid yet map to no user (deleted
     account). The protected page must redirect to login AND clear the cookies,

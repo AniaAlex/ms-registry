@@ -11,6 +11,7 @@
                 Register New Entity
             </a>
             <form method="post" action="{% url 'participant:logout' %}" class="logout-form">
+                {% csrf_token %}
                 <button type="submit" class="btn btn-secondary">Log out</button>
             </form>
         </div>

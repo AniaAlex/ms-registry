@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.views import View
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -81,16 +82,17 @@ class JWTLoginRequiredMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-class LogoutView(APIView):
+class LogoutView(View):
     """
     POST /participants/logout/
 
     Clears the JWT cookies set at login and redirects to the login page.
-    Auth is not required: clearing already-absent cookies is a harmless no-op.
-    """
 
-    authentication_classes = ()
-    permission_classes = (AllowAny,)
+    A plain Django View (not a DRF APIView) so it is covered by
+    CsrfViewMiddleware. DRF APIViews are CSRF-exempt, which would let a
+    cross-site POST forcibly log a user out; the dashboard's logout form sends
+    the CSRF token, so a legitimate logout is unaffected.
+    """
 
     def post(self, request):
         response = HttpResponseRedirect(reverse("participant:login"))
