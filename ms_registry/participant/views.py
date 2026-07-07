@@ -66,7 +66,14 @@ class JWTLoginRequiredMixin:
         token = _token_from_request(request)
         user = _user_from_token(token) if token else None
         if user is None:
-            return HttpResponseRedirect(reverse("participant:login"))
+            # Clear any stale JWT cookies. A token can be cryptographically
+            # valid yet map to no user (e.g. deleted account); LoginView.get
+            # only checks token validity, so leaving the cookie set would
+            # bounce login -> home -> login in an infinite redirect loop.
+            response = HttpResponseRedirect(reverse("participant:login"))
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+            return response
         # Attach the authenticated participant so plain Django views (which
         # otherwise see AnonymousUser from session middleware) can scope by
         # request.user. DRF views re-authenticate independently.

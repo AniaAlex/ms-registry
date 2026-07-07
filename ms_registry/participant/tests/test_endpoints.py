@@ -58,6 +58,29 @@ def test_logout_clears_cookies_and_redirects(api_client):
 
 
 @pytest.mark.django_db
+def test_protected_page_clears_stale_cookies_for_deleted_user(client):
+    """A token can be cryptographically valid yet map to no user (deleted
+    account). The protected page must redirect to login AND clear the cookies,
+    otherwise LoginView (which only checks token validity) bounces back to home
+    in an infinite loop.
+    """
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    participant.delete()
+
+    client.cookies["access_token"] = token
+    client.cookies["refresh_token"] = "stale-refresh"
+    response = client.get(reverse("home"))
+
+    assert response.status_code == status.HTTP_302_FOUND
+    assert response["Location"] == reverse("participant:login")
+    assert response.cookies["access_token"].value == ""
+    assert response.cookies["access_token"]["max-age"] == 0
+    assert response.cookies["refresh_token"].value == ""
+    assert response.cookies["refresh_token"]["max-age"] == 0
+
+
+@pytest.mark.django_db
 def test_dashboard_shows_logout_button(operator_client):
     response = operator_client.get(reverse("home"))
     assert response.status_code == status.HTTP_200_OK

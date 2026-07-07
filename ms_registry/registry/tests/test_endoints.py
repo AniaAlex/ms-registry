@@ -214,6 +214,7 @@ def test_wrp_post_entity_is_active_after_registration():
     [
         "https://wrp.example.com:8008",  # port
         "https://wrp.example.com:8008/",  # port + trailing slash
+        "https://wrp.example.com:99999",  # out-of-range port
         "https://wrp.example.com/verifier_1",  # path
         "https://wrp.example.com/?q=1",  # query
     ],
@@ -372,6 +373,7 @@ def test_domain_uri_returned_in_response(authenticated_api_client):
     [
         "https://service.example.com:8008",  # port
         "https://service.example.com:8008/",  # port + trailing slash
+        "https://service.example.com:99999",  # out-of-range port
         "https://service.example.com/verifier_1",  # path
         "https://service.example.com/?q=1",  # query
     ],

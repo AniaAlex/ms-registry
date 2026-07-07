@@ -33,7 +33,18 @@ def validate_domain_uri_host_only(value):
     if not value:
         return value
     parsed = urlparse(value)
-    if parsed.port is not None:
+    # .port raises ValueError on an out-of-range/malformed port (e.g. :99999);
+    # such a value carries a port either way, so reject it as one rather than
+    # letting the ValueError bubble up as a 500.
+    try:
+        port = parsed.port
+    except ValueError:
+        raise serializers.ValidationError(
+            "Domain URI has an invalid port. It must not include a port at all "
+            "— only the host is used in the certificate. Put the full endpoint "
+            "(with port) in instance_uri instead."
+        )
+    if port is not None:
         raise serializers.ValidationError(
             "Domain URI must not include a port — only the host is used in "
             "the certificate. Put the full endpoint (with port) in "
