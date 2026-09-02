@@ -62,6 +62,11 @@ urlpatterns = [
         EntityDetailView.as_view(),
         name="entity-detail",
     ),
+    path(
+        "entities/<uuid:pk>/delete/",
+        views.EntityDeleteView.as_view(),
+        name="entity-delete",
+    ),
     # Supervisory Authority URLs
     path(
         "supervisory-authorities/add/",

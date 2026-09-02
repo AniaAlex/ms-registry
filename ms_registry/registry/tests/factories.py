@@ -22,9 +22,9 @@ class SupervisoryAuthorityFactory(factory.django.DjangoModelFactory):
 class RegisteredEntityFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = RegisteredEntity
+        skip_postgeneration_save = True
 
     legal_entity = factory.SubFactory(LegalEntityFactory)
-    participant = factory.SubFactory(ParticipantFactory)
     entity_role = EntityRole.RELYING_PARTY
     registry_uri = factory.Sequence(
         lambda n: f"https://registry.example.com/entities/{n}"
@@ -34,6 +34,22 @@ class RegisteredEntityFactory(factory.django.DjangoModelFactory):
         lambda n: f"https://service{n}.example.com:{8000 + n}/"
     )
     supervisory_authority = factory.SubFactory(SupervisoryAuthorityFactory)
+
+    @factory.post_generation
+    def operators(self, create, extracted, **kwargs):
+        """Attach operators to the M2M.
+
+        Pass ``operators=[user, ...]`` to set specific operators; otherwise a
+        fresh Participant is created so the entity always has at least one
+        operator (mirroring the "never empty" invariant enforced on creation).
+        """
+        if not create:
+            return
+        if extracted:
+            for operator in extracted:
+                self.operators.add(operator)
+        else:
+            self.operators.add(ParticipantFactory())
 
 
 class EntityEntitlementFactory(factory.django.DjangoModelFactory):

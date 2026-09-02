@@ -5,7 +5,8 @@ Tests for Registry app endpoints.
 from unittest.mock import patch
 
 import pytest
-from core.models import EntitlementType, EntityRole
+from core.models import EntitlementType, EntityRole, RegistrationStatus
+from django.test import Client
 from django.urls import reverse
 from legal_entities.tests.factories import LegalEntityFactory
 from participant.tests.factories import ParticipantFactory
@@ -106,7 +107,29 @@ def test_registry_uri_is_set_after_create(authenticated_api_client):
 
 
 @pytest.mark.django_db
-def test_create_entity_assigns_participant_to_authenticated_user():
+def test_entity_is_active_after_registration(authenticated_api_client):
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "trade_name": "Test Service",
+        "domain_uri": "https://service.example.com",
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority": str(authority.id),
+        "entitlements": ["Service_Provider"],
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
+    assert entity.registration_status == RegistrationStatus.ACTIVE
+
+
+@pytest.mark.django_db
+def test_create_entity_adds_authenticated_user_as_first_operator():
     participant = ParticipantFactory()
     token = str(RefreshToken.for_user(participant).access_token)
     client = APIClient()
@@ -129,7 +152,206 @@ def test_create_entity_assigns_participant_to_authenticated_user():
     assert response.status_code == status.HTTP_201_CREATED
 
     entity = RegisteredEntity.objects.get(legal_entity=legal_entity)
-    assert entity.participant == participant
+    # The registering user is the sole (first) operator — never empty.
+    assert list(entity.operators.all()) == [participant]
+
+
+@pytest.mark.django_db
+def test_wrp_post_adds_authenticated_user_as_operator():
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    url = reverse("registry:wrp")
+    data = {
+        "legal_entity_identifier": "SE5560360793",
+        "legal_entity_identifier_type": "EUID",
+        "legal_name": "WRP Test AB",
+        "country_code": "SE",
+        "domain_uri": "https://wrp.example.com",
+        "entitlements": ["https://uri.etsi.org/19475/Entitlement/Service_Provider"],
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority_name": "Swedish DPA",
+        "supervisory_authority_country": "SE",
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(id=response.data["id"])
+    assert list(entity.operators.all()) == [participant]
+
+
+@pytest.mark.django_db
+def test_wrp_post_entity_is_active_after_registration():
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    url = reverse("registry:wrp")
+    data = {
+        "legal_entity_identifier": "SE5560360793",
+        "legal_entity_identifier_type": "EUID",
+        "legal_name": "WRP Test AB",
+        "country_code": "SE",
+        "domain_uri": "https://wrp.example.com",
+        "entitlements": ["https://uri.etsi.org/19475/Entitlement/Service_Provider"],
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority_name": "Swedish DPA",
+        "supervisory_authority_country": "SE",
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_201_CREATED
+
+    entity = RegisteredEntity.objects.get(id=response.data["id"])
+    assert entity.registration_status == RegistrationStatus.ACTIVE
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "bad_domain_uri",
+    [
+        "https://wrp.example.com:8008",  # port
+        "https://wrp.example.com:8008/",  # port + trailing slash
+        "https://wrp.example.com:99999",  # out-of-range port
+        "https://wrp.example.com/verifier_1",  # path
+        "https://wrp.example.com/?q=1",  # query
+        "https://user@wrp.example.com",  # userinfo
+        "https://user:pw@wrp.example.com",  # userinfo with password
+        "https://wrp.example.com/p;param",  # path parameters
+        "https://wrp.example.com;param",  # ';param' folded into the host
+    ],
+)
+def test_wrp_post_domain_uri_rejects_port_or_path(bad_domain_uri):
+    """The WRP endpoint must apply the same host-only rule as the registry
+    endpoint. build_san_from_entity drops the port/path, so without this a
+    client could submit https://victim.example:8008/foo and obtain a cert for
+    victim.example.
+    """
+    participant = ParticipantFactory()
+    token = str(RefreshToken.for_user(participant).access_token)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    url = reverse("registry:wrp")
+    data = {
+        "legal_entity_identifier": "SE5560360793",
+        "legal_entity_identifier_type": "EUID",
+        "legal_name": "WRP Test AB",
+        "country_code": "SE",
+        "domain_uri": bad_domain_uri,
+        "entitlements": ["https://uri.etsi.org/19475/Entitlement/Service_Provider"],
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority_name": "Swedish DPA",
+        "supervisory_authority_country": "SE",
+    }
+    response = client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "domain_uri" in response.data["errors"]
+    # A partial write must not leave an orphan entity behind.
+    assert not RegisteredEntity.objects.exists()
+
+
+@pytest.mark.django_db
+def test_entity_detail_page_denies_non_operator(authenticated_api_client):
+    """The HTML detail page must not disclose an entity a participant does not
+    operate. Non-operators get 404 (not 403) so entity IDs are not enumerable.
+    """
+    entity = RegisteredEntityFactory(operators=[ParticipantFactory()])
+    url = reverse("registry:entity-detail", args=[entity.id])
+    assert authenticated_api_client.get(url).status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_entity_detail_page_allows_operator(authenticated_api_client):
+    entity = RegisteredEntityFactory(operators=[authenticated_api_client.participant])
+    url = reverse("registry:entity-detail", args=[entity.id])
+    assert authenticated_api_client.get(url).status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_entity_delete_by_operator(authenticated_api_client):
+    """An operator can delete their entity from the dashboard; POST redirects
+    back to home and the entity is gone."""
+    entity = RegisteredEntityFactory(operators=[authenticated_api_client.participant])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.post(url)
+    assert response.status_code == status.HTTP_302_FOUND
+    assert response["Location"] == reverse("home")
+    assert not RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_entity_delete_denied_for_non_operator(authenticated_api_client):
+    """A non-operator gets 404 (not 403, so IDs are not enumerable) and the
+    entity is left untouched."""
+    entity = RegisteredEntityFactory(operators=[ParticipantFactory()])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.post(url)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_entity_delete_rejects_get(authenticated_api_client):
+    """Deletion must be an explicit POST; GET is not allowed."""
+    entity = RegisteredEntityFactory(operators=[authenticated_api_client.participant])
+    url = reverse("registry:entity-delete", args=[entity.id])
+    response = authenticated_api_client.get(url)
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    assert RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_wrp_put_denied_for_non_operator(authenticated_api_client):
+    entity = RegisteredEntityFactory(
+        operators=[ParticipantFactory()], entity_role=EntityRole.RELYING_PARTY
+    )
+    response = authenticated_api_client.put(
+        reverse("registry:wrp"),
+        {"id": str(entity.id), "trade_name": "Hijacked"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    entity.refresh_from_db()
+    assert entity.trade_name != "Hijacked"
+
+
+@pytest.mark.django_db
+def test_wrp_delete_denied_for_non_operator(authenticated_api_client):
+    entity = RegisteredEntityFactory(operators=[ParticipantFactory()])
+    response = authenticated_api_client.delete(
+        reverse("registry:wrp"), {"id": str(entity.id)}, format="json"
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert RegisteredEntity.objects.filter(id=entity.id).exists()
+
+
+@pytest.mark.django_db
+def test_operators_m2m_supports_multiple_and_is_never_empty():
+    # Factory default: at least one operator (invariant mirror).
+    entity = RegisteredEntityFactory()
+    assert entity.operators.count() == 1
+
+    # A second operator can be added and both are responsible for the entity.
+    op1 = entity.operators.first()
+    op2 = ParticipantFactory()
+    entity.operators.add(op2)
+
+    assert entity.operators.count() == 2
+    assert set(entity.operators.all()) == {op1, op2}
+    # Reverse accessor: each operator sees the shared entity.
+    assert entity in op1.registered_entities.all()
+    assert entity in op2.registered_entities.all()
+
+
+@pytest.mark.django_db
+def test_factory_accepts_explicit_operators():
+    op1 = ParticipantFactory()
+    op2 = ParticipantFactory()
+    entity = RegisteredEntityFactory(operators=[op1, op2])
+    assert set(entity.operators.all()) == {op1, op2}
 
 
 @pytest.mark.django_db
@@ -180,6 +402,41 @@ def test_domain_uri_returned_in_response(authenticated_api_client):
     response = authenticated_api_client.post(url, data, format="json")
     assert response.status_code == status.HTTP_201_CREATED
     assert response.data["data"]["domain_uri"] == "https://service.example.com"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "bad_domain_uri",
+    [
+        "https://service.example.com:8008",  # port
+        "https://service.example.com:8008/",  # port + trailing slash
+        "https://service.example.com:99999",  # out-of-range port
+        "https://service.example.com/verifier_1",  # path
+        "https://service.example.com/?q=1",  # query
+        "https://user@service.example.com",  # userinfo
+        "https://user:pw@service.example.com",  # userinfo with password
+        "https://service.example.com/p;param",  # path parameters
+        "https://service.example.com;param",  # ';param' folded into the host
+    ],
+)
+def test_domain_uri_rejects_port_or_path(authenticated_api_client, bad_domain_uri):
+    """Only the host survives into the cert dNSName, so a port/path in
+    domain_uri is rejected rather than silently dropped."""
+    legal_entity = LegalEntityFactory()
+    authority = SupervisoryAuthorityFactory()
+    url = reverse("registry:entity-list-create")
+    data = {
+        "legal_entity": str(legal_entity.id),
+        "entity_role": EntityRole.RELYING_PARTY,
+        "domain_uri": bad_domain_uri,
+        "instance_uri": "https://service.example.com:8008/",
+        "support_uris": ["https://support.example.com"],
+        "supervisory_authority": str(authority.id),
+        "entitlements": ["Service_Provider"],
+    }
+    response = authenticated_api_client.post(url, data, format="json")
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "domain_uri" in response.data["errors"]
 
 
 @pytest.mark.django_db
@@ -389,10 +646,33 @@ def test_home_page_loads(auth_client):
 
 
 @pytest.mark.django_db
-def test_home_page_shows_entities(auth_client):
-    RegisteredEntityFactory(trade_name="Visible Entity")
-    response = auth_client.get(reverse("home"))
+def test_home_page_shows_own_entities(operator, operator_client):
+    RegisteredEntityFactory(trade_name="Visible Entity", operators=[operator])
+    response = operator_client.get(reverse("home"))
     assert b"Visible Entity" in response.content
+
+
+@pytest.mark.django_db
+def test_home_page_hides_other_operators_entities(operator, operator_client):
+    # Entity owned by a different operator must not appear on this operator's
+    # dashboard.
+    RegisteredEntityFactory(trade_name="Someone Elses Entity")
+    response = operator_client.get(reverse("home"))
+    assert b"Someone Elses Entity" not in response.content
+
+
+@pytest.mark.django_db
+def test_home_page_shows_shared_entity_to_all_operators(operator):
+    # An entity with two operators is visible to both of them.
+    other = ParticipantFactory()
+    RegisteredEntityFactory(trade_name="Shared Entity", operators=[operator, other])
+
+    for user in (operator, other):
+        client = Client()
+        token = str(RefreshToken.for_user(user).access_token)
+        client.defaults["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        response = client.get(reverse("home"))
+        assert b"Shared Entity" in response.content
 
 
 @pytest.mark.django_db

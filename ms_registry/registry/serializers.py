@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from core.models import EntitlementType, EntityRole, Identifier, IdentifierType, Policy
 from credentials.serializers import IntendedUseInputSerializer, create_intended_use
 from legal_entities.models import LegalEntity, LegalEntityIdentifier, LegalPerson
@@ -12,6 +14,70 @@ from .models import (
     RegisteredEntityPolicy,
     SupervisoryAuthority,
 )
+
+# Characters permitted in a DNS hostname (urlparse lowercases the host, and an
+# IDN in a certificate SAN must already be in ASCII punycode form).
+_DNS_HOST_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
+
+
+def validate_domain_uri_host_only(value):
+    """Reject a port or path: only the host survives into the certificate.
+
+    domain_uri becomes the SAN dNSName, which per RFC 5280 is a bare
+    hostname — scheme, port, path, query and fragment are all dropped by
+    build_san_from_entity. Silently discarding them is misleading (a user who
+    enters https://example.com:8008/foo gets a cert for example.com), and worse,
+    a client could submit https://victim.example:8008/foo and obtain a cert for
+    victim.example, so reject anything beyond scheme + host — port, path,
+    parameters, query, fragment and userinfo all included. Use instance_uri
+    for the full endpoint (port/path preserved).
+
+    Returns the value unchanged if valid; raises serializers.ValidationError
+    otherwise. Shared by every serializer that accepts a domain_uri.
+    """
+    if not value:
+        return value
+    parsed = urlparse(value)
+    # .port raises ValueError on an out-of-range/malformed port (e.g. :99999);
+    # such a value carries a port either way, so reject it as one rather than
+    # letting the ValueError bubble up as a 500.
+    try:
+        port = parsed.port
+    except ValueError:
+        raise serializers.ValidationError(
+            "Domain URI has an invalid port. It must not include a port at all "
+            "— only the host is used in the certificate. Put the full endpoint "
+            "(with port) in instance_uri instead."
+        )
+    if port is not None:
+        raise serializers.ValidationError(
+            "Domain URI must not include a port — only the host is used in "
+            "the certificate. Put the full endpoint (with port) in "
+            "instance_uri instead."
+        )
+    if parsed.username or parsed.password:
+        raise serializers.ValidationError(
+            "Domain URI must not include userinfo (e.g. user@ or "
+            "user:password@) — only the host is used in the certificate. Put "
+            "the full endpoint in instance_uri instead."
+        )
+    if parsed.path not in ("", "/") or parsed.params or parsed.query or parsed.fragment:
+        raise serializers.ValidationError(
+            "Domain URI must not include a path, parameters, query or fragment "
+            "— only the host is used in the certificate. Put the full endpoint "
+            "in instance_uri instead."
+        )
+    # Only urlparse(...).hostname ends up in the SAN, so the host must be a
+    # plain DNS name. This also catches cases the checks above miss: a ';param'
+    # with no path folds into the netloc (host becomes "example.com;param"),
+    # and an empty/missing host (e.g. "https:///path").
+    host = parsed.hostname or ""
+    if not host or any(c not in _DNS_HOST_CHARS for c in host):
+        raise serializers.ValidationError(
+            "Domain URI must be a plain host (letters, digits, hyphens and "
+            "dots only). Put the full endpoint in instance_uri instead."
+        )
+    return value
 
 
 class WRPQueryParameterSerializer(serializers.Serializer):
@@ -180,7 +246,6 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "legal_entity",
-            "participant",
             "entity_role",
             "trade_name",
             "domain_uri",
@@ -200,7 +265,6 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "participant",
             "registration_status",
             "registered_at",
             "created_at",
@@ -219,6 +283,9 @@ class RegisteredEntitySerializer(serializers.ModelSerializer):
                 "A registered entity with this registry URI already exists."
             )
         return value
+
+    def validate_domain_uri(self, value):
+        return validate_domain_uri_host_only(value)
 
     def validate_entitlements(self, value):
         """Validate that at least one entitlement is provided"""
@@ -485,6 +552,9 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         help_text="Intended use declarations per Annex B WalletRelyingParty [0..*]",
     )
 
+    def validate_domain_uri(self, value):
+        return validate_domain_uri_host_only(value)
+
     def validate(self, data):
         """Validate WalletRelyingParty data"""
         # Intermediary cannot use other intermediaries
@@ -549,7 +619,6 @@ class WalletRelyingPartySerializer(serializers.Serializer):
         # Create registered entity (WRP)
         registered_entity = RegisteredEntity.objects.create(
             legal_entity=legal_entity,
-            participant=validated_data.get("participant"),
             entity_role=EntityRole.RELYING_PARTY,
             trade_name=validated_data.get("trade_name"),
             domain_uri=validated_data.get("domain_uri"),

@@ -105,11 +105,11 @@ def _make_natural_person_entity(**kwargs):
 
     entity = RegisteredEntity.objects.create(
         legal_entity=le,
-        participant=ParticipantFactory(),
         entity_role=EntityRole.PID_PROVIDER,
         supervisory_authority=sa,
         **kwargs,
     )
+    entity.operators.add(ParticipantFactory())
     return entity
 
 

@@ -6,9 +6,15 @@
 <div class="container">
     <div class="page-header">
         <h2>Registered Entities</h2>
-        <a href="{% url 'registry:entity-list-create' %}" class="btn btn-primary">
-            Register New Entity
-        </a>
+        <div class="header-actions">
+            <a href="{% url 'registry:entity-list-create' %}" class="btn btn-primary">
+                Register New Entity
+            </a>
+            <form method="post" action="{% url 'participant:logout' %}" class="logout-form">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary">Log out</button>
+            </form>
+        </div>
     </div>
 
     {% if entities %}
@@ -42,8 +48,8 @@
                 <td>{{ entity.supervisory_authority }}</td>
                 <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
                 <td>
-                    {% if entity.registration_status == 'active' %}
                     <div class="actions-cell">
+                        {% if entity.registration_status == 'active' %}
                         <a href="{% url 'registry:entity-detail' entity.id %}" class="btn btn-sm btn-secondary">Manage</a>
                         <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get Entity Info</a>
                         {% if entity.has_valid_cert %}
@@ -52,8 +58,13 @@
                         {% else %}
                             <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
                         {% endif %}
+                        {% endif %}
+                        <form method="post" action="{% url 'registry:entity-delete' entity.id %}" class="delete-form"
+                              onsubmit="return confirm('Delete this registered entity? This cannot be undone.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
                     </div>
-                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -81,6 +92,14 @@
         border-bottom: 1px solid #dee2e6;
     }
     .page-header h2 {
+        margin: 0;
+    }
+    .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .logout-form {
         margin: 0;
     }
     .entity-table {
@@ -150,6 +169,20 @@
         border-radius: 4px;
         white-space: nowrap;
         text-decoration: none;
+    }
+    .actions-cell .delete-form {
+        margin: 0;
+        display: inline;
+    }
+    .btn-danger {
+        background-color: #dc3545;
+        color: #fff;
+        border: 1px solid #dc3545;
+        cursor: pointer;
+    }
+    .btn-danger:hover {
+        background-color: #c82333;
+        border-color: #bd2130;
     }
     .badge-cert-valid {
         display: inline-flex;

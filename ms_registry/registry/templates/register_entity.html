@@ -226,7 +226,7 @@
                 <input type="url" name="domain_uri" id="domain_uri" class="form-control" required
                        placeholder="https://service.example.com"
                        value="{{ form_data.domain_uri|default:'' }}">
-                <small class="form-help">Domain/host of the entity's service. Goes into the certificate SAN as a dNSName (host only — port and path are not included here).</small>
+                <small class="form-help">Host of the entity's service (scheme + host only, e.g. https://service.example.com). Goes into the certificate SAN as a dNSName. A port or path is rejected — use Instance URI for the full endpoint.</small>
             </div>
 
             <div class="form-group">
@@ -356,7 +356,7 @@
         
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Register Entity</button>
-            <a href="{% url 'registry:entity-list-create' %}" class="btn btn-secondary">Cancel</a>
+            <a href="{% url 'home' %}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

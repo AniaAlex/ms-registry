@@ -87,7 +87,8 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
     ]
     list_filter = ["entity_role", "registration_status", "is_psb", "is_intermediary"]
     search_fields = ["trade_name", "legal_entity__legal_person__legal_name"]
-    autocomplete_fields = ["legal_entity", "supervisory_authority", "participant"]
+    autocomplete_fields = ["legal_entity", "supervisory_authority"]
+    filter_horizontal = ["operators"]
     readonly_fields = ["registered_at"]
     inlines = [
         EntitySupportURIInline,
@@ -101,7 +102,7 @@ class RegisteredEntityAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             None,
-            {"fields": ("legal_entity", "participant", "entity_role", "trade_name")},
+            {"fields": ("legal_entity", "operators", "entity_role", "trade_name")},
         ),
         ("Entity Flags", {"fields": ("is_psb", "is_intermediary")}),
         (

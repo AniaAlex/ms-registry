@@ -1,5 +1,7 @@
+from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.views import View
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -46,12 +48,57 @@ def _token_from_request(request):
     return token
 
 
+def _user_from_token(token_str):
+    """Resolve the Participant a valid access token belongs to, or None."""
+    try:
+        access = AccessToken(token_str)
+        user_id = access["user_id"]
+    except (InvalidToken, TokenError, KeyError):
+        return None
+    user_model = get_user_model()
+    try:
+        return user_model.objects.get(pk=user_id)
+    except (user_model.DoesNotExist, ValueError):
+        return None
+
+
 class JWTLoginRequiredMixin:
     def dispatch(self, request, *args, **kwargs):
         token = _token_from_request(request)
-        if not token or not _is_valid_access_token(token):
-            return HttpResponseRedirect(reverse("participant:login"))
+        user = _user_from_token(token) if token else None
+        if user is None:
+            # Clear any stale JWT cookies. A token can be cryptographically
+            # valid yet map to no user (e.g. deleted account); LoginView.get
+            # only checks token validity, so leaving the cookie set would
+            # bounce login -> home -> login in an infinite redirect loop.
+            response = HttpResponseRedirect(reverse("participant:login"))
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+            return response
+        # Attach the authenticated participant so plain Django views (which
+        # otherwise see AnonymousUser from session middleware) can scope by
+        # request.user. DRF views re-authenticate independently.
+        request.user = user
         return super().dispatch(request, *args, **kwargs)
+
+
+class LogoutView(View):
+    """
+    POST /participants/logout/
+
+    Clears the JWT cookies set at login and redirects to the login page.
+
+    A plain Django View (not a DRF APIView) so it is covered by
+    CsrfViewMiddleware. DRF APIViews are CSRF-exempt, which would let a
+    cross-site POST forcibly log a user out; the dashboard's logout form sends
+    the CSRF token, so a legitimate logout is unaffected.
+    """
+
+    def post(self, request):
+        response = HttpResponseRedirect(reverse("participant:login"))
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return response
 
 
 class LoginView(APIView):

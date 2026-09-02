@@ -3,11 +3,12 @@ Tests for certificates endpoints.
 """
 
 import uuid
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from core.models import EntitlementType, EntityRole, RegistrationStatus
 from django.urls import reverse
+from participant.tests.factories import ParticipantFactory
 from registry.tests.factories import (
     EntityEntitlementFactory,
     RegisteredEntityFactory,
@@ -24,10 +25,15 @@ def _get_cnf(authenticated_api_client, entity_id):
     return authenticated_api_client.get(url)
 
 
-def _make_active_entity(**kwargs):
-    return RegisteredEntityFactory(
-        registration_status=RegistrationStatus.ACTIVE, **kwargs
-    )
+def _make_entity(operator, **kwargs):
+    """Create an entity operated by ``operator`` (defaults to active status).
+
+    Certificate endpoints are scoped to an entity's operators, so tests must
+    make the authenticated participant an operator to reach the endpoint logic.
+    """
+    kwargs.setdefault("registration_status", RegistrationStatus.ACTIVE)
+    kwargs.setdefault("operators", [operator])
+    return RegisteredEntityFactory(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +43,7 @@ def _make_active_entity(**kwargs):
 
 @pytest.mark.django_db
 def test_cnf_returns_200_for_active_entity(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt", return_value="signed.jwt.token"):
         response = _get_cnf(authenticated_api_client, entity.id)
     assert response.status_code == status.HTTP_200_OK
@@ -46,7 +52,7 @@ def test_cnf_returns_200_for_active_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_sub_is_entity_id(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt") as mock_sign:
         mock_sign.return_value = "token"
         _get_cnf(authenticated_api_client, entity.id)
@@ -56,7 +62,7 @@ def test_cnf_payload_sub_is_entity_id(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_issuer_matches_request_host(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt") as mock_sign:
         mock_sign.return_value = "token"
         _get_cnf(authenticated_api_client, entity.id)
@@ -66,7 +72,7 @@ def test_cnf_payload_issuer_matches_request_host(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_exp_is_24h_after_iat(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt") as mock_sign:
         mock_sign.return_value = "token"
         _get_cnf(authenticated_api_client, entity.id)
@@ -76,7 +82,7 @@ def test_cnf_payload_exp_is_24h_after_iat(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_contains_entity_name(authenticated_api_client):
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt") as mock_sign:
         mock_sign.return_value = "token"
         _get_cnf(authenticated_api_client, entity.id)
@@ -87,7 +93,7 @@ def test_cnf_payload_contains_entity_name(authenticated_api_client):
 @pytest.mark.django_db
 def test_cnf_payload_country_from_physical_address(authenticated_api_client):
     """When primary_identifier has no country_code, falls back to physical_address."""
-    entity = _make_active_entity()
+    entity = _make_entity(authenticated_api_client.participant)
     with patch("certificates.views.sign_jwt") as mock_sign:
         mock_sign.return_value = "token"
         _get_cnf(authenticated_api_client, entity.id)
@@ -99,7 +105,9 @@ def test_cnf_payload_country_from_physical_address(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_role_and_entitlements(authenticated_api_client):
-    entity = _make_active_entity(entity_role=EntityRole.RELYING_PARTY)
+    entity = _make_entity(
+        authenticated_api_client.participant, entity_role=EntityRole.RELYING_PARTY
+    )
     EntityEntitlementFactory(
         registered_entity=entity,
         entitlement_type=EntitlementType.SERVICE_PROVIDER,
@@ -115,7 +123,10 @@ def test_cnf_payload_role_and_entitlements(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_payload_multiple_entitlements(authenticated_api_client):
-    entity = _make_active_entity(entity_role=EntityRole.ATTESTATION_PROVIDER)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        entity_role=EntityRole.ATTESTATION_PROVIDER,
+    )
     EntityEntitlementFactory(
         registered_entity=entity,
         entitlement_type=EntitlementType.QEAA_PROVIDER,
@@ -151,21 +162,24 @@ class TestCnfPageView:
     def test_returns_200_and_renders_token_for_active_entity(
         self, authenticated_api_client
     ):
-        entity = _make_active_entity()
+        participant = authenticated_api_client.participant
+        entity = _make_entity(participant)
+        # request.user must be the real operator so the entity lookup (scoped to
+        # operators) matches; a bare Mock would break the ORM filter.
         with patch(
             "certificates.views.sign_jwt", return_value="signed.jwt.token"
         ), patch("certificates.views.pyjwt.decode", return_value={"cnf": {}}), patch(
-            "participant.views._is_valid_access_token", return_value=True
+            "participant.views._user_from_token", return_value=participant
         ), patch(
             "rest_framework_simplejwt.authentication.JWTAuthentication.authenticate",
-            return_value=(Mock(), None),
+            return_value=(participant, None),
         ):
             response = _get_cnf_page(authenticated_api_client, entity.id)
         assert response.status_code == status.HTTP_200_OK
         assert b"signed.jwt.token" in response.content
 
     def test_does_not_show_error_on_success(self, authenticated_api_client):
-        entity = _make_active_entity()
+        entity = _make_entity(authenticated_api_client.participant)
         with patch("certificates.views.sign_jwt", return_value="tok"), patch(
             "certificates.views.pyjwt.decode", return_value={"cnf": {}}
         ):
@@ -178,21 +192,28 @@ class TestCnfPageView:
         assert b"Entity not found" in response.content
 
     def test_returns_409_for_pending_entity(self, authenticated_api_client):
-        entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
+        entity = _make_entity(
+            authenticated_api_client.participant,
+            registration_status=RegistrationStatus.PENDING,
+        )
         response = _get_cnf_page(authenticated_api_client, entity.id)
         assert response.status_code == status.HTTP_409_CONFLICT
         assert b"pending" in response.content
 
     def test_returns_409_for_suspended_entity(self, authenticated_api_client):
-        entity = RegisteredEntityFactory(
-            registration_status=RegistrationStatus.SUSPENDED
+        entity = _make_entity(
+            authenticated_api_client.participant,
+            registration_status=RegistrationStatus.SUSPENDED,
         )
         response = _get_cnf_page(authenticated_api_client, entity.id)
         assert response.status_code == status.HTTP_409_CONFLICT
         assert b"suspended" in response.content
 
     def test_returns_409_for_revoked_entity(self, authenticated_api_client):
-        entity = RegisteredEntityFactory(registration_status=RegistrationStatus.REVOKED)
+        entity = _make_entity(
+            authenticated_api_client.participant,
+            registration_status=RegistrationStatus.REVOKED,
+        )
         response = _get_cnf_page(authenticated_api_client, entity.id)
         assert response.status_code == status.HTTP_409_CONFLICT
         assert b"revoked" in response.content
@@ -210,8 +231,24 @@ def test_cnf_returns_404_for_unknown_entity(authenticated_api_client):
 
 
 @pytest.mark.django_db
+def test_cnf_returns_404_for_entity_not_operated_by_requester(authenticated_api_client):
+    """A participant must not obtain the cnf for an entity they do not operate.
+
+    The entity exists and is active, but is owned by a different operator, so the
+    endpoint returns 404 (not 403) to avoid leaking that the entity ID exists.
+    """
+    other_operator = ParticipantFactory()
+    entity = _make_entity(other_operator)
+    response = _get_cnf(authenticated_api_client, entity.id)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
 def test_cnf_returns_409_for_pending_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.PENDING)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.PENDING,
+    )
     response = _get_cnf(authenticated_api_client, entity.id)
     assert response.status_code == status.HTTP_409_CONFLICT
     assert "pending" in response.data["detail"]
@@ -219,14 +256,20 @@ def test_cnf_returns_409_for_pending_entity(authenticated_api_client):
 
 @pytest.mark.django_db
 def test_cnf_returns_409_for_suspended_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.SUSPENDED)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.SUSPENDED,
+    )
     response = _get_cnf(authenticated_api_client, entity.id)
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.django_db
 def test_cnf_returns_409_for_revoked_entity(authenticated_api_client):
-    entity = RegisteredEntityFactory(registration_status=RegistrationStatus.REVOKED)
+    entity = _make_entity(
+        authenticated_api_client.participant,
+        registration_status=RegistrationStatus.REVOKED,
+    )
     response = _get_cnf(authenticated_api_client, entity.id)
     assert response.status_code == status.HTTP_409_CONFLICT
 
@@ -241,8 +284,8 @@ def test_cnf_returns_409_when_no_contact_info(authenticated_api_client):
     from legal_entities.tests.factories import LegalEntityFactory
 
     legal_entity = LegalEntityFactory(email=None, phone=None)
-    entity = RegisteredEntityFactory(
-        registration_status=RegistrationStatus.ACTIVE,
+    entity = _make_entity(
+        authenticated_api_client.participant,
         legal_entity=legal_entity,
     )
     # No support URIs, no email, no phone
