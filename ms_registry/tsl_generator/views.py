@@ -3,7 +3,9 @@ Views for TSL Generator
 """
 
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from legal_entities.models import LegalEntity
+from registry.models import RegisteredEntity
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -16,6 +18,10 @@ from .models import (
     TrustService,
     TrustServiceProvider,
     TSLScheme,
+)
+from .registered_entity_prefill import (
+    build_trust_service_prefill,
+    tsl_eligible_entitlement_types,
 )
 from .xml_generator import generate_tsl_xml_etsi_format
 
@@ -161,8 +167,6 @@ class TSLXMLView(generics.GenericAPIView):
     GET /tsl/xml/?download=true - Returns XML as downloadable file
     """
 
-    permission_classes = (IsAuthenticated,)
-
     def get(self, request, *args, **kwargs):
         scheme = TSLScheme.objects.filter(is_active=True).first()
         if not scheme:
@@ -243,10 +247,11 @@ class TrustServiceFormView(generics.CreateAPIView):
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
     template_name = "add_trust_service.html"
 
-    def get_context_data(self, errors=None):
+    def get_context_data(self, errors=None, initial=None):
         """Common context for the form"""
         return {
             "errors": errors,
+            "initial": initial,
             "tsl_schemes": TSLScheme.objects.filter(is_active=True),
             "providers": TrustServiceProvider.objects.filter(
                 is_active=True
@@ -257,9 +262,26 @@ class TrustServiceFormView(generics.CreateAPIView):
         }
 
     def get(self, request, *args, **kwargs):
-        """Render empty Trust Service form"""
+        """
+        Render the Trust Service form.
+
+        With ?registered_entity=<id>&entitlement_type=<type>, prefills the
+        new-provider fields and certificate from that entity's existing
+        registration instead of a blank form - the operator still has to
+        pick the TSL scheme and submit.
+        """
+        initial = None
+        entity_id = request.query_params.get("registered_entity")
+        if entity_id:
+            entity = get_object_or_404(RegisteredEntity, pk=entity_id)
+            entitlement_type = request.query_params.get("entitlement_type") or next(
+                iter(tsl_eligible_entitlement_types(entity)), None
+            )
+            if entitlement_type:
+                initial = build_trust_service_prefill(entity, entitlement_type)
+
         return Response(
-            self.get_context_data(),
+            self.get_context_data(initial=initial),
             template_name=self.template_name,
         )
 

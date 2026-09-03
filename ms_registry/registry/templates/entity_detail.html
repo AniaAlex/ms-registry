@@ -58,6 +58,15 @@
           <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
         {% endif %}
       </dd>
+      {% if tsl_eligible_entitlement_types %}
+      <dt>Trusted List</dt>
+      <dd>
+        {% for entitlement_type in tsl_eligible_entitlement_types %}
+        <a href="{% url 'tsl_generator:service-add-form' %}?registered_entity={{ entity.id }}&entitlement_type={{ entitlement_type }}"
+           class="btn btn-sm btn-primary">Add to Trusted List ({{ entitlement_type }})</a>
+        {% endfor %}
+      </dd>
+      {% endif %}
     </dl>
   </fieldset>
 

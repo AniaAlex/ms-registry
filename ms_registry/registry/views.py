@@ -22,6 +22,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from tsl_generator.registered_entity_prefill import tsl_eligible_entitlement_types
 
 from . import models, serializers
 
@@ -98,6 +99,9 @@ class EntityDetailView(JWTLoginRequiredMixin, TemplateView):
         context["has_valid_cert"] = has_valid_cert
         context["intended_uses"] = intended_uses
         context["credential_formats"] = CredentialFormat.choices
+        context["tsl_eligible_entitlement_types"] = tsl_eligible_entitlement_types(
+            entity
+        )
         return context
 
 
