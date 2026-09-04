@@ -16,7 +16,7 @@ Directory structure reference:
 Usage:
     1. Add 'tsl_generator' to INSTALLED_APPS
     2. Run migrations: python manage.py makemigrations && python manage.py migrate
-    3. Use TSLScheme.to_xml() to generate ETSI TS 119612 compliant XML
+    3. Use TSLScheme.to_xml_etsi() to generate ETSI TS 119612 compliant XML
 """
 
 from django.db import models
@@ -276,29 +276,17 @@ class TSLScheme(models.Model):
             return []
         return [dp.strip() for dp in self.distribution_points.split("\n") if dp.strip()]
 
-    def to_xml(self):
-        """Generate ETSI TS 119612 compliant XML."""
-        from .xml_generator import generate_tsl_xml
-
-        return generate_tsl_xml(self)
-
-    def to_xml_gotrust(self):
-        """Generate XML in go-trust compatible format (tsl: prefix)."""
-        from .xml_generator import generate_tsl_xml_gotrust_format
-
-        return generate_tsl_xml_gotrust_format(self)
-
     def to_xml_etsi(self):
-        """Generate XML in full ETSI TS 119612 format with all namespaces."""
+        """Generate ETSI TS 119612 compliant XML (EUgeneric, unprefixed namespace)."""
         from .xml_generator import generate_tsl_xml_etsi_format
 
         return generate_tsl_xml_etsi_format(self)
 
-    def export_to_file(self, filepath: str, use_gotrust_format: bool = True):
+    def export_to_file(self, filepath: str):
         """Export this TSL to a file."""
         from .xml_generator import export_tsl_to_file
 
-        return export_tsl_to_file(self, filepath, use_gotrust_format)
+        return export_tsl_to_file(self, filepath)
 
 
 class TSLSchemeOperatorName(MultiLangName):

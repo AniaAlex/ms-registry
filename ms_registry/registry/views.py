@@ -1,4 +1,4 @@
-from certificates.models import EntityAccessCertificate
+from certificates.models import EntityAccessCertificate, EntitySigningCertificate
 from core.models import (
     CredentialFormat,
     EntitlementType,
@@ -16,12 +16,17 @@ from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from legal_entities.models import LegalEntity
 from legal_entities.serializers import LegalEntityCreateSerializer
+from lote_source.entitlement_eligibility import (
+    any_signing_certificate_entitlement,
+    lote_eligible_entitlement_types,
+)
 from participant.views import JWTLoginRequiredMixin
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from tsl_generator.registered_entity_prefill import tsl_eligible_entitlement_types
 
 from . import models, serializers
 
@@ -98,6 +103,20 @@ class EntityDetailView(JWTLoginRequiredMixin, TemplateView):
         context["has_valid_cert"] = has_valid_cert
         context["intended_uses"] = intended_uses
         context["credential_formats"] = CredentialFormat.choices
+        context["tsl_eligible_entitlement_types"] = tsl_eligible_entitlement_types(
+            entity
+        )
+        context["lote_eligible_entitlement_types"] = lote_eligible_entitlement_types(
+            entity
+        )
+        context["needs_signing_certificate"] = any_signing_certificate_entitlement(
+            entity
+        )
+        context["signing_cert_types"] = set(
+            EntitySigningCertificate.objects.filter(
+                registered_entity=entity, is_current=True
+            ).values_list("entitlement_type", flat=True)
+        )
         return context
 
 
@@ -319,10 +338,11 @@ class RegisteredEntityListCreateView(JWTLoginRequiredMixin, generics.ListCreateA
                 is_active=True,
             ).exists()
             if has_issuer_entitlements:
+                # Signing certificates are requested from the entity detail
+                # page's LoTE section, not as a forced step right after
+                # registration.
                 return redirect(
-                    reverse(
-                        "certificates:signing-page", kwargs={"entity_id": entity.id}
-                    )
+                    reverse("registry:entity-detail", kwargs={"pk": entity.id})
                 )
             return Response(
                 {
