@@ -10,9 +10,10 @@ this module derives the form/serializer input from the existing records.
 
 from core.models import EntitlementType
 
-# Only entitlements that are actually published in the EUgeneric TL (per
-# ETSI TS 119 412-6 Annex: PID/Wallet/PuB-EAA are published in their own
-# LoTE instead, and QEAA requires a QTSP-issued qualified certificate).
+# Non-LoTE entitlements only - the ones actually published in the EUgeneric TL.
+# Per ETSI TS 119 412-6 Annex: PID/Wallet/PuB-EAA are published in their own
+# LoTE instead (see lote_source.entitlement_eligibility), and QEAA requires a
+# QTSP-issued qualified certificate.
 ENTITLEMENT_TO_SERVICE_TYPE = {
     EntitlementType.NON_Q_EAA_PROVIDER: (
         "http://uri.etsi.org/TrstSvc/Svctype/Non_Q_EAA_Provider"

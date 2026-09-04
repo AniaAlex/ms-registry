@@ -58,12 +58,38 @@
           <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
         {% endif %}
       </dd>
+      {% if needs_signing_certificate %}
+      <dt>Signing Certificate</dt>
+      <dd>
+        <a href="{% url 'certificates:signing-page' entity.id %}" class="btn btn-sm btn-primary">Add Signing Certificate</a>
+      </dd>
+      {% endif %}
+      {% if lote_eligible_entitlement_types %}
+      <dt>LoTE</dt>
+      <dd>
+        {% for entitlement_type in lote_eligible_entitlement_types %}
+        {% if entitlement_type in signing_cert_types %}
+        <a href="{% url 'certificates:signing-page' entity.id %}"
+           class="btn btn-sm btn-primary">Lote registration ({{ entitlement_type }})</a>
+        {% else %}
+        <span class="entitlement-warning">Signing certificate required before Lote registration ({{ entitlement_type }}).</span>
+        {% endif %}
+        {% endfor %}
+      </dd>
+      {% endif %}
       {% if tsl_eligible_entitlement_types %}
+      <!-- Trusted List entry is only offered for non-LoTE entitlements -
+           LoTE-eligible entitlements are published live from their signing
+           certificate instead (see lote_source.entitlement_eligibility). -->
       <dt>Trusted List</dt>
       <dd>
         {% for entitlement_type in tsl_eligible_entitlement_types %}
+        {% if entitlement_type in signing_cert_types %}
         <a href="{% url 'tsl_generator:service-add-form' %}?registered_entity={{ entity.id }}&entitlement_type={{ entitlement_type }}"
            class="btn btn-sm btn-primary">Add to Trusted List ({{ entitlement_type }})</a>
+        {% else %}
+        <span class="entitlement-warning">Signing certificate required before adding to Trusted List ({{ entitlement_type }}).</span>
+        {% endif %}
         {% endfor %}
       </dd>
       {% endif %}
@@ -319,6 +345,7 @@
   .sub-fieldset { border: 1px solid #dee2e6; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
   .sub-fieldset legend { font-size: 0.875rem; font-weight: 600; padding: 0 0.25rem; color: #495057; }
   .required { color: #dc3545; }
+  .entitlement-warning { color: #dc3545; font-size: 0.85rem; display: inline-block; }
 
   .row-item { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
   .row-item .form-control { flex: 1; }
