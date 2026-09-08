@@ -284,7 +284,14 @@ class TrustServiceFormView(generics.CreateAPIView):
         initial = None
         entity_id = request.query_params.get("registered_entity")
         if entity_id:
-            entity = get_object_or_404(RegisteredEntity, pk=entity_id)
+            # Scoped to the requesting operator, as in registry's
+            # EntityDetailView: the prefill exposes the entity's record and its
+            # signing certificate PEM, so only its operators may pull it. 404
+            # (not 403) keeps entity IDs non-enumerable.
+            entity = get_object_or_404(
+                RegisteredEntity.objects.filter(operators=request.user),
+                pk=entity_id,
+            )
             entitlement_type = request.query_params.get("entitlement_type") or next(
                 iter(tsl_eligible_entitlement_types(entity)), None
             )
