@@ -2,8 +2,9 @@
 Views for TSL Generator
 """
 
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from legal_entities.models import LegalEntity
 from registry.models import RegisteredEntity
 from rest_framework import generics, status
@@ -21,6 +22,7 @@ from .models import (
 )
 from .registered_entity_prefill import (
     build_trust_service_prefill,
+    current_signing_certificate,
     tsl_eligible_entitlement_types,
 )
 from .xml_generator import generate_tsl_xml_etsi_format
@@ -280,6 +282,12 @@ class TrustServiceFormView(generics.CreateAPIView):
         new-provider fields and certificate from that entity's existing
         registration instead of a blank form - the operator still has to
         pick the TSL scheme and submit.
+
+        The query string is operator input, not necessarily a click on
+        registry's "Add to Trusted List" button (it can be bookmarked, edited
+        or shared), so the two conditions that button encodes are re-checked
+        here: the entity must hold the entitlement, and it must have a current
+        signing certificate for it.
         """
         initial = None
         entity_id = request.query_params.get("registered_entity")
@@ -288,14 +296,30 @@ class TrustServiceFormView(generics.CreateAPIView):
             # EntityDetailView: the prefill exposes the entity's record and its
             # signing certificate PEM, so only its operators may pull it. 404
             # (not 403) keeps entity IDs non-enumerable.
-            entity = get_object_or_404(
-                RegisteredEntity.objects.filter(operators=request.user),
-                pk=entity_id,
-            )
-            entitlement_type = request.query_params.get("entitlement_type") or next(
-                iter(tsl_eligible_entitlement_types(entity)), None
-            )
+            try:
+                entity = get_object_or_404(
+                    RegisteredEntity.objects.filter(operators=request.user),
+                    pk=entity_id,
+                )
+            except DjangoValidationError:
+                # Malformed UUID - same answer as an ID that does not exist.
+                raise Http404
+
+            eligible = tsl_eligible_entitlement_types(entity)
+            entitlement_type = request.query_params.get("entitlement_type")
+            if entitlement_type and entitlement_type not in eligible:
+                # Either not publishable in the TL at all, or an entitlement
+                # this entity does not hold. 404 for the same reason as above:
+                # it does not disclose which entitlements the entity holds.
+                raise Http404
+            entitlement_type = entitlement_type or next(iter(eligible), None)
+
             if entitlement_type:
+                if current_signing_certificate(entity, entitlement_type) is None:
+                    # Entitled, but nothing to publish yet. Send them where the
+                    # certificate is uploaded rather than to a form with an
+                    # empty certificate box.
+                    return redirect("certificates:signing-page", entity_id=entity.id)
                 initial = build_trust_service_prefill(entity, entitlement_type)
 
         return Response(

@@ -32,6 +32,20 @@ def tsl_eligible_entitlement_types(entity):
     return [et for et in ENTITLEMENT_TO_SERVICE_TYPE if et in held]
 
 
+def current_signing_certificate(entity, entitlement_type):
+    """
+    The entity's current signing certificate for this entitlement, or None.
+
+    At most one can exist - see the unique_current_signing_cert_per_entitlement
+    constraint on EntitySigningCertificate.
+    """
+    return entity.signing_certificates.filter(
+        entitlement_type=entitlement_type,
+        is_current=True,
+        revoked_at__isnull=True,
+    ).first()
+
+
 def build_trust_service_prefill(entity, entitlement_type):
     """
     Build initial values for TrustServiceCreateSerializer/add_trust_service.html
@@ -47,14 +61,8 @@ def build_trust_service_prefill(entity, entitlement_type):
     legal_entity = entity.legal_entity
     name = entity.display_name
 
-    certificate_pem = ""
-    current_cert = entity.signing_certificates.filter(
-        entitlement_type=entitlement_type,
-        is_current=True,
-        revoked_at__isnull=True,
-    ).first()
-    if current_cert:
-        certificate_pem = current_cert.certificate_pem
+    current_cert = current_signing_certificate(entity, entitlement_type)
+    certificate_pem = current_cert.certificate_pem if current_cert else ""
 
     return {
         "legal_entity": legal_entity,
