@@ -171,8 +171,8 @@ class TSLXMLView(generics.GenericAPIView):
     Public: same reasoning as TSLSchemeXMLView - a trusted list has to be
     fetchable by anyone, regardless of any cookie the caller happens to carry.
 
-    GET /tsl/xml/ - Returns XML for the first active scheme
-    GET /tsl/xml/?download=true - Returns XML as downloadable file
+    GET /tsl/trusted-list.xml - Returns XML for the first active scheme
+    GET /tsl/trusted-list.xml?download=true - Returns XML as a downloadable file
     """
 
     authentication_classes = []

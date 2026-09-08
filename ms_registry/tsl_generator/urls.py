@@ -52,9 +52,11 @@ urlpatterns = [
         views.TSLSchemeXMLView.as_view(),
         name="scheme-xml",
     ),
-    # XML endpoint - returns XML for default active scheme (no ID needed)
+    # XML endpoint - returns XML for default active scheme (no ID needed).
+    # Deliberately territory-neutral: the view serves whichever scheme is
+    # active, so a country-coded name here would contradict the content.
     path(
-        "SE-TL.xml",
+        "trusted-list.xml",
         views.TSLXMLView.as_view(),
         name="tsl-xml",
     ),
