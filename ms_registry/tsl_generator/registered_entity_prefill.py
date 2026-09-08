@@ -15,9 +15,9 @@ from core.models import EntitlementType
 # LoTE instead (see lote_source.entitlement_eligibility), and QEAA requires a
 # QTSP-issued qualified certificate.
 ENTITLEMENT_TO_SERVICE_TYPE = {
-    EntitlementType.NON_Q_EAA_PROVIDER: (
-        "http://uri.etsi.org/TrstSvc/Svctype/Non_Q_EAA_Provider"
-    ),
+    # TS 119 475 entitlement -> TS 119 612 clause 5.5.1 service type. The two
+    # namespaces are unrelated: the entitlement local name is not a service type.
+    EntitlementType.NON_Q_EAA_PROVIDER: "http://uri.etsi.org/TrstSvc/Svctype/EAA",
     EntitlementType.QEAA_PROVIDER: "http://uri.etsi.org/TrstSvc/Svctype/QEAA_Provider",
 }
 

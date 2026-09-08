@@ -142,7 +142,7 @@ SERVICE_TYPE_CHOICES = [
         "PuB-EAA Provider - Public Body Attestation Provider",
     ),
     (
-        "http://uri.etsi.org/TrstSvc/Svctype/Non_Q_EAA_Provider",
+        "http://uri.etsi.org/TrstSvc/Svctype/EAA",
         "Non-Qualified EAA Provider",
     ),
 ]
