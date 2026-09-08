@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from legal_entities.models import LegalEntity
 from registry.models import RegisteredEntity
 from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
@@ -147,10 +147,15 @@ class TSLSchemeXMLView(generics.RetrieveAPIView):
     """
     Return the ETSI TS 119612 compliant XML for a TSL Scheme.
 
+    Public: a published trusted list must be fetchable by any relying party
+    with no login, so this ignores any credential (valid, missing, or
+    expired) rather than 401ing on a stale cookie.
+
     GET: Returns application/xml
     """
 
-    permission_classes = (IsAuthenticated,)
+    authentication_classes = []
+    permission_classes = (AllowAny,)
     queryset = TSLScheme.objects.filter(is_active=True)
 
     def retrieve(self, request, *args, **kwargs):
@@ -163,9 +168,15 @@ class TSLXMLView(generics.GenericAPIView):
     """
     Return the ETSI TS 119612 compliant XML for the default active TSL Scheme.
 
+    Public: same reasoning as TSLSchemeXMLView - a trusted list has to be
+    fetchable by anyone, regardless of any cookie the caller happens to carry.
+
     GET /tsl/xml/ - Returns XML for the first active scheme
     GET /tsl/xml/?download=true - Returns XML as downloadable file
     """
+
+    authentication_classes = []
+    permission_classes = (AllowAny,)
 
     def get(self, request, *args, **kwargs):
         scheme = TSLScheme.objects.filter(is_active=True).first()
