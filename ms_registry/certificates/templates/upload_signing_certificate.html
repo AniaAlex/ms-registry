@@ -23,6 +23,10 @@
     </p>
   </div>
 
+  {% if success_label %}
+  <div class="alert alert-success alert-sm">{{ success_label }} certificate saved successfully.</div>
+  {% endif %}
+
   {% if all_uploaded %}
   <div class="alert alert-success">
     All signing certificates have been uploaded. The entity is ready to issue credentials.
@@ -31,54 +35,12 @@
   {% endif %}
 
   {% for section in sections %}
-  <div class="cert-section {% if section.current_cert %}cert-section--done{% endif %}">
+  <div class="cert-section">
 
     <div class="cert-section-header">
       <h2>{{ section.label }}</h2>
-      {% if section.current_cert %}
-      <span class="badge badge-success">Certificate uploaded</span>
-      {% else %}
       <span class="badge badge-pending">Pending</span>
-      {% endif %}
     </div>
-
-    {% if success_entitlement == section.entitlement_type %}
-    <div class="alert alert-success alert-sm">Certificate saved successfully.</div>
-    {% endif %}
-
-    {% if section.current_cert %}
-    <div class="cert-details">
-      <div class="cert-detail-row">
-        <span class="cert-detail-label">Serial</span>
-        <span class="cert-detail-value mono">{{ section.current_cert.certificate_serial }}</span>
-      </div>
-      <div class="cert-detail-row">
-        <span class="cert-detail-label">Subject DN</span>
-        <span class="cert-detail-value mono">{{ section.current_cert.subject_dn }}</span>
-      </div>
-      <div class="cert-detail-row">
-        <span class="cert-detail-label">SHA-256</span>
-        <span class="cert-detail-value mono small">{{ section.current_cert.certificate_fingerprint_sha256 }}</span>
-      </div>
-      <div class="cert-detail-row">
-        <span class="cert-detail-label">Valid from</span>
-        <span class="cert-detail-value">{{ section.current_cert.not_before|date:"Y-m-d" }}</span>
-      </div>
-      <div class="cert-detail-row">
-        <span class="cert-detail-label">Valid until</span>
-        <span class="cert-detail-value">{{ section.current_cert.not_after|date:"Y-m-d" }}</span>
-      </div>
-    </div>
-
-    <details class="rotate-section">
-      <summary>Replace certificate</summary>
-      <div class="rotate-form">
-        <p class="help-text">Uploading a new certificate will mark the current one as historical.</p>
-        {% include "upload_signing_certificate_form.html" with section=section %}
-      </div>
-    </details>
-
-    {% else %}
 
     {% if section.errors %}
     <div class="alert alert-danger">
@@ -89,8 +51,6 @@
     {% endif %}
 
     {% include "upload_signing_certificate_form.html" with section=section %}
-
-    {% endif %}
   </div>
   {% endfor %}
 
@@ -124,9 +84,6 @@
     padding: 1.5rem;
     margin-bottom: 1.5rem;
   }
-  .cert-section--done {
-    border-left: 4px solid #28a745;
-  }
   .cert-section-header {
     display: flex;
     align-items: center;
@@ -144,44 +101,8 @@
     font-size: 0.8rem;
     font-weight: 600;
   }
-  .badge-success { background: #d4edda; color: #155724; }
   .badge-pending { background: #fff3cd; color: #856404; }
   .badge-role    { background: #e2e3e5; color: #383d41; }
-  .cert-details {
-    background: #f8f9fa;
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-  }
-  .cert-detail-row {
-    display: flex;
-    gap: 1rem;
-    padding: 0.35rem 0;
-    border-bottom: 1px solid #e9ecef;
-    font-size: 0.9rem;
-  }
-  .cert-detail-row:last-child { border-bottom: none; }
-  .cert-detail-label {
-    width: 110px;
-    flex-shrink: 0;
-    color: #6c757d;
-    font-weight: 600;
-  }
-  .cert-detail-value.mono { font-family: monospace; }
-  .cert-detail-value.small { font-size: 0.78rem; word-break: break-all; }
-  .rotate-section {
-    margin-top: 0.5rem;
-  }
-  .rotate-section summary {
-    color: #6c757d;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .rotate-form {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid #dee2e6;
-  }
   .error-list {
     margin: 0;
     padding-left: 1.25rem;

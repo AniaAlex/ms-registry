@@ -114,11 +114,15 @@ class SigningCertificateUploadSerializer(serializers.Serializer):
         except Exception:
             raise serializers.ValidationError("Invalid PEM-encoded X.509 certificate.")
 
-        if cert.issuer != cert.subject:
-            raise serializers.ValidationError(
-                "Signing certificate must be self-signed "
-                "(issuer Distinguished Name must equal subject)."
-            )
+        # TODO: only PID_Provider certs are actually meant to be self-signed;
+        # QEAA/Non_Q_EAA/PUB_EAA certs are CA-issued (see task3-x509-pki-etsi
+        # certificate-profiles example - issuer is a separate CA, not self).
+        # Disabled until entitlement_type is used to pick the right check.
+        # if cert.issuer != cert.subject:
+        #     raise serializers.ValidationError(
+        #         "Signing certificate must be self-signed "
+        #         "(issuer Distinguished Name must equal subject)."
+        #     )
 
         now = timezone.now()
         if cert.not_valid_after_utc < now:
