@@ -2,10 +2,13 @@
 Views for TSL Generator
 """
 
-from django.http import HttpResponse
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from legal_entities.models import LegalEntity
+from registry.models import RegisteredEntity
 from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
@@ -16,6 +19,11 @@ from .models import (
     TrustService,
     TrustServiceProvider,
     TSLScheme,
+)
+from .registered_entity_prefill import (
+    build_trust_service_prefill,
+    current_signing_certificate,
+    tsl_eligible_entitlement_types,
 )
 from .xml_generator import generate_tsl_xml_etsi_format
 
@@ -141,10 +149,15 @@ class TSLSchemeXMLView(generics.RetrieveAPIView):
     """
     Return the ETSI TS 119612 compliant XML for a TSL Scheme.
 
+    Public: a published trusted list must be fetchable by any relying party
+    with no login, so this ignores any credential (valid, missing, or
+    expired) rather than 401ing on a stale cookie.
+
     GET: Returns application/xml
     """
 
-    permission_classes = (IsAuthenticated,)
+    authentication_classes = []
+    permission_classes = (AllowAny,)
     queryset = TSLScheme.objects.filter(is_active=True)
 
     def retrieve(self, request, *args, **kwargs):
@@ -157,11 +170,15 @@ class TSLXMLView(generics.GenericAPIView):
     """
     Return the ETSI TS 119612 compliant XML for the default active TSL Scheme.
 
-    GET /tsl/xml/ - Returns XML for the first active scheme
-    GET /tsl/xml/?download=true - Returns XML as downloadable file
+    Public: same reasoning as TSLSchemeXMLView - a trusted list has to be
+    fetchable by anyone, regardless of any cookie the caller happens to carry.
+
+    GET /tsl/trusted-list.xml - Returns XML for the first active scheme
+    GET /tsl/trusted-list.xml?download=true - Returns XML as a downloadable file
     """
 
-    permission_classes = (IsAuthenticated,)
+    authentication_classes = []
+    permission_classes = (AllowAny,)
 
     def get(self, request, *args, **kwargs):
         scheme = TSLScheme.objects.filter(is_active=True).first()
@@ -243,10 +260,11 @@ class TrustServiceFormView(generics.CreateAPIView):
     renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
     template_name = "add_trust_service.html"
 
-    def get_context_data(self, errors=None):
+    def get_context_data(self, errors=None, initial=None):
         """Common context for the form"""
         return {
             "errors": errors,
+            "initial": initial,
             "tsl_schemes": TSLScheme.objects.filter(is_active=True),
             "providers": TrustServiceProvider.objects.filter(
                 is_active=True
@@ -257,9 +275,55 @@ class TrustServiceFormView(generics.CreateAPIView):
         }
 
     def get(self, request, *args, **kwargs):
-        """Render empty Trust Service form"""
+        """
+        Render the Trust Service form.
+
+        With ?registered_entity=<id>&entitlement_type=<type>, prefills the
+        new-provider fields and certificate from that entity's existing
+        registration instead of a blank form - the operator still has to
+        pick the TSL scheme and submit.
+
+        The query string is operator input, not necessarily a click on
+        registry's "Add to Trusted List" button (it can be bookmarked, edited
+        or shared), so the two conditions that button encodes are re-checked
+        here: the entity must hold the entitlement, and it must have a current
+        signing certificate for it.
+        """
+        initial = None
+        entity_id = request.query_params.get("registered_entity")
+        if entity_id:
+            # Scoped to the requesting operator, as in registry's
+            # EntityDetailView: the prefill exposes the entity's record and its
+            # signing certificate PEM, so only its operators may pull it. 404
+            # (not 403) keeps entity IDs non-enumerable.
+            try:
+                entity = get_object_or_404(
+                    RegisteredEntity.objects.filter(operators=request.user),
+                    pk=entity_id,
+                )
+            except DjangoValidationError:
+                # Malformed UUID - same answer as an ID that does not exist.
+                raise Http404
+
+            eligible = tsl_eligible_entitlement_types(entity)
+            entitlement_type = request.query_params.get("entitlement_type")
+            if entitlement_type and entitlement_type not in eligible:
+                # Either not publishable in the TL at all, or an entitlement
+                # this entity does not hold. 404 for the same reason as above:
+                # it does not disclose which entitlements the entity holds.
+                raise Http404
+            entitlement_type = entitlement_type or next(iter(eligible), None)
+
+            if entitlement_type:
+                if current_signing_certificate(entity, entitlement_type) is None:
+                    # Entitled, but nothing to publish yet. Send them where the
+                    # certificate is uploaded rather than to a form with an
+                    # empty certificate box.
+                    return redirect("certificates:signing-page", entity_id=entity.id)
+                initial = build_trust_service_prefill(entity, entitlement_type)
+
         return Response(
-            self.get_context_data(),
+            self.get_context_data(initial=initial),
             template_name=self.template_name,
         )
 

@@ -745,32 +745,39 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
             .get(id=entity_id)
         )
 
+    LABEL_MAP = {
+        EntitlementType.PID_PROVIDER: "PID Provider",
+        EntitlementType.QEAA_PROVIDER: "Qualified EAA Provider",
+        EntitlementType.PUB_EAA_PROVIDER: "Public EAA Provider",
+        EntitlementType.NON_Q_EAA_PROVIDER: "Non-Qualified EAA Provider",
+    }
+
     def _build_sections(self, entity):
         """
-        Returns a list of dicts, one per issuer entitlement the entity holds:
-            { entitlement_type, label, current_cert, errors, pem_value }
+        Returns a list of dicts, one per issuer entitlement the entity holds
+        that still needs a certificate uploaded:
+            { entitlement_type, label, errors, pem_value }
+
+        An entitlement with a current certificate already on file is done -
+        it drops off this list rather than sticking around as a completed card.
         """
-        label_map = {
-            EntitlementType.PID_PROVIDER: "PID Provider",
-            EntitlementType.QEAA_PROVIDER: "Qualified EAA Provider",
-            EntitlementType.PUB_EAA_PROVIDER: "Public EAA Provider",
-            EntitlementType.NON_Q_EAA_PROVIDER: "Non-Qualified EAA Provider",
-        }
-        current_certs = {
-            c.entitlement_type: c
-            for c in EntitySigningCertificate.objects.filter(
+        has_current_cert = set(
+            EntitySigningCertificate.objects.filter(
                 registered_entity=entity, is_current=True
-            )
-        }
+            ).values_list("entitlement_type", flat=True)
+        )
         sections = []
         for ent in entity.entitlements.filter(
             entitlement_type__in=list(_ISSUER_ENTITLEMENT_TYPES), is_active=True
         ):
+            if ent.entitlement_type in has_current_cert:
+                continue
             sections.append(
                 {
                     "entitlement_type": ent.entitlement_type,
-                    "label": label_map.get(ent.entitlement_type, ent.entitlement_type),
-                    "current_cert": current_certs.get(ent.entitlement_type),
+                    "label": self.LABEL_MAP.get(
+                        ent.entitlement_type, ent.entitlement_type
+                    ),
                     "errors": [],
                     "pem_value": "",
                 }
@@ -785,15 +792,14 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
                 request, self.TEMPLATE, {"error": "Entity not found."}, status=404
             )
 
+        sections = self._build_sections(entity)
         return render(
             request,
             self.TEMPLATE,
             {
                 "entity": entity,
-                "sections": self._build_sections(entity),
-                "all_uploaded": all(
-                    s["current_cert"] for s in self._build_sections(entity)
-                ),
+                "sections": sections,
+                "all_uploaded": not sections,
             },
         )
 
@@ -840,9 +846,9 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
         certificate_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
         _store_signing_certificate(entity, cert, certificate_pem, entitlement_type)
 
-        # Rebuild sections with the freshly stored cert
+        # The just-uploaded entitlement now has a current cert, so it no
+        # longer appears in _build_sections() - the step is done, not shown.
         sections = self._build_sections(entity)
-        all_uploaded = all(s["current_cert"] for s in sections)
 
         return render(
             request,
@@ -850,7 +856,7 @@ class SigningCertificatePageView(JWTLoginRequiredMixin, View):
             {
                 "entity": entity,
                 "sections": sections,
-                "all_uploaded": all_uploaded,
-                "success_entitlement": entitlement_type,
+                "all_uploaded": not sections,
+                "success_label": self.LABEL_MAP.get(entitlement_type, entitlement_type),
             },
         )

@@ -383,7 +383,7 @@ class TSLSchemeAdmin(admin.ModelAdmin):
 
         if queryset.count() == 1:
             scheme = queryset.first()
-            xml_content = scheme.to_xml_gotrust()
+            xml_content = scheme.to_xml_etsi()
             response = HttpResponse(xml_content, content_type="application/xml")
             response["Content-Disposition"] = (
                 f'attachment; filename="{scheme.territory}-TSL-'

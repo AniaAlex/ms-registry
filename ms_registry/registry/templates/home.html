@@ -18,58 +18,60 @@
     </div>
 
     {% if entities %}
-    <table class="entity-table">
-        <thead>
-            <tr>
-                <th>Legal Entity</th>
-                <th>Trade Name</th>
-                <th>Entity Role</th>
-                <th>Status</th>
-                <th>Supervisory Authority</th>
-                <th>Registered At</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for entity in entities %}
-            <tr>
-                <td>{{ entity.legal_entity }}</td>
-                <td>{{ entity.trade_name|default:"-" }}</td>
-                <td>
-                    <span class="badge badge-role-{{ entity.entity_role }}">
-                        {{ entity.get_entity_role_display }}
-                    </span>
-                </td>
-                <td>
-                    <span class="badge badge-status-{{ entity.registration_status }}">
-                        {{ entity.get_registration_status_display }}
-                    </span>
-                </td>
-                <td>{{ entity.supervisory_authority }}</td>
-                <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
-                <td>
-                    <div class="actions-cell">
-                        {% if entity.registration_status == 'active' %}
-                        <a href="{% url 'registry:entity-detail' entity.id %}" class="btn btn-sm btn-secondary">Manage</a>
-                        <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get Entity Info</a>
-                        {% if entity.has_valid_cert %}
-                            <span class="badge-cert-valid">Valid Cert</span>
-                            <a href="{% url 'certificates:detail-page' entity.id %}" class="btn btn-sm btn-secondary">Show Access Cert</a>
-                        {% else %}
-                            <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
-                        {% endif %}
-                        {% endif %}
-                        <form method="post" action="{% url 'registry:entity-delete' entity.id %}" class="delete-form"
-                              onsubmit="return confirm('Delete this registered entity? This cannot be undone.');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table class="entity-table">
+            <thead>
+                <tr>
+                    <th>Legal Entity</th>
+                    <th>Trade Name</th>
+                    <th>Entity Role</th>
+                    <th>Status</th>
+                    <th>Supervisory Authority</th>
+                    <th>Registered At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entity in entities %}
+                <tr>
+                    <td>{{ entity.legal_entity }}</td>
+                    <td>{{ entity.trade_name|default:"-" }}</td>
+                    <td>
+                        <span class="badge badge-role-{{ entity.entity_role }}">
+                            {{ entity.get_entity_role_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-status-{{ entity.registration_status }}">
+                            {{ entity.get_registration_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ entity.supervisory_authority }}</td>
+                    <td>{{ entity.registered_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                    <td>
+                        <div class="actions-cell">
+                            {% if entity.registration_status == 'active' %}
+                            <a href="{% url 'registry:entity-detail' entity.id %}" class="btn btn-sm btn-secondary">Manage</a>
+                            <a href="{% url 'certificates:cnf-page' entity.id %}" class="btn btn-sm btn-secondary">Get Entity Info</a>
+                            {% if entity.has_valid_cert %}
+                                <span class="badge-cert-valid">Valid Cert</span>
+                                <a href="{% url 'certificates:detail-page' entity.id %}" class="btn btn-sm btn-secondary">Show Access Cert</a>
+                            {% else %}
+                                <a href="{% url 'certificates:issue-page' entity.id %}" class="btn btn-sm btn-primary">Generate Certificate</a>
+                            {% endif %}
+                            {% endif %}
+                            <form method="post" action="{% url 'registry:entity-delete' entity.id %}" class="delete-form"
+                                  onsubmit="return confirm('Delete this registered entity? This cannot be undone.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <div class="empty-state">
         <p>No registered entities yet.</p>
@@ -83,6 +85,11 @@
 
 {% block extra_css %}
 <style>
+    /* This page is a wide data table — the 900px default leaves no room for
+       seven columns plus the action buttons. */
+    .container {
+        max-width: 1200px;
+    }
     .page-header {
         display: flex;
         justify-content: space-between;
@@ -102,10 +109,16 @@
     .logout-form {
         margin: 0;
     }
+    /* Keeps an over-wide table scrolling inside the card instead of
+       overflowing the page. */
+    .table-wrap {
+        overflow-x: auto;
+        margin-top: 1rem;
+    }
     .entity-table {
         width: 100%;
+        min-width: 900px;
         border-collapse: collapse;
-        margin-top: 1rem;
     }
     .entity-table th,
     .entity-table td {
@@ -156,11 +169,22 @@
         background-color: #e2d5f1;
         color: #563d7c;
     }
+    /* Every button is nowrap, so without a cap the cell demands one very long
+       line and pushes the table past the container. */
     .actions-cell {
         display: flex;
         flex-wrap: wrap;
         gap: 0.4rem;
         align-items: center;
+        max-width: 260px;
+    }
+    .entity-table td:last-child {
+        width: 260px;
+    }
+    /* Timestamps and badges read badly broken across lines. */
+    .entity-table td:nth-child(6),
+    .entity-table .badge {
+        white-space: nowrap;
     }
     .actions-cell .btn-sm {
         padding: 0.2rem 0.55rem;
